@@ -7,6 +7,6 @@ async function tick(){
  catch{console.error(`${brand.name}: Worker failed. Check account database and service configuration.`);process.exitCode=1;}
 }
 if(args.includes('--watch')){
- console.log(`${brand.name}: Worker scheduler started. Checks account searches every minute.`);
- while(true){await tick();await new Promise(resolve=>setTimeout(resolve,60000));}
+ console.log(`${brand.name}: Worker scheduler started. Checks account searches every 15 minutes.`);
+ while(true){await tick();await new Promise(resolve=>setTimeout(resolve,15*60000));}
 }else await tick();

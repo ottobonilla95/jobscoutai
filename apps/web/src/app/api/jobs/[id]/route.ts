@@ -5,11 +5,11 @@ export async function PATCH(request:Request,context:{params:Promise<{id:string}>
  const denied=await guard(request);if(denied)return denied;
  const {id}=await context.params;
  try{const input=JSON.parse(new TextDecoder().decode(await limitedBody(request,20000)));
-  return await withUserStore(store=>{
-   const job=store.job(id);if(!job)return localizedJson({error:'Job not found.'},{status:404});
-   if(input.distinct===true)store.db.prepare('UPDATE jobs SET duplicate_of=NULL,duplicate_reviewed=1 WHERE id=?').run(id);
-   else if(input.tracking){store.track(id,trackingSchema.parse(input.tracking));}
-   else if(['new','saved','dismissed'].includes(input.status))store.db.prepare('UPDATE jobs SET status=? WHERE id=?').run(input.status,id);
+  return await withUserStore(async store=>{
+   const job=(await store.job(id));if(!job)return localizedJson({error:'Job not found.'},{status:404});
+   if(input.distinct===true)(await store.markDistinct(id));
+   else if(input.tracking){(await store.track(id,trackingSchema.parse(input.tracking)));}
+   else if(['new','saved','dismissed'].includes(input.status))(await store.setStatus(id,input.status));
    else return localizedJson({error:'Invalid update.'},{status:400});
    return localizedJson({ok:true});
   });

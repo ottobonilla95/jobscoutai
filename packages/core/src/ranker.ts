@@ -16,7 +16,7 @@ export function verifyEvidence(assessment: Assessment, description: string): Ass
 }
 export async function rankJob(job: Job, profile: Profile, accountId?:string) {
   if (!process.env.AI_GATEWAY_API_KEY) throw new Error('Add AI_GATEWAY_API_KEY to enable CV-based matching.');
-  const generation=accountId?beginGeneration(accountId,'ranking',profile.dailyEvaluationLimit):null;
+  const generation=accountId?(await beginGeneration(accountId,'ranking',profile.dailyEvaluationLimit)):null;
   try{
   const result = await generateText({
     model: process.env.AI_MODEL || 'openai/gpt-6-luna',
@@ -44,8 +44,8 @@ Explain the match and concerns concretely. Output only the requested structured 
   if(evaluation.decision==='exclude'){assessment.eligibility='ineligible';}
   if(assessment.eligibility==='ineligible')evaluation.decision='exclude';
   else if(assessment.eligibility==='uncertain'&&evaluation.decision==='apply')evaluation.decision='apply_verify';
-  if(generation)finishGeneration(generation,'completed',result.usage.inputTokens||0,result.usage.outputTokens||0);
+  if(generation)(await finishGeneration(generation,'completed',result.usage.inputTokens||0,result.usage.outputTokens||0));
   return { assessment,
     inputTokens: result.usage.inputTokens || 0, outputTokens: result.usage.outputTokens || 0 };
-  }catch(error){if(generation)finishGeneration(generation,'failed');throw error;}
+  }catch(error){if(generation)(await finishGeneration(generation,'failed'));throw error;}
 }

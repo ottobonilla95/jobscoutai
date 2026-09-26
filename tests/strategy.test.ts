@@ -1,3 +1,4 @@
+import {accountsFixture,storeFixture} from './database-fixture';
 import {brand} from '../packages/core/src/brand';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -14,7 +15,7 @@ import {searchSources} from '../packages/core/src/sources';
 import {runSearch} from '../packages/core/src/worker';
 const quote='Build useful software with our engineering team and take responsibility for product delivery.';
 const research=(strategy:Strategy):Research=>({components:strategy.groups.flatMap(g=>g.criteria.map(c=>({id:c.id,score:5,reason:'Supported overlap',evidence:quote}))),requirements:[],countries:[]});
-function fixture(t:test.TestContext){const dir=mkdtempSync(join(tmpdir(),`${brand.slug}-strategy-`));const store=new Store(join(dir,'jobs.sqlite'));t.after(()=>{store.db.close();rmSync(dir,{recursive:true,force:true});});return store;}
+async function fixture(t:test.TestContext){return storeFixture(t);}
 const listing={id:'one',title:'Engineer',company:'Test company',location:'London, United Kingdom',url:'https://example.com/jobs/one',postedAt:null,description:quote};
 test('legacy profiles acquire neutral strategies without founder gates',()=>{
  const {strategy,postedWithinDays,includeUnknownDates,dailyEvaluationLimit,...old}=defaultProfile;const parsed=profileSchema.parse(old);
@@ -45,11 +46,11 @@ test('unsupported and duplicated component evidence remains unknown, not a confi
  const raw=research(defaultStrategy);raw.components[0].evidence='Invented job quote';raw.components.push(raw.components[1]);
  const result=evaluateStrategy(defaultStrategy,raw,quote,'');assert.equal(result.components[0].score,null);assert.equal(result.components[1].score,null);assert.equal(result.decision,'apply_verify');
 });
-test('strategy changes invalidate scores; tracking edits do not; duplicate override persists',t=>{
- const store=fixture(t);const initial=store.profile();store.saveProfile({...initial.profile,strategy:{...defaultStrategy,relocation:'Open to moving'}});assert.equal(store.profile().version,initial.version+1);
- store.upsert(listing);store.upsert({...listing,id:'two',url:'https://other.example/jobs/two',sourceKey:'yc'});assert.equal(store.job('two')!.duplicateOf,'one');
- store.db.prepare('UPDATE jobs SET duplicate_of=NULL,duplicate_reviewed=1 WHERE id=?').run('two');store.upsert({...listing,id:'two',url:'https://other.example/jobs/two',sourceKey:'yc'});assert.equal(store.job('two')!.duplicateOf,null);
- store.track('one',{stage:'applied',recommendation:'automatic',notes:'Private note',nextAction:'Interview',followUp:'2026-10-01'});assert.equal(store.job('one')!.tracking?.stage,'applied');assert.equal(store.profile().version,initial.version+1);
+test('strategy changes invalidate scores; tracking edits do not; duplicate override persists',async t=>{
+ const store=(await fixture(t));const initial=(await store.profile());(await store.saveProfile({...initial.profile,strategy:{...defaultStrategy,relocation:'Open to moving'}}));assert.equal((await store.profile()).version,initial.version+1);
+ (await store.upsert(listing));(await store.upsert({...listing,id:'two',url:'https://other.example/jobs/two',sourceKey:'yc'}));assert.equal((await store.job('two'))!.duplicateOf,'one');
+ (await store.db.prepare('UPDATE jobs SET duplicate_of=NULL,duplicate_reviewed=1 WHERE id=?').run('two'));(await store.upsert({...listing,id:'two',url:'https://other.example/jobs/two',sourceKey:'yc'}));assert.equal((await store.job('two'))!.duplicateOf,null);
+ (await store.track('one',{stage:'applied',recommendation:'automatic',notes:'Private note',nextAction:'Interview',followUp:'2026-10-01'}));assert.equal((await store.job('one'))!.tracking?.stage,'applied');assert.equal((await store.profile()).version,initial.version+1);
 });
 test('date windows exclude old listings and distinguish unknown dates',async()=>{
  const adapters={linkedin:async()=>[{...listing,postedAt:new Date().toISOString()},{...listing,id:'old',postedAt:'2020-01-01'},{...listing,id:'unknown'}],yc:async()=>[],company:async()=>[]};
@@ -65,28 +66,28 @@ test('application checks reject private, link-local and credential-bearing desti
  for(const ip of ['127.0.0.1','10.0.0.1','169.254.169.254','172.16.0.1','192.168.1.1','100.64.0.1','::1','::ffff:127.0.0.1','fd00::1','2001:db8::1'])assert.equal(publicAddress(ip),false,ip);
  assert.equal(publicAddress('8.8.8.8'),true);for(const url of ['http://example.com','https://user:pass@example.com','https://localhost','https://example.com:8443'])assert.throws(()=>safeUrl(url));
 });
-test('recommendations require fresh form verification and do not conflate application history',t=>{
- const store=fixture(t);store.upsert(listing);const job=store.job('one')!;job.assessment={score:95,eligibility:'eligible',summary:'Good',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null};job.evaluatedVersion=1;
+test('recommendations require fresh form verification and do not conflate application history',async t=>{
+ const store=(await fixture(t));(await store.upsert(listing));const job=(await store.job('one'))!;job.assessment={score:95,eligibility:'eligible',summary:'Good',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null};job.evaluatedVersion=1;
  assert.equal(recommendation(job),'apply_verify');job.verification={status:'open',checkedAt:new Date().toISOString(),applicationUrl:job.url,note:'Form'};assert.equal(recommendation(job),'apply');
  job.verification.status='closed';assert.equal(strongMatch(job,defaultProfile,1),false);
 });
 test('daily evaluation limit bounds a worker run without discarding pending jobs',async t=>{
- const store=fixture(t);store.saveProfile({...defaultProfile,cvText:'Experienced engineer working on useful products. '.repeat(4),dailyEvaluationLimit:1});const old=process.env.AI_GATEWAY_API_KEY;process.env.AI_GATEWAY_API_KEY='test';t.after(()=>{if(old===undefined)delete process.env.AI_GATEWAY_API_KEY;else process.env.AI_GATEWAY_API_KEY=old;});
+ const store=(await fixture(t));(await store.saveProfile({...defaultProfile,cvText:'Experienced engineer working on useful products. '.repeat(4),dailyEvaluationLimit:1}));const old=process.env.AI_GATEWAY_API_KEY;process.env.AI_GATEWAY_API_KEY='test';t.after(()=>{if(old===undefined)delete process.env.AI_GATEWAY_API_KEY;else process.env.AI_GATEWAY_API_KEY=old;});
  let ranked=0;const dependencies={search:async()=>[listing,{...listing,id:'different',company:'Second',url:'https://other.example/job'}],describe:async()=>quote.repeat(3),rank:async()=>{ranked++;return {assessment:{score:80,eligibility:'eligible' as const,summary:'Good',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null},inputTokens:10,outputTokens:10};},notify:async()=>0};
- await runSearch({store,force:true,dependencies});await runSearch({store,force:true,dependencies});assert.equal(ranked,1);assert.equal(store.pending(store.profile().version,10).length,1);
+ await runSearch({store,force:true,dependencies});await runSearch({store,force:true,dependencies});assert.equal(ranked,1);assert.equal((await store.pending((await store.profile()).version,10)).length,1);
 });
 test('verification and password reset tokens are purpose-bound, expiring and single-use; resets revoke sessions',async t=>{
- const dir=mkdtempSync(join(tmpdir(),`${brand.slug}-reset-`));const accounts=new Accounts(dir);t.after(()=>{accounts.db.close();rmSync(dir,{recursive:true,force:true});});const user=await accounts.signup({email:'reset@example.test',password:'Old long test password'});
- const verify=accounts.issueToken(user,'verify');assert.equal(await accounts.consumeToken(verify,'reset','New long test password'),false);assert.equal(accounts.verified(user.id),false);assert.equal(await accounts.consumeToken(verify,'verify'),true);assert.equal(await accounts.consumeToken(verify,'verify'),false);
- const session=accounts.session(user);const reset=accounts.issueToken(user,'reset');assert.equal(await accounts.consumeToken(reset,'reset','New long test password'),true);assert.equal(accounts.current(session),null);assert.equal(await accounts.login(user.email,'Old long test password'),null);assert.ok(await accounts.login(user.email,'New long test password'));
- const expired=accounts.issueToken(user,'reset');accounts.db.exec('UPDATE account_tokens SET expires=0');assert.equal(await accounts.consumeToken(expired,'reset','Another test password'),false);
+ const accounts=await accountsFixture(t);const user=await accounts.signup({email:'reset@example.test',password:'Old long test password'});
+ const verify=(await accounts.issueToken(user,'verify'));assert.equal(await accounts.consumeToken(verify,'reset','New long test password'),false);assert.equal((await accounts.verified(user.id)),false);assert.equal(await accounts.consumeToken(verify,'verify'),true);assert.equal(await accounts.consumeToken(verify,'verify'),false);
+ const session=(await accounts.session(user));const reset=(await accounts.issueToken(user,'reset'));assert.equal(await accounts.consumeToken(reset,'reset','New long test password'),true);assert.equal((await accounts.current(session)),null);assert.equal(await accounts.login(user.email,'Old long test password'),null);assert.ok(await accounts.login(user.email,'New long test password'));
+ const expired=(await accounts.issueToken(user,'reset'));(await accounts.db.exec('UPDATE account_tokens SET expires=0'));assert.equal(await accounts.consumeToken(expired,'reset','Another test password'),false);
 });
 test('AI reservations enforce shared budgets across accounts and retain failed-call usage',async t=>{
- const dir=mkdtempSync(join(tmpdir(),`${brand.slug}-ai-budget-`));const oldDir=process.env.DATA_DIR;const oldLimit=process.env.AI_DAILY_CALL_LIMIT;process.env.DATA_DIR=dir;process.env.AI_DAILY_CALL_LIMIT='2';
- const {getAccounts}=await import('../packages/core/src/accounts');const {beginGeneration,finishGeneration}=await import('../packages/core/src/ai-usage');const accounts=getAccounts();
- t.after(()=>{accounts.db.close();rmSync(dir,{recursive:true,force:true});if(oldDir===undefined)delete process.env.DATA_DIR;else process.env.DATA_DIR=oldDir;if(oldLimit===undefined)delete process.env.AI_DAILY_CALL_LIMIT;else process.env.AI_DAILY_CALL_LIMIT=oldLimit;});
+ const oldLimit=process.env.AI_DAILY_CALL_LIMIT;process.env.AI_DAILY_CALL_LIMIT='2';
+ const {beginGeneration,finishGeneration}=await import('../packages/core/src/ai-usage');const accounts=await accountsFixture(t);
+ t.after(()=>{if(oldLimit===undefined)delete process.env.AI_DAILY_CALL_LIMIT;else process.env.AI_DAILY_CALL_LIMIT=oldLimit;});
  const a=await accounts.signup({email:'budget-one@example.test',password:'Budget test password 123'});const b=await accounts.signup({email:'budget-two@example.test',password:'Budget test password 123'});
- const id=beginGeneration(a.id,'ranking',1);finishGeneration(id,'failed');assert.throws(()=>beginGeneration(a.id,'strategy',1),/budget/);const second=beginGeneration(b.id,'ranking',2);finishGeneration(second,'completed',10,20);assert.throws(()=>beginGeneration(b.id,'ranking',2),/budget/);assert.equal(accounts.db.prepare('SELECT input_tokens FROM ai_generations WHERE id=?').get(second)!.input_tokens,10);
+ const id=(await beginGeneration(a.id,'ranking',1,accounts));(await finishGeneration(id,'failed',0,0,accounts));await assert.rejects(beginGeneration(a.id,'strategy',1,accounts),/budget/);const second=(await beginGeneration(b.id,'ranking',2,accounts));(await finishGeneration(second,'completed',10,20,accounts));await assert.rejects(beginGeneration(b.id,'ranking',2,accounts),/budget/);assert.equal((await accounts.db.prepare('SELECT input_tokens FROM ai_generations WHERE id=?').get(second))!.input_tokens,10);
 });
 
 test('pinned DNS supports Node dual-stack lookup without resolving the host again',()=>{

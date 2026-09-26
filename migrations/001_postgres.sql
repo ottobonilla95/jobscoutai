@@ -1,0 +1,26 @@
+CREATE TABLE IF NOT EXISTS accounts (
+ id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
+ created_at BIGINT NOT NULL, last_check BIGINT NOT NULL DEFAULT 0, verified_at BIGINT,
+ language TEXT NOT NULL DEFAULT 'auto', browser_language TEXT NOT NULL DEFAULT 'en'
+);
+CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,expires BIGINT NOT NULL);
+CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
+CREATE TABLE IF NOT EXISTS rate_limits(key TEXT PRIMARY KEY,count INTEGER NOT NULL,expires BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS ai_generations(id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,kind TEXT NOT NULL,model TEXT NOT NULL,created_at TEXT NOT NULL,finished_at TEXT,status TEXT NOT NULL,input_tokens INTEGER NOT NULL DEFAULT 0,output_tokens INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS ai_generations_day ON ai_generations(created_at,user_id);
+CREATE TABLE IF NOT EXISTS account_tokens(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,purpose TEXT NOT NULL,expires BIGINT NOT NULL,UNIQUE(user_id,purpose));
+CREATE TABLE IF NOT EXISTS scheduler_lock(id INTEGER PRIMARY KEY CHECK(id=1),owner TEXT NOT NULL,expires BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS profile(user_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,value TEXT NOT NULL,version INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS state(user_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,next_run TEXT,requested INTEGER NOT NULL DEFAULT 0,heartbeat TEXT);
+CREATE TABLE IF NOT EXISTS locks(user_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,owner TEXT NOT NULL,expires BIGINT NOT NULL);
+CREATE TABLE IF NOT EXISTS jobs (
+ user_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,id TEXT NOT NULL,title TEXT NOT NULL,company TEXT NOT NULL,location TEXT NOT NULL,url TEXT NOT NULL,
+ posted_at TEXT,description TEXT,first_seen TEXT NOT NULL,last_seen TEXT NOT NULL,assessment TEXT,score INTEGER,evaluated_version INTEGER,status TEXT NOT NULL DEFAULT 'new',notified_at TEXT,
+ source_key TEXT NOT NULL DEFAULT 'linkedin',tracking TEXT NOT NULL DEFAULT '{}',verification TEXT,duplicate_of TEXT,duplicate_reviewed INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(user_id,id)
+);
+CREATE INDEX IF NOT EXISTS jobs_score ON jobs(user_id,score DESC NULLS LAST);
+CREATE TABLE IF NOT EXISTS runs(user_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,id TEXT NOT NULL,started_at TEXT NOT NULL,finished_at TEXT,status TEXT NOT NULL,discovered INTEGER NOT NULL DEFAULT 0,evaluated INTEGER NOT NULL DEFAULT 0,matched INTEGER NOT NULL DEFAULT 0,input_tokens INTEGER NOT NULL DEFAULT 0,output_tokens INTEGER NOT NULL DEFAULT 0,error TEXT,PRIMARY KEY(user_id,id));
+CREATE TABLE IF NOT EXISTS deliveries(user_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,id TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',created_at TEXT NOT NULL,sent_at TEXT,error TEXT,PRIMARY KEY(user_id,id));
+CREATE TABLE IF NOT EXISTS delivery_jobs(user_id TEXT NOT NULL,job_id TEXT NOT NULL,delivery_id TEXT NOT NULL,PRIMARY KEY(user_id,job_id),FOREIGN KEY(user_id,job_id) REFERENCES jobs(user_id,id) ON DELETE CASCADE,FOREIGN KEY(user_id,delivery_id) REFERENCES deliveries(user_id,id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS leads(user_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,id TEXT NOT NULL,value TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(user_id,id));

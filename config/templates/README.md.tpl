@@ -1,6 +1,6 @@
 # {{name}}
 
-An account-based job-search app and scheduled worker. Next.js provides the dashboard; the TypeScript worker searches your selected job sources, evaluates new results against your CV, and optionally emails matches. Accounts and sessions live in a shared SQLite database; each account has a separate SQLite database for its private search data. Both services share persistent storage.
+An account-based job-search app and scheduled worker. Next.js provides the dashboard; the TypeScript worker searches your selected job sources, evaluates new results against your CV, and optionally emails matches. Vercel hosts the web app, DigitalOcean runs the worker, and Neon PostgreSQL stores accounts, settings, jobs, and delivery history. Every private-data query is scoped to its account.
 
 ## Product configuration
 
@@ -17,7 +17,7 @@ The `compatibility` settings deliberately preserve existing cookie names, the Co
 - `packages/core`: LinkedIn, Y Combinator, Ashby, and Greenhouse retrieval, model scoring, storage, and notification delivery.
 - `deploy`: DigitalOcean Docker Compose, HTTPS proxy, systemd search/backup timers.
 
-Requires Node.js 24+. The SQLite API currently prints Node's experimental warning; data lives in a regular SQLite database.
+Requires Node.js 24+ and PostgreSQL.
 
 ## Local setup
 
@@ -36,11 +36,14 @@ Open `.env` locally. Add these platform credentials once; users do not need thei
 | `RESEND_API_KEY` | Needed only for email notifications. |
 | `EMAIL_FROM` | A sender verified in your Resend account, e.g. `{{name}} <jobs@your-domain.com>`. |
 | `APP_URL` | Exact browser origin; locally `http://localhost:3000`. Used for origin validation and email links. |
-| `DATA_DIR` | Absolute directory shared by both processes; setup fills this automatically. |
+| `DATABASE_URL` | Shared PostgreSQL connection for web and worker; use the Neon pooled URL with TLS. |
+| `DATABASE_URL_UNPOOLED` | Optional direct PostgreSQL connection for backups. |
+| `DATA_DIR` | Local backup output directory only. |
 
 Start the website and local worker scheduler in separate terminals:
 
 ```bash
+npm run db:migrate
 npm run dev
 npm run worker:watch
 ```
@@ -62,47 +65,39 @@ npm run backup
 npm run check:ai       # Small paid API check using synthetic data
 ```
 
-## DigitalOcean deployment
+## Vercel + DigitalOcean deployment
 
-Use one Ubuntu Droplet with Docker Engine and the Docker Compose plugin installed. A 2 GB machine is a reasonable starting point; local Next.js builds can need more memory, so build the container elsewhere if necessary. The app and search worker run as a non-root container user. Caddy is the only public entry point, with HTTPS.
+1. Import the repository into Vercel with Root Directory `apps/web`, Next.js preset, install command `cd ../.. && npm ci`, and build command `cd ../.. && npm run build`. Include files outside the root directory.
+2. Connect Neon to the Vercel project. It provides `DATABASE_URL`. Set `APP_URL` to the exact production origin. Keep all database and model credentials server-side.
+3. Use the same database URL locally to run `npm run db:migrate` once before deploying code that depends on new tables. Migrations are versioned, transactional, and safe to rerun. They never run from a user request or automatically during a preview build.
+4. For previews, use a separate Neon branch before testing changes that affect real data. Connecting the same Neon resource to Production and Preview may initially share data.
+5. Put the worker code in `{{installDirectory}}` on DigitalOcean. Install a dedicated Node 24 runtime in `{{installDirectory}}/runtime` and dependencies with `npm ci --omit=dev`. Do not replace another application's global Node installation.
+6. Create a `jobscout` system user, own the worker directory with that user, and create a private `.env` (mode 600). Set `DATABASE_URL`, `APP_URL`, AI credentials, and optional email credentials there. No inbound database port is needed on the Droplet.
+7. Run `sudo bash deploy/install-timers.sh`. The service runs once and exits; systemd schedules subsequent invocations. The worker needs outbound HTTPS and PostgreSQL connectivity.
 
-1. Put this project at `{{installDirectory}}` on the server. Transfer source and lockfile, not local `node_modules`, `.next`, or test data.
-2. Create a fresh `.env` on the server using `node scripts/setup.mjs` (requires Node 24 on the host), or copy `.env.example` and fill in the service settings. Signup creates account credentials; there is no shared application password. Keep `.env` mode `600`.
-3. Set `APP_DOMAIN=jobs.your-domain.com` and `APP_URL=https://jobs.your-domain.com`; point the domain's DNS to the Droplet. Add the AI and optional email credentials.
-4. Allow inbound TCP 80/443 and your SSH access in the DigitalOcean firewall. Port 3000 is bound only to loopback.
-5. From `{{installDirectory}}`, run:
-
-```bash
-docker compose build
-docker compose up -d web caddy
-sudo bash deploy/install-timers.sh
-```
-
-The initial container sets the data volume's ownership. Web and worker share the `{{dataVolume}}` volume. Compose overrides `DATA_DIR` to `/app/data` inside the containers. Do not use `docker compose down -v` unless you intend to erase your data.
-
-The worker timer checks every minute and runs at most one due account per invocation, rotating across accounts. Searches may start later than their due time when other accounts are being processed. The database stores when a real search is due, so 1-, 2-, 3-, or 23-hour intervals all work. This is not a 23-hour cron expression. Each run exits when finished. The manual button queues work instead of holding an HTTP request open.
-
-Operational commands:
+The default timer checks every 15 minutes so it does not keep Neon continuously awake with minute-by-minute polling. Manual searches can wait up to 15 minutes plus any current run. Each user still chooses their own 1-, 2-, 3-, or 23-hour search interval. At most one due account runs per tick, so a larger installation should increase dispatch capacity and review its database compute plan.
 
 ```bash
-docker compose logs --tail 100 web
 journalctl -u {{servicePrefix}}-worker.service -n 100
-systemctl list-timers {{servicePrefix}}-worker.timer {{servicePrefix}}-backup.timer
-docker compose --profile worker run --rm worker node --import tsx apps/worker/src/index.ts --force --user <account-id>
+systemctl list-timers {{servicePrefix}}-worker.timer
+sudo systemctl start {{servicePrefix}}-worker.service
+npm run check:database # temporary synthetic accounts; verifies then removes them
 ```
 
-Updates: copy the updated source, run `docker compose build`, then `docker compose up -d web caddy`. The worker uses the rebuilt image on its next invocation. Stop the worker timer and wait for an active worker service to finish before incompatible code/database changes.
+For updates, stop the timer, wait for any active worker, copy the new code, install dependencies, apply any migration, then restart the timer. Secrets are never part of the Git repository.
 
-The daily backup timer creates consistent snapshots of `accounts.sqlite` and every account database under a timestamped backup directory. It also preserves the old prototype database when present. Copy these backups off the Droplet or enable Droplet backups. Apply a retention policy. To restore, stop web and worker services, restore `accounts.sqlite` and the matching `users/<account-id>/jobs.sqlite` paths, remove stale WAL/SHM files, then restart. These contain private profile data and credential hashes.
+The Docker Compose deployment remains an alternative for hosting both processes yourself. Set the same PostgreSQL URL, run the migration on the host first, then `docker compose up -d web caddy`. Invoke the worker with `docker compose --profile worker run --rm worker`; the supplied systemd service is for the native Node deployment.
+
+Backups: `npm run backup` uses `pg_dump` and stores a custom-format dump under `DATA_DIR/backups`. Install a PostgreSQL client version matching or newer than the server first; use `DATABASE_URL_UNPOOLED` when available. The optional backup timer is not enabled by the installer. Store backups off the Droplet and test recovery with `pg_restore` into a separate database before switching the application connection. Existing local SQLite files are left untouched, but are no longer used by the app; importing legacy data requires an explicit owner mapping.
 
 ## Accounts and AI configuration
 
 - Signup requires a valid email format and a 12–128-character password. Passwords use salted scrypt hashes. Sessions use random, opaque cookies; only their hashes are stored. Logout revokes the server-side session. Old shared-password cookies are not accepted.
-- Every data route derives account identity from the session. A client cannot select another account with a URL or request field. Accounts are stored in `DATA_DIR/accounts.sqlite`; private data is in `DATA_DIR/users/<account-id>/jobs.sqlite`.
+- Every data route derives account identity from the session. A client cannot select another account with a URL or request field. Private tables use account IDs in their queries and composite keys/foreign keys.
 - Login and signup have persistent attempt limits. Manual searches have a five-minute cooldown per account. Set `ALLOW_SIGNUP=false` to close new registrations while preserving existing logins.
 - New users get neutral career goals and LinkedIn selected. Your founder goals belong in your own search profile.
 - Email verification and self-service password recovery are available through the configured email provider. Verification links expire after 24 hours; reset links after 30 minutes. Tokens are hashed, purpose-bound, and single-use. Password reset revokes all sessions. Job notifications require a verified account address. Configure delivery and verify the complete email flows before a public launch.
-- Existing prototype data at `DATA_DIR/jobs.sqlite` is retained and backed up, but is never automatically assigned to the first signup. It needs an explicit owner migration if you want to reuse it. `APP_PASSWORD` and `SESSION_SECRET` in an old `.env` are now ignored.
+- Existing prototype SQLite files are retained locally and never assigned automatically to a new signup. `APP_PASSWORD` and `SESSION_SECRET` in an old `.env` are ignored.
 - Add `AI_GATEWAY_API_KEY` in the server `.env`, then restart web/worker services. The existing AI SDK connector uses `AI_MODEL` (default `openai/gpt-6-luna`) and `AI_REASONING_EFFORT=medium`. This is an API credential, separate from a ChatGPT subscription. The key is never returned to the browser or stored in a user profile.
 - `npm run check:ai` tests the configured model with synthetic candidate/job text and reports token usage. It performs a real billable model call. No model connection is claimed until this succeeds. Set provider spending limits before opening the service to many users.
 
@@ -139,8 +134,8 @@ Disabled sources and removed company boards are excluded from future discovery, 
 - The model receives CV text, preferences, and the job description. It has no tools. Equity/salary/founder-path evidence must be exact excerpts from the source; unsupported excerpts are discarded. Eligibility uncertainty is visible.
 - The dashboard retains every stored job and renders 50 at a time with Show more; it shows the last 30 runs. This single-Droplet version loads the account list into memory; server-side pagination is a future scaling improvement. Scores are review aids, not verified claims about employers or guarantees of fit.
 - Email delivery uses a persistent outbox and Resend idempotency keys. After 23 hours, uncertain deliveries are marked for manual review rather than risking a duplicate. Review entries in Activity and confirm delivery in Resend; there is no automatic resend after that point.
-- Requests are bounded by count and time. Each account has a daily AI generation limit (default 50), and AI_DAILY_CALL_LIMIT caps all accounts combined (default 500). Reservations include failed calls and strategy imports and reset at midnight UTC. Each generation records an ID, account, model, kind, status, timestamps and token counts in accounts.sqlite; source/CV text is not logged there. Run history also records tokens. These are call limits, not dollar budgets: set a financial spending limit at the provider too. SDK retries can make more than one underlying request per reserved generation.
-- SQLite's write lock and a renewable run lease prevent overlapping scans. A stopped worker's lease expires and the next tick marks its run as failed.
+- Requests are bounded by count and time. Each account has a daily AI generation limit (default 50), and AI_DAILY_CALL_LIMIT caps all accounts combined (default 500). Reservations include failed calls and strategy imports and reset at midnight UTC. Each generation records an ID, account, model, kind, status, timestamps and token counts in PostgreSQL; source/CV text is not logged there. Run history also records tokens. These are call limits, not dollar budgets: set a financial spending limit at the provider too. SDK retries can make more than one underlying request per reserved generation.
+- PostgreSQL transactions, row locks, and a renewable run lease prevent overlapping scans. A stopped worker's lease expires and the next tick marks its run as failed.
 
 ## Credentials still needed for a live deployment
 

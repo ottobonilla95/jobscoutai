@@ -1,3 +1,4 @@
+import {accountsFixture,storeFixture} from './database-fixture';
 import {brand} from '../packages/core/src/brand';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,7 +13,7 @@ import {sendAccountLink} from '../packages/core/src/account-email';
 import {notifyMatches,type EmailPayload} from '../packages/core/src/notifications';
 import {defaultProfile,profileSchema} from '../packages/core/src/profile';
 const require=createRequire(import.meta.url);const parser=require('next/dist/compiled/babel/parser');
-function fixture(t:test.TestContext){const dir=mkdtempSync(join(tmpdir(),`${brand.slug}-languages-`));const accounts=new Accounts(dir);t.after(()=>{accounts.db.close();rmSync(dir,{recursive:true,force:true});});return accounts;}
+async function fixture(t:test.TestContext){return accountsFixture(t);}
 function emailConfig(t:test.TestContext){for(const [key,value]of Object.entries({RESEND_API_KEY:'fixture',EMAIL_FROM:`${brand.slug}@example.test`})){const old=process.env[key];process.env[key]=value;t.after(()=>{if(old===undefined)delete process.env[key];else process.env[key]=old;});}}
 test('browser detection honors region tags, preference weights, exclusions and fallback',()=>{
  assert.equal(browserLocale('es-MX,es;q=0.9,en;q=0.8'),'es');assert.equal(browserLocale('en-GB,es;q=0.5'),'en');assert.equal(browserLocale('en;q=0.5,es-AR;q=0.9'),'es');assert.equal(browserLocale('es;q=0,en;q=0.9'),'en');assert.equal(browserLocale('fr-FR,es;q=0.8'),'es');assert.equal(browserLocale('fr-FR,de;q=0.8'),'en');assert.equal(browserLocale(null),'en');assert.equal(browserLocale('es;q=broken'),'en');
@@ -39,17 +40,17 @@ test('dates, numbers and application diagnostics use the selected language',()=>
  assert.match(systemMessage('es','Job sources could not be reached. Check connectivity and run again later. AI evaluation failed. Check model access, API balance, and credentials. The job is saved for retry.'),/No se pudo acceder/);
 });
 test('account preferences persist across connections without changing another user or original content',async t=>{
- const accounts=fixture(t);const a=await accounts.signup({email:'es@example.test',password:'A private test phrase 2026'});const b=await accounts.signup({email:'en@example.test',password:'A private test phrase 2026'});
- const store=accounts.store(a.id);const original={...store.profile().profile,cvText:'Original English CV',objective:'Original personal career goal'};store.saveProfile(original);const version=store.profile().version;store.db.close();accounts.setLanguage(a.id,'es','es');
- const second=new Accounts(accounts.directory);t.after(()=>second.db.close());assert.deepEqual(second.language(a.id),{preference:'es',locale:'es'});assert.deepEqual(second.language(b.id),{preference:'auto',locale:'en'});
- const saved=second.store(a.id);assert.equal(saved.profile().profile.cvText,original.cvText);assert.equal(saved.profile().profile.objective,original.objective);assert.equal(saved.profile().profile.outputLanguage,'es');assert.equal(saved.profile().version,version+1);saved.db.close();
- accounts.setLanguage(a.id,'auto','en');assert.equal(accounts.language(a.id).locale,'en');
+ const accounts=(await fixture(t));const a=await accounts.signup({email:'es@example.test',password:'A private test phrase 2026'});const b=await accounts.signup({email:'en@example.test',password:'A private test phrase 2026'});
+ const store=(await accounts.store(a.id));const original={...(await store.profile()).profile,cvText:'Original English CV',objective:'Original personal career goal'};(await store.saveProfile(original));const version=(await store.profile()).version;(await accounts.setLanguage(a.id,'es','es'));
+ const second=new Accounts(accounts.db);assert.deepEqual((await second.language(a.id)),{preference:'es',locale:'es'});assert.deepEqual((await second.language(b.id)),{preference:'auto',locale:'en'});
+ const saved=(await second.store(a.id));assert.equal((await saved.profile()).profile.cvText,original.cvText);assert.equal((await saved.profile()).profile.objective,original.objective);assert.equal((await saved.profile()).profile.outputLanguage,'es');assert.equal((await saved.profile()).version,version+1);
+ (await accounts.setLanguage(a.id,'auto','en'));assert.equal((await accounts.language(a.id)).locale,'en');
  const {outputLanguage,...legacy}=defaultProfile;assert.equal(profileSchema.parse(legacy).outputLanguage,'en');
 });
 test('account and job email templates localize copy while preserving titles and evidence',async t=>{
- emailConfig(t);const accounts=fixture(t);const user=await accounts.signup({email:'mail-es@example.test',password:'A private test phrase 2026'});accounts.setLanguage(user.id,'es','es');const sent:EmailPayload[]=[];
+ emailConfig(t);const accounts=(await fixture(t));const user=await accounts.signup({email:'mail-es@example.test',password:'A private test phrase 2026'});(await accounts.setLanguage(user.id,'es','es'));const sent:EmailPayload[]=[];
  await sendAccountLink(accounts,user,'reset',async payload=>{sent.push(payload);});assert.equal(sent[0].subject,`Restablece tu contraseña de ${brand.name}`);assert.match(sent[0].text,/30 minutos/);assert.match(sent[0].text,/#reset=/);
- const store=accounts.store(user.id);t.after(()=>store.db.close());store.upsert({id:'es-mail',title:'Original English Job Title',company:'Original Company',location:'Berlin',url:'https://example.com/job',postedAt:null});store.assess('es-mail',{language:'es',score:90,eligibility:'eligible',summary:'Buen encaje con tu experiencia.',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:'1% equity',founderPathEvidence:null},1);
+ const store=(await accounts.store(user.id));(await store.upsert({id:'es-mail',title:'Original English Job Title',company:'Original Company',location:'Berlin',url:'https://example.com/job',postedAt:null}));(await store.assess('es-mail',{language:'es',score:90,eligibility:'eligible',summary:'Buen encaje con tu experiencia.',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:'1% equity',founderPathEvidence:null},1));
  await notifyMatches(store,{...defaultProfile,outputLanguage:'es',email:user.email,emailEnabled:true},1,async payload=>{sent.push(payload);});assert.equal(sent[1].subject,'1 nueva oportunidad para ti');assert.match(sent[1].text,/Original English Job Title/);assert.match(sent[1].text,/Participación accionaria: 1% equity/);assert.match(sent[1].text,/Recomendación:/);
 });
 test('AI language instructions preserve source excerpts and user data',()=>{const instructions=aiLanguageInstruction('es');assert.match(instructions,/neutral Spanish/);assert.match(instructions,/Never translate evidence excerpts/);assert.match(aiLanguageInstruction('en'),/in English/);});

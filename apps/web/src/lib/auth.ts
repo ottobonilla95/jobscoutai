@@ -5,16 +5,16 @@ import { cache } from 'react';
 import { getAccounts } from '@core/accounts';
 
 export const cookieName = brand.compatibility.sessionCookie;
-export const currentAccount = cache(async () => getAccounts().current((await cookies()).get(cookieName)?.value));
+export const currentAccount = cache(async () => {const token=(await cookies()).get(cookieName)?.value;return token?getAccounts().current(token):null;});
 export async function authenticated(){return Boolean(await currentAccount());}
 export async function withUserStore<T>(callback: (store: import('@core/store').Store) => T | Promise<T>):Promise<T>{
   const account=await currentAccount();if(!account)throw new Error('Please sign in.');
-  const store=getAccounts().store(account.id);
-  try{return await callback(store);}finally{store.db.close();}
+  const store=(await getAccounts().store(account.id));
+  try{return await callback(store);}finally{/* Store shares the process connection pool. */}
 }
 export async function setSession(account: import('@core/accounts').Account){
-  const jar=await cookies();getAccounts().revoke(jar.get(cookieName)?.value);
-  jar.set(cookieName,getAccounts().session(account),{httpOnly:true,secure:(process.env.APP_URL||'').startsWith('https://'),sameSite:'strict',path:'/',maxAge:7*86400});
+  const jar=await cookies();(await getAccounts().revoke(jar.get(cookieName)?.value));
+  jar.set(cookieName,(await getAccounts().session(account)),{httpOnly:true,secure:(process.env.APP_URL||'').startsWith('https://'),sameSite:'strict',path:'/',maxAge:7*86400});
 }
 export function sameOrigin(request:Request){
   const expected=new URL(process.env.APP_URL||'http://localhost:3000').origin;

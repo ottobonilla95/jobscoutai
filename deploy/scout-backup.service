@@ -1,11 +1,13 @@
 # Generated from config/product.json and config/templates; run npm run brand:sync.
 [Unit]
-Description=Back up JobScout AI SQLite using its online backup API
-Requires=docker.service
-After=docker.service
+Description=Back up JobScout AI PostgreSQL using pg_dump
+After=network-online.target
 
 [Service]
 Type=oneshot
+User=jobscout
+Group=jobscout
 WorkingDirectory=/opt/job-searcher
-ExecStart=/usr/bin/docker compose --profile worker run --rm --no-deps worker node --import tsx scripts/backup.ts
+ExecStart=/opt/job-searcher/runtime/bin/node --env-file=.env --import tsx scripts/backup.ts
 TimeoutStartSec=5min
+UMask=0077

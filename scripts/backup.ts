@@ -1,13 +1,12 @@
-import { backup, DatabaseSync } from 'node:sqlite';
-import { mkdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
-import { getAccounts } from '../packages/core/src/accounts';
-import { dataDirectory } from '../packages/core/src/config';
-const accounts=getAccounts();
-const dir=join(dataDirectory(),'backups',new Date().toISOString().replace(/[:.]/g,'-'));mkdirSync(dir,{recursive:true,mode:0o700});
-await backup(accounts.db,join(dir,'accounts.sqlite'));
-const snapshot=new DatabaseSync(join(dir,'accounts.sqlite'),{readOnly:true});
-const users=snapshot.prepare('SELECT id FROM accounts').all().map(row=>({id:String(row.id)}));snapshot.close();
-for(const user of users){const target=join(dir,'users',user.id);mkdirSync(target,{recursive:true,mode:0o700});const store=accounts.store(user.id);try{await backup(store.db,join(target,'jobs.sqlite'));}finally{store.db.close();}}
-const legacy=join(dataDirectory(),'jobs.sqlite');if(existsSync(legacy)){const db=new DatabaseSync(legacy);try{await backup(db,join(dir,'legacy-jobs.sqlite'));}finally{db.close();}}
-console.log(`Backup saved to ${dir}`);
+import {spawn} from 'node:child_process';
+import {mkdirSync} from 'node:fs';
+import {join} from 'node:path';
+import {dataDirectory} from '../packages/core/src/config';
+if(!process.env.DATABASE_URL)throw new Error('DATABASE_URL is required.');
+process.umask(0o077);
+const dir=join(dataDirectory(),'backups');mkdirSync(dir,{recursive:true,mode:0o700});
+const file=join(dir,`${new Date().toISOString().replace(/[:.]/g,'-')}.dump`);
+// Keep credentials out of process arguments and shell history.
+const result=spawn('pg_dump',['--format=custom','--file',file],{env:{...process.env,PGDATABASE:process.env.DATABASE_URL_UNPOOLED||process.env.DATABASE_URL},stdio:['ignore','inherit','inherit']});
+result.on('error',()=>{console.error('Install PostgreSQL client tools (pg_dump) before running a backup.');process.exitCode=1;});
+result.on('exit',code=>{if(code)process.exitCode=code;else console.log(`Backup saved to ${file}`);});
