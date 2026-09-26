@@ -1,0 +1,13 @@
+{
+  "name": "JobScout AI",
+  "slug": "jobscout-ai",
+  "httpAgent": "JobScoutAI/1.0",
+  "compatibility": {
+    "sessionCookie": "scout-session",
+    "languageCookie": "scout-language",
+    "composeProject": "job-searcher",
+    "dataVolume": "scout_data",
+    "servicePrefix": "scout",
+    "installDirectory": "/opt/job-searcher"
+  }
+}

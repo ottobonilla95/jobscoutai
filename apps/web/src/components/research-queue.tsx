@@ -1,0 +1,20 @@
+'use client';
+import {useI18n,LanguageSelect} from './i18n';
+import {useState} from 'react';
+import type {Lead} from '@core/leads';
+const empty={company:'',url:'',kind:'company' as const,status:'research' as const,evidence:'',unknowns:'',nextAction:'',evidenceDate:'',followUp:''};
+export default function ResearchQueue({leads,refresh}:{leads:Lead[];refresh:()=>Promise<void>}){
+ const {t,locale,date,number,message:localizeMessage}=useI18n();
+
+ const [draft,setDraft]=useState<Omit<Lead,'createdAt'|'id'>&{id?:string}>(empty);const [message,setMessage]=useState('');const [busy,setBusy]=useState(false);
+ return <section className="panel"><h2>{t("Company and recruiter research")}</h2><p className="muted">{t("Keep exploratory leads separate from verified vacancies. Adding a company here does not claim it is hiring or send anyone a message.")}</p>
+ <div className="run-list">{leads.map(lead=><article className="run-card" key={lead.id}><a href={lead.url} target="_blank" rel="noopener noreferrer"><strong>{lead.company} ↗</strong></a><p>{lead.kind==='company'?t("Exploratory company lead — no verified vacancy"):t("Recruiter lead — employer claims need verification")} · {t(lead.status)}</p><p>{lead.evidence}</p>{lead.unknowns&&<p>{t("Unknowns:")} {lead.unknowns}</p>}<p>{t("Next action:")} {lead.nextAction||t("Not recorded")} {t("· Follow-up:")} {lead.followUp?date(lead.followUp,false):t("Not set")} {t("· Evidence date:")} {lead.evidenceDate?date(lead.evidenceDate,false):t("Unknown")}</p><button className="text-button" onClick={()=>{setDraft(lead);setMessage(t("Editing this research lead below."));}}>{t("Edit lead")}</button></article>)}</div>
+ <details open={Boolean(draft.id)}><summary>{draft.id?t("Edit lead"):t("Add a research lead")}</summary><form onSubmit={async e=>{e.preventDefault();setBusy(true);setMessage('');try{const response=await fetch('/api/leads',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(draft)});const result=await response.json();if(!response.ok)throw new Error(result.error);setDraft(empty);await refresh();setMessage(t("Research lead saved."));}catch(e){setMessage(e instanceof Error?e.message:t("Could not save."));}finally{setBusy(false);}}}>
+ <label>{t("Company or recruiter")}<input required maxLength={150} value={draft.company} onChange={e=>setDraft({...draft,company:e.target.value})}/></label><label>{t("Source link")}<input type="url" required value={draft.url} onChange={e=>setDraft({...draft,url:e.target.value})}/></label>
+ <div className="field-grid"><label>{t("Lead type")}<select value={draft.kind} onChange={e=>setDraft({...draft,kind:e.target.value as typeof draft.kind})}><option value="company">{t("Company — no verified vacancy")}</option><option value="recruiter">{t("Recruiter lead")}</option></select></label><label>{t("Research status")}<select value={draft.status} onChange={e=>setDraft({...draft,status:e.target.value as typeof draft.status})}>{['research','contact','monitor','archived'].map(s=><option key={s} value={s}>{t(s)}</option>)}</select></label></div>
+ <label>{t("Facts and source evidence")}<textarea value={draft.evidence} maxLength={8000} onChange={e=>setDraft({...draft,evidence:e.target.value})}/></label><label>{t("Unknowns and hypotheses")}<textarea value={draft.unknowns} maxLength={3000} onChange={e=>setDraft({...draft,unknowns:e.target.value})}/></label><label>{t("Next action")}<textarea value={draft.nextAction} maxLength={1500} onChange={e=>setDraft({...draft,nextAction:e.target.value})}/></label>
+ <div className="field-grid"><label>{t("Evidence date")}<input type="date" value={draft.evidenceDate} onChange={e=>setDraft({...draft,evidenceDate:e.target.value})}/></label><label>{t("Follow-up date")}<input type="date" value={draft.followUp} onChange={e=>setDraft({...draft,followUp:e.target.value})}/></label></div>
+ <button className="button primary" disabled={busy}>{t("Save research lead")}</button>{draft.id&&<button type="button" className="text-button" onClick={()=>setDraft(empty)}>{t("Cancel edit")}</button>}
+ </form></details>{message&&<p role="status">{message}</p>}
+ </section>;
+}

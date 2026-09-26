@@ -1,0 +1,45 @@
+{
+  "name": "jobscout-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "node scripts/web.mjs dev --hostname 127.0.0.1",
+    "build": "next build apps/web && node scripts/copy-static.mjs",
+    "start": "node scripts/web.mjs start",
+    "worker": "node --env-file-if-exists=.env --import tsx apps/worker/src/index.ts",
+    "worker:once": "npm run worker -- --force",
+    "worker:watch": "npm run worker -- --watch",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p apps/web/tsconfig.json",
+    "setup": "node scripts/setup.mjs",
+    "backup": "node --env-file-if-exists=.env --import tsx scripts/backup.ts",
+    "check:linkedin": "node --import tsx scripts/check-linkedin.ts",
+    "check:ai": "node --env-file-if-exists=.env --import tsx scripts/check-ai.ts",
+    "brand:sync": "node scripts/sync-brand.mjs",
+    "brand:check": "node scripts/sync-brand.mjs --check",
+    "prebuild": "npm run brand:check",
+    "pretest": "npm run brand:check"
+  },
+  "dependencies": {
+    "ai": "^7.0.112",
+    "cheerio": "^1.2.0",
+    "lucide-react": "^1.47.0",
+    "mammoth": "^1.12.3",
+    "next": "^16.3.6",
+    "pdf-parse": "^2.4.5",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^7.0.2"
+  }
+}

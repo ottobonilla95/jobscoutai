@@ -1,0 +1,12 @@
+# Generated from config/product.json and config/templates; run npm run brand:sync.
+[Unit]
+Description=Check the JobScout AI search schedule every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=1min
+AccuracySec=5s
+Unit=scout-worker.service
+
+[Install]
+WantedBy=timers.target

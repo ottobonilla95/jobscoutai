@@ -1,0 +1,52 @@
+# Generated from config/product.json and config/templates; run npm run brand:sync.
+name: job-searcher
+x-app: &app
+  image: jobscout-ai:local
+  build: .
+  env_file: .env
+  environment:
+    DATA_DIR: /app/data
+  volumes:
+    - scout_data:/app/data
+services:
+  init:
+    <<: *app
+    user: root
+    command: ["sh", "-c", "mkdir -p /app/data && chown 1000:1000 /app/data && chmod 700 /app/data"]
+    restart: "no"
+  web:
+    <<: *app
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  worker:
+    <<: *app
+    profiles: [worker]
+    command: ["node", "--import", "tsx", "apps/worker/src/index.ts"]
+    restart: "no"
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+volumes:
+  scout_data:
+  caddy_data:
+  caddy_config:

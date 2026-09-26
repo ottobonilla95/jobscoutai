@@ -1,0 +1,11 @@
+# Generated from config/product.json and config/templates; run npm run brand:sync.
+[Unit]
+Description=Daily JobScout AI database backup
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+Persistent=true
+Unit=scout-backup.service
+
+[Install]
+WantedBy=timers.target

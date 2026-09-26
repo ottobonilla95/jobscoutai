@@ -1,0 +1,12 @@
+# Generated from config/product.json and config/templates; run npm run brand:sync.
+[Unit]
+Description=Check and run due JobScout AI searches
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/job-searcher
+ExecStart=/usr/bin/docker compose --profile worker run --rm --no-deps worker
+TimeoutStartSec=12min
