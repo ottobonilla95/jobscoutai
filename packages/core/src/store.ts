@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { minimumSearchIntervalHours } from './search-policy';
+import { setupDraftSchema, type SetupDraft } from './setup-schema';
 import { Database, type Row } from './database';
 import { profileSchema, type Profile, type Job, type JobListing, type Assessment, type Run, type Tracking, type Verification } from './profile';
 import { sourceEnabled } from './source-settings';
@@ -9,13 +11,22 @@ export class Store {
   async profile(lock=false): Promise<{ profile: Profile; version: number }> {
     const row=await this.db.prepare(`SELECT * FROM profile WHERE user_id=?${lock?' FOR UPDATE':''}`).get(this.userId);
     if(!row)throw new Error('Account not found.');
-    return {profile:profileSchema.parse(JSON.parse(row.value)),version:Number(row.version)};
+    const profile=profileSchema.parse(JSON.parse(row.value));
+    profile.intervalHours=Math.max(profile.intervalHours,minimumSearchIntervalHours());
+    return {profile,version:Number(row.version)};
+  }
+  async saveSetupDraft(draft:SetupDraft) {
+    const parsed=setupDraftSchema.parse(draft);
+    await this.db.transaction(async db=>{
+      const {profile}=await new Store(db,this.userId).profile(true);
+      await db.prepare('UPDATE profile SET value=? WHERE user_id=?').run(JSON.stringify({...profile,setupDraft:parsed}),this.userId);
+    });
   }
   async saveProfile(profile: Profile) {
-    profile=profileSchema.parse(profile);
+    profile=profileSchema.parse({...profile,intervalHours:Math.max(profile.intervalHours,minimumSearchIntervalHours())});
     await this.db.transaction(async db=>{
       const old=await new Store(db,this.userId).profile(true);
-      const fields=(p:Profile)=>JSON.stringify([p.objective,p.cvText,p.titles,p.constraints,p.salaryExpectation,p.equityExpectation,p.remoteOnly,p.locations,p.sources,p.companyBoards,p.strategy,p.postedWithinDays,p.includeUnknownDates,p.outputLanguage]);
+      const fields=(p:Profile)=>JSON.stringify([p.workAuthorization,p.objective,p.cvText,p.titles,p.constraints,p.salaryExpectation,p.equityExpectation,p.remoteOnly,p.locations,p.sources,p.companyBoards,p.strategy,p.postedWithinDays,p.includeUnknownDates,p.outputLanguage]);
       await db.prepare('UPDATE profile SET value=?,version=version+? WHERE user_id=?').run(JSON.stringify(profile),fields(profile)!==fields(old.profile)?1:0,this.userId);
       if(profile.enabled&&!old.profile.enabled)await db.prepare('UPDATE state SET next_run=? WHERE user_id=?').run(new Date().toISOString(),this.userId);
       else if(profile.intervalHours!==old.profile.intervalHours)await db.prepare('UPDATE state SET next_run=? WHERE user_id=?').run(new Date(Date.now()+profile.intervalHours*3600000).toISOString(),this.userId);
@@ -33,6 +44,13 @@ export class Store {
       const {profile}=await new Store(db,this.userId).profile(true);
       const state=await db.prepare('SELECT * FROM state WHERE user_id=? FOR UPDATE').get(this.userId);
       const lock=await db.prepare('SELECT * FROM locks WHERE user_id=?').get(this.userId);
+      if(!profile.onboardingCompleted)return null;
+      const latest=await db.prepare('SELECT started_at FROM runs WHERE user_id=? ORDER BY started_at DESC LIMIT 1').get(this.userId);
+      const earliest=latest?Date.parse(latest.started_at)+minimumSearchIntervalHours()*3600000:0;
+      if(!force&&earliest>Date.now()){
+        await db.prepare('UPDATE state SET next_run=? WHERE user_id=?').run(new Date(Math.max(earliest,state.next_run?Date.parse(state.next_run):0)).toISOString(),this.userId);
+        return null;
+      }
       const due=profile.enabled&&(!state.next_run||Date.parse(state.next_run)<=Date.now());
       if((lock&&Number(lock.expires)>Date.now())||(!force&&!state.requested&&!due))return null;
       const id=randomUUID(),now=new Date().toISOString();

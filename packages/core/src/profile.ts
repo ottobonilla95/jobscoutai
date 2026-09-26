@@ -1,8 +1,14 @@
 import { z } from 'zod';
+import { setupDraftSchema } from './setup-schema';
 import { strategySchema, defaultStrategy, type Research, type evaluateStrategy } from './strategy';
 import { parseBoard } from './source-settings';
 
 export const profileSchema = z.object({
+  onboardingCompleted:z.boolean().default(true),
+  setupDraft:setupDraftSchema.nullable().default(null),
+  workAuthorization:z.string().max(1000).default(''),
+  matchingSummary:z.string().max(1200).default(''),
+  emailAlertsRequested:z.boolean().default(false),
   outputLanguage: z.enum(['en','es']).default('en'),
   strategy: strategySchema.default(defaultStrategy),
   postedWithinDays: z.number().int().min(1).max(90).default(7),
@@ -29,6 +35,7 @@ export const profileSchema = z.object({
 }).refine(p => !p.sources.includes('companies') || p.companyBoards.length > 0, 'Add at least one company board.');
 export type Profile = z.infer<typeof profileSchema>;
 export const defaultProfile: Profile = {
+  onboardingCompleted:true, setupDraft:null, workAuthorization:'', matchingSummary:'', emailAlertsRequested:false,
   outputLanguage:'en', strategy: defaultStrategy, postedWithinDays: 7, includeUnknownDates: true, dailyEvaluationLimit: 50,
   name: '',
   objective: 'Find a role that matches my experience, priorities, and career goals.',
@@ -36,7 +43,7 @@ export const defaultProfile: Profile = {
   titles: ['Software Engineer'], locations: [''], remoteOnly: false,
   sources: ['linkedin'], companyBoards: [],
   constraints: '', salaryExpectation: '', equityExpectation: '', email: '',
-  intervalHours: 2, minimumScore: 80, maxJobsPerRun: 10,
+  intervalHours: 4, minimumScore: 80, maxJobsPerRun: 10,
   enabled: false, emailEnabled: false,
 };
 

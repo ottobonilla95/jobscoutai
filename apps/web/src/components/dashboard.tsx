@@ -1,12 +1,12 @@
 'use client';
 import {brand} from '@core/brand';
-import {useI18n,LanguageSelect} from './i18n';
+import {useI18n} from './i18n';
 import { useCallback, useEffect, useState } from 'react';
-import { Compass, Search, SlidersHorizontal, Activity, ArrowUpRight, ArrowRight, Bookmark, X, Upload, Check, LogOut, Clock3, FileText, Mail, CircleDot, AlertCircle } from 'lucide-react';
+import { Compass, Search, SlidersHorizontal, Activity, ArrowUpRight, ArrowRight, Bookmark, X, LogOut, Clock3, Mail, CircleDot, AlertCircle } from 'lucide-react';
 import type { DashboardData } from '@/lib/dashboard';
 import type { Job, Profile } from '@core/profile';
 import ResearchQueue from './research-queue';
-import StrategyEditor from './strategy-editor';
+import SearchProfile from './search-profile';
 import { strongMatch, recommendation, recommendationLabels } from '@core/recommendation';
 import TrackingEditor from './tracking-editor';
 import { sourceOptions, sourceLabel } from '@core/source-settings';
@@ -22,7 +22,6 @@ export default function Dashboard({ initial }: { initial: DashboardData }) {
   const [shown,setShown] = useState(50);
   const [sourceFilter,setSourceFilter] = useState('all');
   const [busy,setBusy] = useState(false);
-  const [uploading,setUploading] = useState(false);
   const [message,setMessage] = useState('');
   const [isError,setIsError] = useState(false);
   const [dirty,setDirty] = useState(false);
@@ -51,7 +50,7 @@ export default function Dashboard({ initial }: { initial: DashboardData }) {
   async function save() {
     setBusy(true);
     try {
-      const profile = { ...draft, strategy:{...draft.strategy,citizenships:draft.strategy.citizenships.map(c=>c.trim()).filter(Boolean)}, titles: draft.titles.map(t=>t.trim()).filter(Boolean), locations: draft.locations.map(l=>l.trim()).filter(Boolean), companyBoards: [...new Set(draft.companyBoards.map(url=>url.trim()).filter(Boolean))] };
+      const profile = { ...data.profile, enabled:draft.enabled,sources:draft.sources, strategy:{...data.profile.strategy,citizenships:data.profile.strategy.citizenships.map(c=>c.trim()).filter(Boolean)}, titles: data.profile.titles.map(t=>t.trim()).filter(Boolean), locations: data.profile.locations.map(l=>l.trim()).filter(Boolean), companyBoards: [...new Set(draft.companyBoards.map(url=>url.trim()).filter(Boolean))] };
       if (!profile.locations.length) profile.locations=[''];
       await action('/api/profile','PUT',profile); setDraft(profile); setDirty(false); notify(t("Your search profile is saved."));
     } catch(e) { notify(e instanceof Error ? e.message : t("Could not save."),true); } finally { setBusy(false); }
@@ -94,43 +93,20 @@ export default function Dashboard({ initial }: { initial: DashboardData }) {
         {visible.length>shown&&<button className="button secondary" onClick={()=>setShown(n=>n+50)}>{t('Show more opportunities ({count} remaining)',{count:number(visible.length-shown)})}</button>}
         <p className="footnote">{t("Public listings from your selected sources · Coverage varies by source · Scores guide your review; unstated details remain unknown.")}</p>
       </>}
-      {tab==='profile'&&<form onSubmit={e=>{e.preventDefault();void save();}} className="profile-form">
-        <section className="panel"><div className="panel-title"><span className="step-number">01</span><div><h2>{t("You and your ambition")}</h2><p>{t("The context behind every recommendation.")}</p></div></div>
-          <label>{t("Your name")}<input value={draft.name} onChange={e=>change('name',e.target.value)} placeholder={t("What should we call you?")} maxLength={100}/></label>
-          <label>{t("Your bigger goal")}<textarea rows={3} value={draft.objective} onChange={e=>change('objective',e.target.value)} minLength={10} maxLength={3000} required/></label>
-          <div className="upload-area"><FileText size={25}/><div><strong>{draft.cvFileName || t("Bring your experience along")}</strong><span>{t("PDF, DOCX, or TXT · Up to 5 MB · Text is stored privately")}</span></div><label className="button secondary upload-button"><Upload size={15}/>{uploading?t("Reading…"):t("Upload CV")}<input type="file" accept=".pdf,.docx,.txt" disabled={uploading} onChange={async e=>{
-            const file=e.target.files?.[0];if(!file)return;setUploading(true);
-            try{const form=new FormData();form.append('cv',file);const response=await fetch('/api/cv',{method:'POST',body:form});const result=await response.json();if(!response.ok)throw new Error(result.error);setDraft(p=>({...p,cvText:result.text,cvFileName:result.name}));setDirty(true);notify(result.truncated?t("CV extracted and shortened to 30,000 characters. Review it before saving."):t("CV extracted. Review the text below, then save your profile."));}
-            catch(error){notify(error instanceof Error?error.message:t("Could not read CV."),true);}finally{setUploading(false);e.target.value='';}
-          }}/></label></div>
-          <label>{t("CV text")} <span className="optional">{t("Review extracted text or paste directly")}</span><textarea rows={7} value={draft.cvText} onChange={e=>change('cvText',e.target.value)} maxLength={30000} placeholder={t("Your experience, skills, and achievements…")}/></label>
-        </section>
-        <section className="panel"><div className="panel-title"><span className="step-number">02</span><div><h2>{t("Where to search")}</h2><p>{t("One profile, shared across the sources you choose.")}</p></div></div>
+      {tab==='profile'&&<>
+        <SearchProfile profile={data.profile} minimum={data.minimumSearchIntervalHours} onSaved={async()=>{const response=await fetch('/api/dashboard');if(!response.ok)throw new Error(t('Could not refresh the dashboard.'));const next=await response.json();setData(next);setDraft(next.profile);setDirty(false);}}/>
+        <details className="panel search-controls"><summary><h2>{t('Search sources and automatic searches')}</h2></summary>
+          <form onSubmit={e=>{e.preventDefault();void save();}}>
           {sourceOptions.map(source=><label className="check-label" key={source.id}><input type="checkbox" checked={draft.sources.includes(source.id)} onChange={e=>change('sources',e.target.checked?[...draft.sources,source.id]:draft.sources.filter(id=>id!==source.id))}/><span>{t(source.label)}<small>{t(source.detail)}</small></span></label>)}
           <p className="footnote">{t("LinkedIn is selected to start. Add Y Combinator if startup opportunities interest you. YC checks its recent public jobs page, not every startup opening. Your role keywords narrow these results; the same CV, location constraints, and equity goals guide matching everywhere.")}</p>
           {draft.sources.includes('companies')&&<label>{t("Company board URLs")} <span className="optional">{t("One per line, up to 5")}</span><textarea rows={3} value={draft.companyBoards.join('\n')} onChange={e=>change('companyBoards',e.target.value.split('\n'))} placeholder="https://jobs.ashbyhq.com/company\nhttps://job-boards.greenhouse.io/company"/><small>{t("Use the company's Ashby or Greenhouse board address. Only the companies listed here will be watched.")}</small></label>}
           <div className="manual-sources"><strong>{t("More places to explore")}</strong><p><a href="https://wellfound.com/jobs" target="_blank" rel="noopener noreferrer">Wellfound ↗</a><a href="https://www.indeed.com/" target="_blank" rel="noopener noreferrer">Indeed ↗</a></p><small>{t("Open manually. These portals are not connected to scheduled searches yet.")}</small></div>
-        </section>
-        <section className="panel"><div className="panel-title"><span className="step-number">03</span><div><h2>{t("Define a good fit")}</h2><p>{t("Be specific about the things that matter.")}</p></div></div>
-          <div className="field-grid"><label>{t("Target roles")} <span className="optional">{t("One per line, up to 4")}</span><textarea rows={3} value={draft.titles.join('\n')} onChange={e=>change('titles',e.target.value.split('\n'))} required/></label><label>{t("Search locations")} <span className="optional">{t("One per line, up to 3; blank for worldwide")}</span><textarea rows={3} value={draft.locations.join('\n')} onChange={e=>change('locations',e.target.value.split('\n'))} placeholder={t("Spain\\nEurope")}/></label></div>
-          <label className="check-label"><input type="checkbox" checked={draft.remoteOnly} onChange={e=>change('remoteOnly',e.target.checked)}/><span>{t("Search remote listings only")} <small>{t("Location and work-authorization restrictions still apply.")}</small></span></label>
-          <div className="field-grid"><label>{t("Salary expectations")}<input value={draft.salaryExpectation} onChange={e=>change('salaryExpectation',e.target.value)} placeholder={t("Your minimum, currency, and flexibility")} maxLength={300}/></label><label>{t("Equity expectations")}<input value={draft.equityExpectation} onChange={e=>change('equityExpectation',e.target.value)} placeholder={t("What meaningful ownership means to you")} maxLength={500}/></label></div>
-          <label>{t("Must-haves and dealbreakers")}<textarea rows={3} value={draft.constraints} onChange={e=>change('constraints',e.target.value)} maxLength={3000} placeholder={t("Work authorization, time zones, relocation, industries, company stage…")}/></label>
-        </section>
 
-        <StrategyEditor profile={draft} onChange={value=>{setDraft(value);setDirty(true);}}/>
-        <section className="panel"><div className="panel-title"><span className="step-number">04</span><div><h2>{t("Your rhythm")}</h2><p>{t("Choose when to search and what deserves an email.")}</p></div></div>
-          <div className="field-grid three"><label>{t("Search every (hours)")}<input type="number" min={1} max={168} value={draft.intervalHours} onChange={e=>change('intervalHours',Number(e.target.value))} required/></label><label>{t("Strong match threshold")}<input type="number" min={0} max={100} value={draft.minimumScore} onChange={e=>change('minimumScore',Number(e.target.value))} required/></label><label>{t("AI evaluations per run")}<input type="number" min={1} max={30} value={draft.maxJobsPerRun} onChange={e=>change('maxJobsPerRun',Number(e.target.value))} required/></label></div>
-          <div className="field-grid"><label>{t("Posted within (days)")}<input type="number" min={1} max={90} value={draft.postedWithinDays} onChange={e=>change('postedWithinDays',Number(e.target.value))}/></label><label>{t("Daily AI evaluation limit")}<input type="number" min={1} max={300} value={draft.dailyEvaluationLimit} onChange={e=>change('dailyEvaluationLimit',Number(e.target.value))}/></label></div>
-          <label className="check-label"><input type="checkbox" checked={draft.includeUnknownDates} onChange={e=>change('includeUnknownDates',e.target.checked)}/><span>{t("Include listings without a posting date")}<small>{t("These are shown with an unknown posting date, not labelled as newly posted.")}</small></span></label>
-          <label className="check-label"><input type="checkbox" checked={draft.enabled} onChange={e=>change('enabled',e.target.checked)}/><span>{t("Enable scheduled searches")} <small>{t("You can still run a manual search while paused.")}</small></span></label>
-          <label>{t("Notification email")}<input type="email" value={draft.email} onChange={e=>change('email',e.target.value)} placeholder={t("you@example.com")}/></label>
-          <label className="check-label"><input type="checkbox" checked={draft.emailEnabled} onChange={e=>change('emailEnabled',e.target.checked)}/><span>{t("Email me new strong matches")} <small>{t("Up to 10 jobs in a digest. Previously notified jobs are not sent again.")}</small></span></label>
-        </section>
-        <div className="integration-row"><Integration label={t("AI matching")} ready={data.integrations.ai}/><Integration label={t("Email delivery")} ready={data.integrations.email}/><Integration label={t("Worker")} ready={Boolean(workerOnline)}/></div>
-        {(!data.integrations.ai||!data.integrations.email)&&<p className="footnote">{t("You can save your profile now. AI matching and email alerts become available when the platform services are connected.")}</p>}
-        <div className="save-bar"><span>{dirty?t("You have unsaved changes."):t("Your preferences are up to date.")}</span><button className="button primary" disabled={busy||uploading}><Check size={16}/>{busy?t("Saving…"):t("Save search profile")}</button></div>
-      </form>}
+            <label className="check-label"><input type="checkbox" checked={draft.enabled} onChange={e=>change('enabled',e.target.checked)}/><span>{t('Enable scheduled searches')}</span></label>
+            <button className="button secondary" disabled={busy}>{t('Save search settings')}</button>
+          </form>
+        </details>
+      </>}
       {tab==='activity'&&<>
         <div className="integration-row"><Integration label={t("AI matching")} ready={data.integrations.ai}/><Integration label={t("Email delivery")} ready={data.integrations.email}/><Integration label={t("Worker")} ready={Boolean(workerOnline)}/></div>
         <div className="panel activity-summary"><Clock3 size={20}/><div><strong>{t("Last worker check:")} {date(data.state.heartbeat)}</strong><p>{data.profile.enabled?t('Next scheduled search: {date}',{date:date(data.state.nextRun)}):t("Scheduled searches are paused.")} {data.state.requested?t("A manual search is queued."):''}</p></div></div>

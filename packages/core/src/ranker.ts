@@ -33,7 +33,7 @@ Score 80-100 only for compelling supported fit, 50-79 for potential fit with mea
 Each evidence field must be an exact short excerpt from the description, or null if absent. Never estimate equity, salary or founder progression.
 Explain the match and concerns concretely. Output only the requested structured result.`,
     prompt: JSON.stringify({ candidate: { objective: profile.objective, cv: profile.cvText, targetRoles: profile.titles,
-      constraints: profile.constraints, salary: profile.salaryExpectation, equity: profile.equityExpectation,
+      workAuthorization:profile.workAuthorization, constraints: profile.constraints, salary: profile.salaryExpectation, equity: profile.equityExpectation,
       locations: profile.locations, remoteOnly: profile.remoteOnly, strategy: profile.strategy },
       job: { title: job.title, company: job.company, location: job.location, description: job.description } }),
   });
