@@ -65,6 +65,12 @@ export class Accounts {
    if(!row)return false;
    if(hash){await db.prepare('UPDATE accounts SET password_hash=?,verified_at=COALESCE(verified_at,?) WHERE id=?').run(hash,Date.now(),row.user_id);await db.prepare('DELETE FROM sessions WHERE user_id=?').run(row.user_id);await db.prepare('DELETE FROM account_tokens WHERE user_id=?').run(row.user_id);}
    else{await db.prepare('UPDATE accounts SET verified_at=? WHERE id=?').run(Date.now(),row.user_id);await db.prepare('DELETE FROM account_tokens WHERE token_hash=?').run(digest(token));}
+   const store=new Store(db,String(row.user_id));
+   const {profile}=await store.profile();
+   if(profile.emailAlertsRequested&&profile.onboardingCompleted){
+     const account=await db.prepare('SELECT email FROM accounts WHERE id=?').get(row.user_id);
+     await store.saveProfile({...profile,email:String(account.email),emailEnabled:true});
+   }
    return true;
   });
  }

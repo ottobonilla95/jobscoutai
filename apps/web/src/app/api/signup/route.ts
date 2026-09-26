@@ -14,7 +14,7 @@ export async function POST(request:Request){
   const language=await requestLanguage();
   const account=await accounts.signup(parsed.data);
   (await accounts.setLanguage(account.id,language.preference,language.locale));
-  const store=(await accounts.store(account.id));try{const profile=(await store.profile()).profile;(await store.saveProfile({...profile,email:account.email,objective:translate(language.locale,profile.objective),strategy:{...profile.strategy,groups:profile.strategy.groups.map(g=>({...g,label:translate(language.locale,g.label),criteria:g.criteria.map(c=>({...c,label:translate(language.locale,c.label),rubric:translate(language.locale,c.rubric)}))}))}}));}finally{/* Store shares the process connection pool. */}
+  const store=(await accounts.store(account.id));try{const profile=(await store.profile()).profile;(await store.saveProfile({...profile,onboardingCompleted:false,email:account.email,objective:translate(language.locale,profile.objective),strategy:{...profile.strategy,groups:profile.strategy.groups.map(g=>({...g,label:translate(language.locale,g.label),criteria:g.criteria.map(c=>({...c,label:translate(language.locale,c.label),rubric:translate(language.locale,c.rubric)}))}))}}));}finally{/* Store shares the process connection pool. */}
   await setSession(account);return localizedJson({ok:true},{status:201});
  }catch{return localizedJson({error:'Could not create this account. If you already have an account, sign in.'},{status:400});}
 }

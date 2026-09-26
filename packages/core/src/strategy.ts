@@ -7,7 +7,7 @@ export const strategySchema = z.object({
   citizenships:z.array(z.string().trim().min(2).max(80)).max(6).default([]),
   relocation:z.string().max(1000).default(''),
   workAccess:z.array(z.object({ country:z.string().regex(/^[A-Z]{2}$/,'Use a two-letter country code, such as US or MX.'), access:z.enum(['authorized','sponsorship']), unknownSponsorship:z.enum(['allow','research','exclude']) })).max(40).default([]),
-  requirements:z.array(z.object({ id, label:z.string().min(2).max(120), instruction:z.string().min(10).max(2000), unknown:z.enum(['research','exclude','allow']) })).max(10).default([]),
+  requirements:z.array(z.object({ id, label:z.string().min(2).max(120), instruction:z.string().min(10).max(4000), unknown:z.enum(['research','exclude','allow']) })).max(10).default([]),
   groups:z.array(groupSchema).min(1).max(4),
   caps:z.array(z.object({ criterionId:id, atOrBelow:z.number().min(1).max(5), maximum:z.number().min(0).max(100) })).max(8).default([]),
 }).superRefine((s,ctx)=>{

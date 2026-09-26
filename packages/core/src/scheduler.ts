@@ -13,6 +13,7 @@ export async function runScheduled({accounts=getAccounts(),forceUserId,run=runSe
    const store=(await accounts.store(user.id));
    try{
     (await store.heartbeat());const {profile}=(await store.profile());const state=(await store.state());
+    if(!profile.onboardingCompleted)continue;
     if(!forceUserId&&!state.requested&&!(profile.enabled&&(!state.next_run||Date.parse(String(state.next_run))<=Date.now())))continue;
     const result=await run({store,accountId:user.id,canNotify:(await accounts.verified(user.id))&&profile.email.toLowerCase()===user.email,force:Boolean(forceUserId)});
     if(result.status!=='idle')return {accountId:user.id,...result};

@@ -12,13 +12,13 @@ export default function Login({mode='login',signupOpen=true}:{mode?:'login'|'sig
  const [error,setError]=useState('');const [busy,setBusy]=useState(false);
  return <main className="login-wrap"><div className="login-card">
   <Link href="/login" className="brand"><span className="brand-icon"><Compass size={23}/></span><span>{brand.name}</span></Link>
-  <LanguageSelect/>
+  {!signup&&<LanguageSelect/>}
   <span className="eyebrow">{t("YOUR SEARCH. YOUR NEXT CHAPTER.")}</span>
   <h1>{signup?t("Find what comes next."):t("Welcome back.")}</h1>
   <p className="muted">{signup?t("Create your account, add your CV, and build a search around what matters to you."):t("Sign in to your opportunities and search profile.")}</p>
   <form onSubmit={async e=>{e.preventDefault();setBusy(true);setError('');
    try{const response=await fetch(`/api/${mode}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email.trim(),password})});
-    const data=await response.json();if(!response.ok)throw new Error(data.error);window.location.assign(signup?'/?welcome=1':'/');
+    const data=await response.json();if(!response.ok)throw new Error(data.error);window.location.assign(signup?'/onboarding':'/');
    }catch(error){setError(error instanceof Error?error.message:t("Please try again."));setBusy(false);}}}>
    <label htmlFor="email">{t("Email address")}</label><input id="email" name="email" type="email" autoComplete="email" required maxLength={254} value={email} onChange={e=>setEmail(e.target.value)} placeholder={t("you@example.com")}/>
    <label htmlFor="password">{t("Password")}</label><div className="password-field"><input id="password" name="password" type={visible?'text':'password'} autoComplete={signup?'new-password':'current-password'} required minLength={signup?12:undefined} maxLength={128} value={password} onChange={e=>setPassword(e.target.value)} aria-describedby={signup?'password-hint':undefined}/><button type="button" className="icon-button" aria-label={visible?t("Hide password"):t("Show password")} onClick={()=>setVisible(v=>!v)}>{visible?<EyeOff size={18}/>:<Eye size={18}/>}</button></div>

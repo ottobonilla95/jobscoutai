@@ -5,5 +5,7 @@ import Dashboard from '@/components/dashboard';
 export const dynamic = 'force-dynamic';
 export default async function Page() {
   if (!await authenticated()) redirect('/login');
-  return <Dashboard initial={await withUserStore(dashboard)} />;
+  const initial=await withUserStore(dashboard);
+  if(!initial.profile.onboardingCompleted)redirect('/onboarding');
+  return <Dashboard initial={initial} />;
 }
