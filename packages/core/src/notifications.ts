@@ -36,6 +36,8 @@ export async function notifyMatches(store: Store, profile: Profile, version: num
   for (const batch of await store.pendingDeliveries()) {
     const payload = JSON.parse(String(batch.payload)) as EmailPayload;
     const savedJobs=await store.deliveryJobs(String(batch.id));
+    // A deleted account cascades its queue and jobs, even if this worker already read the batch.
+    if(!savedJobs.length)continue;
     if(savedJobs.some(job=>!strongMatch(job,profile,version))){await store.holdDelivery(String(batch.id),'Matching preferences or job eligibility changed; review this digest.');continue;}
     if(savedJobs.some(job=>!sourceEnabled(profile,job.sourceKey))){await store.holdDelivery(String(batch.id),'A job source was disabled; this saved digest needs review.');continue;}
     if (payload.to[0] !== profile.email) {

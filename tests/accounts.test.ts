@@ -52,3 +52,74 @@ test('authentication rate limits persist across connections and expire',async t=
  assert.equal((await accounts.allow('attempt',2,60000)),true);assert.equal((await second.allow('attempt',2,60000)),true);assert.equal((await accounts.allow('attempt',2,60000)),false);
  (await accounts.db.exec('UPDATE rate_limits SET expires=0'));assert.equal((await second.allow('attempt',2,60000)),true);
 });
+
+test('account deletion requires the current password and removes every owned record without affecting another account',async t=>{
+ const accounts=await fixture(t);
+ const a=await accounts.signup({email:'delete@example.test',password});
+ const b=await accounts.signup({email:'keep@example.test',password});
+ const tokens=new Map<string,string>();
+ for(const user of [a,b]){
+  tokens.set(user.id,await accounts.session(user));await accounts.session(user);
+  await accounts.issueToken(user,'reset');await accounts.issueToken(user,'verify');
+  const store=await accounts.store(user.id);
+  await store.saveProfile({... (await store.profile()).profile,cvText:'Private CV',objective:'Private objective'});
+  await store.upsert({id:'job',title:'Role',company:'Company',location:'Remote',url:'https://example.test/job',postedAt:null});
+  await store.enqueueDelivery('delivery',{to:[user.email],text:'Private digest'},['job']);
+  await accounts.db.prepare("INSERT INTO runs(user_id,id,started_at,status) VALUES(?,'run','2026-09-28','running')").run(user.id);
+  await accounts.db.prepare("INSERT INTO locks(user_id,owner,expires) VALUES(?,'worker',?)").run(user.id,Date.now()+60000);
+  await accounts.db.prepare("INSERT INTO leads(user_id,id,value,created_at) VALUES(?,'lead','{}','2026-09-28')").run(user.id);
+  await accounts.db.prepare("INSERT INTO ai_generations(id,user_id,kind,model,created_at,status) VALUES(?,?,'ranking','test','2026-09-28','pending')").run(user.id,user.id);
+  for(const key of [`login:${user.email}`,`reset:${user.email}`,...['verify-email','strategy','verify','profile-suggestions','manual-search','delete-account'].map(prefix=>`${prefix}:${user.id}`)])await accounts.allow(key,5,60000);
+ }
+ await accounts.allow('login:global',100,60000);
+ const tables=['sessions','account_tokens','profile','state','jobs','runs','locks','deliveries','delivery_jobs','leads','ai_generations'];
+ const snapshot=async(id:string)=>Promise.all(tables.map(table=>accounts.db.prepare(`SELECT * FROM ${table} WHERE user_id=?`).all(id)));
+ const beforeA=await snapshot(a.id),beforeB=await snapshot(b.id);
+ assert.ok(beforeA.every(rows=>rows.length>0));
+ assert.equal(await accounts.deleteAccount(a.id,'wrong password'),false);
+ assert.deepEqual(await snapshot(a.id),beforeA);
+ assert.ok(await accounts.current(tokens.get(a.id)));
+ const staleStore=await accounts.store(a.id);
+ assert.equal(await accounts.deleteAccount(a.id,password),true);
+ assert.equal(await accounts.byId(a.id),null);
+ assert.equal(await accounts.current(tokens.get(a.id)),null);
+ assert.equal(await accounts.login(a.email,password),null);
+ assert.ok((await snapshot(a.id)).every(rows=>rows.length===0));
+ assert.deepEqual(await snapshot(b.id),beforeB);
+ assert.equal((await accounts.current(tokens.get(b.id)))?.id,b.id);
+ assert.equal(Number((await accounts.db.prepare('SELECT count(*) AS n FROM rate_limits').get()).n),9);
+ await assert.rejects(staleStore.upsert({id:'late-job',title:'Role',company:'Company',location:'Remote',url:'https://example.test/late',postedAt:null}));
+ await assert.rejects(accounts.session(a));
+ assert.equal(await accounts.deleteAccount(a.id,password),false);
+ const recreated=await accounts.signup({email:a.email,password});
+ assert.notEqual(recreated.id,a.id);
+ assert.equal((await (await accounts.store(recreated.id)).jobs()).length,0);
+});
+
+test('account deletion rolls back its cascade if cleanup fails',async t=>{
+ const accounts=await fixture(t);const user=await accounts.signup({email:'rollback@example.test',password});
+ const token=await accounts.session(user);await accounts.allow(`login:${user.email}`,10,60000);
+ await accounts.db.exec("CREATE FUNCTION fail_cleanup() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'cleanup failed'; END $$;");
+ await accounts.db.exec("CREATE TRIGGER fail_cleanup BEFORE DELETE ON rate_limits FOR EACH ROW EXECUTE FUNCTION fail_cleanup();");
+ await assert.rejects(accounts.deleteAccount(user.id,password));
+ assert.equal((await accounts.current(token))?.id,user.id);
+ assert.ok(await (await accounts.store(user.id)).profile());
+});
+
+test('a worker with a cached email batch skips it after account deletion',async t=>{
+ const {notifyMatches}=await import('../packages/core/src/notifications');
+ for(const key of ['RESEND_API_KEY','EMAIL_FROM']){
+  const old=process.env[key];process.env[key]='test@example.test';
+  t.after(()=>{if(old===undefined)delete process.env[key];else process.env[key]=old;});
+ }
+ const accounts=await fixture(t);const user=await accounts.signup({email:'queued@example.test',password});
+ const store=await accounts.store(user.id);const {profile,version}=await store.profile();
+ await store.upsert({id:'job',title:'Role',company:'Company',location:'Remote',url:'https://example.test/job',postedAt:null});
+ await store.enqueueDelivery('delivery',{to:[user.email],text:'Private digest'},['job']);
+ const cached=await store.pendingDeliveries();
+ store.pendingDeliveries=async()=>cached;
+ await accounts.deleteAccount(user.id,password);
+ let sent=0;
+ assert.equal(await notifyMatches(store,{...profile,emailEnabled:true,email:user.email},version,async()=>{sent++;}),0);
+ assert.equal(sent,0);
+});

@@ -44,6 +44,19 @@ export class Accounts {
   return row?{id:String(row.id),email:String(row.email)}:null;
  }
  async revoke(token?:string){if(token)await this.db.prepare('DELETE FROM sessions WHERE token_hash=?').run(digest(token));}
+ async deleteAccount(id:string,password:string):Promise<boolean>{
+  const row=await this.db.prepare('SELECT email,password_hash FROM accounts WHERE id=?').get(id);
+  if(!row||!await verifyPassword(password,String(row.password_hash)))return false;
+  return this.db.transaction(async db=>{
+   // Match the verified hash too: a concurrent password reset invalidates this confirmation.
+   // Foreign keys cascade through every account-owned table, including delivery_jobs.
+   const deleted=await db.prepare('DELETE FROM accounts WHERE id=? AND password_hash=?').run(id,row.password_hash);
+   if(!deleted.changes)return false;
+   const keys=[`login:${row.email}`,`reset:${row.email}`,...['verify-email','strategy','verify','profile-suggestions','manual-search','delete-account'].map(prefix=>`${prefix}:${id}`)];
+   for(const key of keys)await db.prepare('DELETE FROM rate_limits WHERE key=?').run(digest(key));
+   return true;
+  });
+ }
  async language(id:string){const row=await this.db.prepare('SELECT language,browser_language FROM accounts WHERE id=?').get(id);return {preference:languagePreference(row?.language),locale:(row?.browser_language==='es'?'es':'en') as Locale};}
  async setLanguage(id:string,preference:LanguagePreference,locale:Locale){
   await this.db.transaction(async db=>{
