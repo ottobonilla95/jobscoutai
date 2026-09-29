@@ -614,5 +614,15 @@
   "Complete the required questions before generating suggestions.": "Completa las preguntas obligatorias antes de generar sugerencias.",
   "Daily suggestion limit reached. Try tomorrow or choose standard matching.": "Has alcanzado el límite diario de sugerencias. Inténtalo mañana o elige la evaluación estándar.",
   "Search sources and automatic searches": "Fuentes y búsquedas automáticas",
-  "Save search settings": "Guardar ajustes de búsqueda"
+  "Save search settings": "Guardar ajustes de búsqueda",
+  "Delete account": "Eliminar cuenta",
+  "Permanently delete your account and all saved data, including your CV, profile, jobs, notes, search history, and queued emails. This cannot be undone.": "Elimina permanentemente tu cuenta y todos los datos guardados, incluidos tu CV, perfil, ofertas, notas, historial de búsquedas y correos pendientes. Esta acción no se puede deshacer.",
+  "Current password": "Contraseña actual",
+  "I understand that my account and saved data will be permanently deleted.": "Entiendo que mi cuenta y mis datos guardados se eliminarán permanentemente.",
+  "Deleting account…": "Eliminando cuenta…",
+  "Permanently delete my account": "Eliminar mi cuenta permanentemente",
+  "Enter your password and confirm account deletion.": "Introduce tu contraseña y confirma la eliminación de la cuenta.",
+  "Incorrect password. Your account was not deleted.": "Contraseña incorrecta. Tu cuenta no se ha eliminado.",
+  "Could not delete your account. Please try again.": "No se pudo eliminar tu cuenta. Inténtalo de nuevo.",
+  "Cancel": "Cancelar"
 }
