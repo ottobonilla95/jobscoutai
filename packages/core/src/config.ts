@@ -16,9 +16,9 @@ export function dataDirectory(): string {
 
 export function integrations() {
   return {
-    ai: Boolean(process.env.AI_GATEWAY_API_KEY),
+    ai: Boolean(process.env.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY),
     email: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
-    model: process.env.AI_MODEL || 'openai/gpt-6-luna',
+    model: process.env.AI_MODEL || 'openai/gpt-5.4-mini',
     reasoning: process.env.AI_REASONING_EFFORT || 'medium',
   };
 }

@@ -27,6 +27,7 @@
     "check:database": "node --env-file-if-exists=.env --import tsx scripts/check-database.ts"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^4.0.83",
     "@vercel/functions": "^3.9.9",
     "ai": "^7.0.112",
     "cheerio": "^1.2.0",

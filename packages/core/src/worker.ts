@@ -1,4 +1,5 @@
 import { AIBudgetError } from './ai-usage';
+import { integrations } from './config';
 import { verifyListing } from './verification';
 import { strongMatch } from './recommendation';
 import { SourceError } from './linkedin';
@@ -24,7 +25,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
   const heartbeat = setInterval(()=>{void store.heartbeat(id).catch(()=>console.error('Worker heartbeat failed.'));},30000);
   try {
     if (profile.cvText.length < 100) throw new Error('Add your CV in Search profile before running a search.');
-    if (!process.env.AI_GATEWAY_API_KEY) throw new Error('Add AI_GATEWAY_API_KEY on the server to enable matching.');
+    if (!integrations().ai) throw new Error('Add OPENAI_API_KEY on the server to enable matching.');
     try {
       const result = await dependencies.search(profile);
       const listings = Array.isArray(result) ? result : result.jobs;

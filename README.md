@@ -31,8 +31,9 @@ Open `.env` locally. Add these platform credentials once; users do not need thei
 
 | Variable | Purpose |
 | --- | --- |
-| `AI_GATEWAY_API_KEY` | AI Gateway key for real CV-based evaluation; works on DigitalOcean without Vercel hosting. |
-| `AI_MODEL` | Defaults to `openai/gpt-6-luna`, verified in the model catalog at implementation time. |
+| `OPENAI_API_KEY` | OpenAI API key for CV-based evaluation, profile suggestions, and strategy imports. Used directly by the server and worker. |
+| `AI_GATEWAY_API_KEY` | Optional AI Gateway alternative when `OPENAI_API_KEY` is not set. |
+| `AI_MODEL` | Defaults to `openai/gpt-5.4-mini`, a capable, affordable model with structured output support. |
 | `AI_REASONING_EFFORT` | Defaults to `medium`. Keep an OpenAI reasoning model when using this provider option. |
 | `RESEND_API_KEY` | Needed only for email notifications. |
 | `EMAIL_FROM` | A sender verified in your Resend account, e.g. `JobScout AI <jobs@your-domain.com>`. |
@@ -99,7 +100,7 @@ Backups: `npm run backup` uses `pg_dump` and stores a custom-format dump under `
 - New signups complete a resumable, one-question-at-a-time profile setup before entering the dashboard. CV/experience, a career goal, confirmed target roles, location choice, and work preference are required. Salary, equity, work authorization, and dealbreakers are optional. LinkedIn is selected initially; sources and automatic searches remain editable from Search profile. AI can suggest roles and matching priorities from the CV and answers. If unavailable, users can enter roles themselves and select standard matching. Drafts stay separate from the active profile until completion; existing accounts retain their saved strategies.
 - Email verification and self-service password recovery are available through the configured email provider. Verification links expire after 24 hours; reset links after 30 minutes. Tokens are hashed, purpose-bound, and single-use. Password reset revokes all sessions. Job notifications require a verified account address. Onboarding email opt-in is saved while verification is pending and activates after verification. Configure delivery and verify the complete email flows before a public launch.
 - Existing prototype SQLite files are retained locally and never assigned automatically to a new signup. `APP_PASSWORD` and `SESSION_SECRET` in an old `.env` are ignored.
-- Add `AI_GATEWAY_API_KEY` in the server `.env`, then restart web/worker services. The existing AI SDK connector uses `AI_MODEL` (default `openai/gpt-6-luna`) and `AI_REASONING_EFFORT=medium`. This is an API credential, separate from a ChatGPT subscription. The key is never returned to the browser or stored in a user profile.
+- Add `OPENAI_API_KEY` in the server `.env` and in the Vercel project's server environment, then restart web/worker services and redeploy Vercel. The AI SDK connects directly to OpenAI using `AI_MODEL` (default `openai/gpt-5.4-mini`) and `AI_REASONING_EFFORT=medium`. Direct requests disable response storage. `AI_GATEWAY_API_KEY` remains an optional alternative when no OpenAI key is configured. This is an API credential, separate from a ChatGPT subscription. The key is never returned to the browser or stored in a user profile.
 - `npm run check:ai` tests the configured model with synthetic candidate/job text and reports token usage. It performs a real billable model call. No model connection is claimed until this succeeds. Set provider spending limits before opening the service to many users.
 
 ## Languages

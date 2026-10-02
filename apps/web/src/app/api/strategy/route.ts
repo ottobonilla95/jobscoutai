@@ -5,9 +5,10 @@ import { guard, limitedBody, currentAccount, withUserStore } from '@/lib/auth';
 import { getAccounts } from '@core/accounts';
 import {beginGeneration,finishGeneration,AIBudgetError} from '@core/ai-usage';
 import { importStrategy } from '@core/import-strategy';
+import { integrations } from '@core/config';
 export async function POST(request:Request){
  const denied=await guard(request);if(denied)return denied;
- if(!process.env.AI_GATEWAY_API_KEY)return localizedJson({error:'Connect AI matching before importing. You can edit the settings manually.'},{status:503});
+ if(!integrations().ai)return localizedJson({error:'Connect AI matching before importing. You can edit the settings manually.'},{status:503});
  const account=(await currentAccount())!;
  if(!(await getAccounts().allow(`strategy:${account.id}`,5,86400000)))return localizedJson({error:'Daily strategy import limit reached. Try again tomorrow.'},{status:429});
  try{const {text}=z.object({text:z.string().min(100).max(40000)}).parse(JSON.parse(new TextDecoder().decode(await limitedBody(request,170000))));

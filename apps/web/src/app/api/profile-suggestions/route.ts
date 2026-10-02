@@ -6,9 +6,10 @@ import { minimumSearchIntervalHours } from '@core/search-policy';
 import { suggestProfile } from '@core/profile-suggestions';
 import { beginGeneration, finishGeneration, AIBudgetError } from '@core/ai-usage';
 import { getAccounts } from '@core/accounts';
+import { integrations } from '@core/config';
 export async function POST(request:Request) {
   const denied=await guard(request);if(denied)return denied;
-  if(!process.env.AI_GATEWAY_API_KEY)return localizedJson({error:'AI suggestions are unavailable. Enter roles yourself or choose standard matching.'},{status:503});
+  if(!integrations().ai)return localizedJson({error:'AI suggestions are unavailable. Enter roles yourself or choose standard matching.'},{status:503});
   try {
     const {answers,kind}=z.object({answers:setupAnswersSchema,kind:z.enum(['roles','matching'])}).parse(JSON.parse(new TextDecoder().decode(await limitedBody(request))));
     if(answers.cvText.trim().length<100||(kind==='matching'&&firstIncompleteStep(answers,minimumSearchIntervalHours())!==null))return localizedJson({error:'Complete the required questions before generating suggestions.'},{status:400});

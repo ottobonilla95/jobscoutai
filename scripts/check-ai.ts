@@ -1,5 +1,6 @@
 import {rankJob} from '../packages/core/src/ranker';
 import {defaultProfile} from '../packages/core/src/profile';
-if(!process.env.AI_GATEWAY_API_KEY)throw new Error('Set AI_GATEWAY_API_KEY in .env before running the model connection check.');
+import {integrations} from '../packages/core/src/config';
+if(!integrations().ai)throw new Error('Set OPENAI_API_KEY in .env before running the model connection check.');
 const result=await rankJob({id:'connection-check',sourceKey:'linkedin',title:'Software Engineer',company:'Connection test',location:'Remote',url:'https://example.com',postedAt:null,firstSeen:new Date().toISOString(),lastSeen:new Date().toISOString(),status:'new',assessment:null,evaluatedVersion:null,notifiedAt:null,description:'Synthetic connection test: a software engineering role building TypeScript applications. Salary, equity, and work authorization are not specified.'},{...defaultProfile,cvText:'Synthetic connection test candidate with experience developing TypeScript and React applications, collaborating with product teams, and testing software.'});
-console.log(JSON.stringify({connected:true,model:process.env.AI_MODEL||'openai/gpt-6-luna',inputTokens:result.inputTokens,outputTokens:result.outputTokens}));
+console.log(JSON.stringify({connected:true,model:integrations().model,inputTokens:result.inputTokens,outputTokens:result.outputTokens}));
