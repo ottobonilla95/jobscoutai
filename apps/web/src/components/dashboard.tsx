@@ -10,6 +10,7 @@ import { strongMatch, recommendation, recommendationLabels } from '@core/recomme
 import TrackingEditor from './tracking-editor';
 import { sourceOptions, sourceLabel } from '@core/source-settings';
 import WorkspaceSidebar, {type DashboardView} from './workspace-sidebar';
+import { activeCountrySources } from '@core/country-sources';
 
 export default function Dashboard({ initial, initialView }: { initial: DashboardData; initialView?: DashboardView }) {
  const {t,locale,date,number,message:localizeMessage}=useI18n();
@@ -92,6 +93,7 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
         <details className="panel search-controls"><summary><h2>{t('Search sources and automatic searches')}</h2></summary>
           <form onSubmit={e=>{e.preventDefault();void save();}}>
           {sourceOptions.map(source=><label className="check-label" key={source.id}><input type="checkbox" checked={draft.sources.includes(source.id)} onChange={e=>change('sources',e.target.checked?[...draft.sources,source.id]:draft.sources.filter(id=>id!==source.id))}/><span>{t(source.label)}<small>{t(source.detail)}</small></span></label>)}
+          {activeCountrySources(draft).length>0&&<div className="manual-sources"><strong>{t('Automatic sources for Colombia')}</strong><p>{activeCountrySources(draft).map(source=><a key={source.key} href={source.url} target="_blank" rel="noopener noreferrer">{source.label} ↗</a>)}</p><small>{t('These sources run automatically while Colombia is included in your search locations.')}</small></div>}
           <p className="footnote">{t("LinkedIn is selected to start. Add Y Combinator if startup opportunities interest you. YC checks its recent public jobs page, not every startup opening. Your role keywords narrow these results; the same CV, location constraints, and equity goals guide matching everywhere.")}</p>
           {draft.sources.includes('companies')&&<label>{t("Company board URLs")} <span className="optional">{t("One per line, up to 5")}</span><textarea rows={3} value={draft.companyBoards.join('\n')} onChange={e=>change('companyBoards',e.target.value.split('\n'))} placeholder="https://jobs.ashbyhq.com/company\nhttps://job-boards.greenhouse.io/company"/><small>{t("Use the company's Ashby or Greenhouse board address. Only the companies listed here will be watched.")}</small></label>}
           <div className="manual-sources"><strong>{t("More places to explore")}</strong><p><a href="https://wellfound.com/jobs" target="_blank" rel="noopener noreferrer">Wellfound ↗</a><a href="https://www.indeed.com/" target="_blank" rel="noopener noreferrer">Indeed ↗</a></p><small>{t("Open manually. These portals are not connected to scheduled searches yet.")}</small></div>

@@ -76,7 +76,9 @@ export class Store {
     await this.db.prepare(`INSERT INTO jobs(user_id,id,title,company,location,url,posted_at,first_seen,last_seen,source_key,description) VALUES(?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(user_id,id) DO UPDATE SET title=excluded.title,company=excluded.company,location=excluded.location,last_seen=excluded.last_seen`)
       .run(this.userId,listing.id,listing.title,listing.company,listing.location,listing.url,listing.postedAt,now,now,listing.sourceKey||'linkedin',listing.description||null);
-    const duplicate=await this.db.prepare('SELECT id FROM jobs WHERE user_id=? AND id!=? AND (url=? OR (lower(trim(company))=lower(trim(?)) AND lower(trim(title))=lower(trim(?)) AND lower(trim(location))=lower(trim(?)))) AND duplicate_of IS NULL ORDER BY first_seen LIMIT 1').get(this.userId,listing.id,listing.url,listing.company,listing.title,listing.location);
+    // Anonymous employers on local portals cannot establish a company/title duplicate.
+    const namedEmployer=Boolean(listing.company.trim())&&!/^(employer not disclosed|confidential employer|empresa confidencial|confidencial)$/i.test(listing.company.trim());
+    const duplicate=await this.db.prepare('SELECT id FROM jobs WHERE user_id=? AND id!=? AND (url=? OR (? AND lower(trim(company))=lower(trim(?)) AND lower(trim(title))=lower(trim(?)) AND lower(trim(location))=lower(trim(?)))) AND duplicate_of IS NULL ORDER BY first_seen LIMIT 1').get(this.userId,listing.id,listing.url,namedEmployer,listing.company,listing.title,listing.location);
     if(duplicate)await this.db.prepare('UPDATE jobs SET duplicate_of=? WHERE user_id=? AND id=? AND duplicate_reviewed=0').run(duplicate.id,this.userId,listing.id);
   }
   async description(id:string,text:string){await this.db.prepare('UPDATE jobs SET description=? WHERE user_id=? AND id=?').run(text,this.userId,id);}
