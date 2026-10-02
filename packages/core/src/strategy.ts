@@ -1,9 +1,11 @@
 import { z } from 'zod';
+import {discoverySchema} from './discovery';
 
 const id = z.string().regex(/^[a-z][a-z0-9_]{0,39}$/);
 export const criterionSchema = z.object({ id, label:z.string().min(2).max(100), rubric:z.string().min(10).max(1500), weight:z.number().min(1).max(100) });
 export const groupSchema = z.object({ id, label:z.string().min(2).max(100), weight:z.number().min(1).max(100), criteria:z.array(criterionSchema).min(1).max(8) });
 export const strategySchema = z.object({
+  discovery:discoverySchema.nullable().default(null),
   citizenships:z.array(z.string().trim().min(2).max(80)).max(6).default([]),
   relocation:z.string().max(1000).default(''),
   workAccess:z.array(z.object({ country:z.string().regex(/^[A-Z]{2}$/,'Use a two-letter country code, such as US or MX.'), access:z.enum(['authorized','sponsorship']), unknownSponsorship:z.enum(['allow','research','exclude']) })).max(40).default([]),
@@ -17,7 +19,7 @@ export const strategySchema = z.object({
   for(const cap of s.caps)if(!s.groups.some(g=>g.criteria.some(c=>c.id===cap.criterionId)))ctx.addIssue({code:'custom',message:'A score cap refers to an unknown criterion.'});
 });
 export type Strategy=z.infer<typeof strategySchema>;
-export const defaultStrategy:Strategy={citizenships:[],relocation:'',workAccess:[],requirements:[],caps:[],groups:[{id:'fit',label:'Overall fit',weight:100,criteria:[
+export const defaultStrategy:Strategy={discovery:null,citizenships:[],relocation:'',workAccess:[],requirements:[],caps:[],groups:[{id:'fit',label:'Overall fit',weight:100,criteria:[
   {id:'skills',label:'Skills',weight:40,rubric:'1: serious mismatch; 3: partial overlap or important unknowns; 5: strong match backed by the CV and job requirements.'},
   {id:'responsibilities',label:'Responsibilities',weight:25,rubric:'1: conflicts with the stated career goal; 3: some relevant responsibilities; 5: clear evidence of responsibilities that strongly advance the goal.'},
   {id:'conditions',label:'Working conditions',weight:20,rubric:'1: stated conditions conflict with preferences; 3: partial match or missing salary/location evidence; 5: stated compensation and working conditions meet preferences.'},

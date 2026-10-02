@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {searchLocationSchema,maxSearchLocations} from './locations';
 import { setupDraftSchema } from './setup-schema';
 import { strategySchema, defaultStrategy, type Research, type evaluateStrategy } from './strategy';
 import { parseBoard } from './source-settings';
@@ -19,7 +20,8 @@ export const profileSchema = z.object({
   cvText: z.string().trim().max(30000),
   cvFileName: z.string().max(200),
   titles: z.array(z.string().trim().min(2).max(120)).min(1).max(4),
-  locations: z.array(z.string().trim().max(120)).min(1).max(3),
+  searchLocations:z.array(searchLocationSchema).max(maxSearchLocations).default([]),
+  locations: z.array(z.string().trim().max(240)).min(1).max(3),
   remoteOnly: z.boolean(),
   sources: z.array(z.enum(['linkedin','yc','companies'])).min(1).max(3).default(['linkedin']),
   companyBoards: z.array(z.string().trim().max(250).refine(value => Boolean(parseBoard(value)), 'Use an Ashby or Greenhouse company board URL.')).max(5).default([]),
@@ -40,7 +42,7 @@ export const defaultProfile: Profile = {
   name: '',
   objective: 'Find a role that matches my experience, priorities, and career goals.',
   cvText: '', cvFileName: '',
-  titles: ['Software Engineer'], locations: [''], remoteOnly: false,
+  searchLocations:[], titles: ['Software Engineer'], locations: [''], remoteOnly: false,
   sources: ['linkedin'], companyBoards: [],
   constraints: '', salaryExpectation: '', equityExpectation: '', email: '',
   intervalHours: 4, minimumScore: 80, maxJobsPerRun: 10,

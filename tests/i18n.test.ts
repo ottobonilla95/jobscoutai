@@ -24,7 +24,7 @@ test('catalog has complete messages and matching interpolation parameters',()=>{
  assert.equal(translate('es','Show more opportunities ({count} remaining)',{count:7}),'Mostrar más oportunidades (quedan 7)');assert.equal(translate('es','Unmapped external content'),'Unmapped external content');
 });
 test('view translation calls reference real keys and visible copy is translated',()=>{
- const allowed=new Set(['Wellfound ↗','Indeed ↗','English','Español']);
+ const allowed=new Set(['Wellfound ↗','Indeed ↗','English','Español','OpenStreetMap']);
  for(const file of readdirSync('apps/web/src/components').filter(f=>f.endsWith('.tsx'))){
   const ast=parser.parse(readFileSync(join('apps/web/src/components',file),'utf8'),{sourceType:'module',plugins:['typescript','jsx']});
   function walk(node:any,parent?:any){if(!node||typeof node!=='object')return;

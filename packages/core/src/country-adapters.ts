@@ -1,3 +1,4 @@
+import {searchTitles} from './discovery';
 import { load } from 'cheerio';
 import { z } from 'zod';
 import { colombiaSearchLocations, normalizedLocation, type CountrySource, type CountrySourceKey } from './country-sources';
@@ -137,11 +138,12 @@ export async function describeCountryJob(id: string, job: JobListing, read = pub
   return parseCountryDescription(key, await read(url.href,key,true));
 }
 export async function searchCountrySource(source: CountrySource, profile: Profile, read = publicData): Promise<JobListing[]> {
-  const cities = colombiaSearchLocations(profile.locations);
+  const places=profile.searchLocations.filter(p=>p.countryCode==='CO');
+  const cities=places.length?(places.some(p=>p.kind==='country')?['']:places.map(p=>p.city)):colombiaSearchLocations(profile.locations);
   if (!cities.length) return [];
   const jobs = new Map<string,JobListing>();
   const queries = new Set<string>();
-  for (const title of profile.titles) for (const city of source.key === 'getonbrd-co' ? [''] : cities) {
+  for (const title of searchTitles(profile)) for (const city of source.key === 'getonbrd-co' ? [''] : cities) {
     let url: string;
     if (source.key === 'getonbrd-co') {
       const query = new URLSearchParams({query:title,country_code:'co',per_page:'20',page:'1',lang:profile.outputLanguage,

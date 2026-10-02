@@ -1,3 +1,4 @@
+import {searchTitles} from './discovery';
 import { load } from 'cheerio';
 import type { JobListing, Profile } from './profile';
 
@@ -50,7 +51,7 @@ async function publicPage(url: string): Promise<string> {
 export async function searchLinkedIn(profile: Profile): Promise<JobListing[]> {
   const jobs = new Map<string, JobListing>();
   // One page per title/location: a deliberate bounded first version, not exhaustive coverage.
-  for (const title of profile.titles) for (const location of profile.locations) {
+  for (const title of searchTitles(profile)) for (const location of profile.locations) {
     const query = new URLSearchParams({ keywords: title, start: '0', f_TPR: `r${profile.postedWithinDays*86400}`, sortBy: 'DD' });
     if (location) query.set('location', location);
     if (profile.remoteOnly) query.set('f_WT', '2');

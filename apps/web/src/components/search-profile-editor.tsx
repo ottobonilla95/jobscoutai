@@ -1,10 +1,14 @@
 import type { ChangeEvent, RefObject } from 'react';
 import { Check, FileText, MapPin, SlidersHorizontal, Sparkles, Target, Upload } from 'lucide-react';
 import type { SetupAnswers, SetupDraft } from '@core/setup-schema';
+import LocationPicker from './location-picker';
+import RolePicker from './role-picker';
+import StrategyReview from './strategy-review';
+import type {SearchLocation} from '@core/locations';
 import { useI18n } from './i18n';
 
 export const profileFieldIds: Record<number, string> = {
-  1: 'profile-cv', 2: 'profile-objective', 3: 'profile-titles',
+  1: 'profile-cv', 2: 'profile-objective', 3: 'profile-titles-0',
   4: 'profile-location', 5: 'profile-work-preference', 10: 'profile-frequency',
 };
 
@@ -26,12 +30,14 @@ type Props = {
   onSuggest: (kind: 'roles' | 'matching') => Promise<void>;
   onStandardMatching: () => void;
   onSave: () => Promise<void>;
+  onLocations:(places:SearchLocation[])=>void;
+  onMatching:(matching:NonNullable<SetupDraft['matching']>)=>void;
 };
 
 export default function SearchProfileEditor({
   answers: a, matching, matchingCurrent, minimum, frequencies, busy, saveState,
   error, notice, invalidStep, verificationNotice, formRef, update, onUpload,
-  onSuggest, onStandardMatching, onSave,
+  onSuggest, onStandardMatching, onSave, onLocations, onMatching,
 }: Props) {
   const { t } = useI18n();
   const fieldError = (step: number) => invalidStep === step || undefined;
@@ -53,17 +59,14 @@ export default function SearchProfileEditor({
             <label htmlFor="profile-name">{t('Your name')} <span className="profile-optional">{t('Optional')}</span><input id="profile-name" value={a.name} maxLength={100} autoComplete="given-name" onChange={event => update('name', event.target.value)}/></label>
             <div className="profile-field-grid">
               <label htmlFor="profile-objective">{t('Career goal')}<textarea id="profile-objective" rows={4} value={a.objective} maxLength={3000} aria-invalid={fieldError(2)} aria-describedby={fieldError(2) ? 'profile-error' : undefined} onChange={event => update('objective', event.target.value)}/></label>
-              <div className="profile-role-field"><label htmlFor="profile-titles">{t('Target roles')}<textarea id="profile-titles" rows={4} value={a.titles} maxLength={500} aria-invalid={fieldError(3)} aria-describedby="profile-roles-hint" onChange={event => update('titles', event.target.value)}/><small id="profile-roles-hint">{t('One per line, up to four.')}</small></label><button type="button" className="text-button" onClick={() => void onSuggest('roles')}><Sparkles size={14}/>{t('Suggest roles from my CV')}</button></div>
+              <div className="profile-role-field"><RolePicker id="profile-titles" value={a.titles} invalid={fieldError(3)} onChange={value=>update('titles',value)}/><button type="button" className="text-button" onClick={() => void onSuggest('roles')}><Sparkles size={14}/>{t('Regenerate from my CV and goal')}</button></div>
             </div>
           </section>
 
           <section className="panel profile-panel" aria-labelledby="profile-location-heading">
             <div className="profile-panel-heading"><MapPin size={19}/><div><h2 id="profile-location-heading">{t('Location and work')}</h2><p>{t('Where and how your next role should fit your life.')}</p></div></div>
             <div className="profile-field-grid">
-              <div>
-                <label htmlFor="profile-location">{t('Search location')}<select id="profile-location" value={a.locationChoice} aria-invalid={fieldError(4)} onChange={event => update('locationChoice', event.target.value as SetupAnswers['locationChoice'])}><option value="" disabled>{t('Choose a location')}</option><option value="anywhere">{t('Anywhere')}</option><option value="specific">{t('Specific locations')}</option></select></label>
-                {a.locationChoice === 'specific' && <label htmlFor="profile-locations">{t('Specific locations')}<textarea id="profile-locations" rows={3} value={a.locations} maxLength={365} aria-invalid={fieldError(4)} onChange={event => update('locations', event.target.value)} placeholder={t('One per line, up to 3')}/></label>}
-              </div>
+              <LocationPicker id="profile-location" value={a.selectedLocations} legacyLocations={a.locations} invalid={fieldError(4)} onChange={onLocations}/>
               <label htmlFor="profile-work-preference">{t('Work preference')}<select id="profile-work-preference" value={a.remotePreference} aria-invalid={fieldError(5)} onChange={event => update('remotePreference', event.target.value as SetupAnswers['remotePreference'])}><option value="" disabled>{t('Choose your work preference.')}</option><option value="remote">{t('Remote only')}</option><option value="flexible">{t('Also open to office work')}</option></select><small>{t('Remote jobs can still have location and work-authorization restrictions.')}</small></label>
             </div>
             <label htmlFor="profile-authorization">{t('Work authorization')} <span className="profile-optional">{t('Optional')}</span><textarea id="profile-authorization" rows={2} value={a.workAuthorization} maxLength={1000} onChange={event => update('workAuthorization', event.target.value)}/></label>
@@ -90,6 +93,7 @@ export default function SearchProfileEditor({
             <div className="profile-panel-heading"><Sparkles size={19}/><h2 id="profile-matching-heading">{t('Matching preferences')}</h2></div>
             <span className={`pill ${matchingCurrent ? 'green' : 'neutral'}`}>{t(matchingCurrent ? 'Up to date' : 'Update needed')}</span>
             <p className="profile-matching-copy">{matchingCurrent ? matching!.summary : t(matching ? 'Your answers changed. Update your matching preferences before saving.' : 'Generate your matching preferences from your CV and answers, or start with standard matching.')}</p>
+            {matchingCurrent&&matching&&<StrategyReview matching={matching} onChange={onMatching}/>}
             <div className="profile-matching-actions"><button type="button" className="button secondary full" onClick={() => void onSuggest('matching')}>{t(matchingCurrent ? 'Regenerate matching preferences' : 'Generate matching preferences')}</button><button type="button" className="text-button" onClick={onStandardMatching}>{t('Use standard matching')}</button></div>
             <p className="footnote">{t('Your explicit dealbreakers remain requirements. Missing information stays unknown.')}</p>
           </section>
