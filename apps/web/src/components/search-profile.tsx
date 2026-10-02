@@ -1,10 +1,11 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { ArrowLeft, ArrowRight, Check, FileText, Upload } from 'lucide-react';
 import type { Profile } from '@core/profile';
 import { draftFromProfile, standardMatching } from '@core/search-setup';
 import { firstIncompleteStep, matchingBasis, setupStepError, type SetupAnswers, type SetupDraft } from '@core/setup-schema';
 import { useI18n } from './i18n';
+import SearchProfileEditor, { profileFieldIds } from './search-profile-editor';
 
 const questions=[
   'What should we call you?', 'Bring your experience along', 'What kind of opportunity do you want?',
@@ -26,6 +27,7 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
   const [verificationNeeded,setVerificationNeeded]=useState(false);
   const [completed,setCompleted]=useState(false);
   const heading=useRef<HTMLHeadingElement>(null);
+  const editor=useRef<HTMLFormElement>(null);
   const current=useRef(draft);current.current=draft;
   const timer=useRef<ReturnType<typeof setTimeout>|null>(null);
   const queue=useRef<Promise<unknown>>(Promise.resolve());
@@ -90,7 +92,12 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
   }
   async function finish() {
     const missing=firstIncompleteStep(a,minimum);
-    if(missing!==null){setError(t(setupStepError(missing,a,minimum)!));setDraft(d=>({...d,step:missing}));return;}
+    if(missing!==null){
+      setError(t(setupStepError(missing,a,minimum)!));
+      if(onboarding)setDraft(d=>({...d,step:missing}));
+      else editor.current?.querySelector<HTMLElement>(`#${missing===4&&a.locationChoice==='specific'?'profile-locations':profileFieldIds[missing]}`)?.focus();
+      return;
+    }
     if(!matchingCurrent){setError(t('Update your matching preferences or choose standard matching.'));return;}
     setBusy(true);setError('');
     try {
@@ -109,9 +116,25 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
     try{const response=await fetch('/api/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'verify'})});const result=await response.json();if(!response.ok)throw new Error(result.error);setNotice(result.message);}
     catch(e){setError(e instanceof Error?e.message:t('Could not request verification.'));}finally{setBusy(false);}
   }
+  async function uploadCV(event:ChangeEvent<HTMLInputElement>) {
+    const input=event.currentTarget;const file=input.files?.[0];if(!file)return;
+    setBusy(true);setError('');setNotice('');
+    try {
+      const form=new FormData();form.append('cv',file);
+      const response=await fetch('/api/cv',{method:'POST',body:form});
+      const result=await response.json();if(!response.ok)throw new Error(result.error);
+      setDraft(d=>({...d,answers:{...d.answers,cvText:result.text,cvFileName:result.name}}));
+      setNotice(t(result.truncated?'CV extracted and shortened to 30,000 characters. Review it before saving.':'CV extracted. Review the text below, then continue.'));
+    }catch(e){setError(e instanceof Error?e.message:t('Could not read CV.'));}
+    finally{setBusy(false);input.value='';}
+  }
+  function useStandardMatching() {
+    setDraft(d=>({...d,matching:standardMatching(d.answers,locale)}));setError('');
+  }
   const alerts=<div className="setup-alerts"><p>{t('Email alerts will start after you verify your account email. Your preference is saved.')}</p><button type="button" className="text-button" disabled={busy} onClick={verify}>{t('Send verification email')}</button></div>;
   if(completed)return <section className="setup-card setup-complete"><Check size={32}/><h1>{t('Your profile is ready.')}</h1><p>{t('Your search is set up. You can change any answer in Search profile.')}</p>{verificationNeeded&&alerts}{notice&&<p role="status">{notice}</p>}{error&&<p role="alert" className="error-text">{error}</p>}<a className="button primary" href="/">{t('Go to my opportunities')}<ArrowRight size={18}/></a></section>;
   const frequencies=[...new Set([minimum,4,8,12,24,48,168,a.intervalHours].filter(n=>n>=minimum))].sort((x,y)=>x-y);
+  if(!onboarding)return <SearchProfileEditor answers={a} matching={draft.matching} matchingCurrent={matchingCurrent} minimum={minimum} frequencies={frequencies} busy={busy} saveState={saveState} error={error} notice={notice} invalidStep={error?firstIncompleteStep(a,minimum):null} verificationNotice={verificationNeeded?alerts:null} formRef={editor} update={update} onUpload={uploadCV} onSuggest={suggest} onStandardMatching={useStandardMatching} onSave={finish}/>;
   const values=[a.name,a.cvFileName||(a.cvText?t('Experience added'):''),a.objective,a.titles,a.locationChoice==='anywhere'?t('Anywhere'):a.locations,a.remotePreference==='remote'?t('Remote only'):a.remotePreference==='flexible'?t('Also open to office work'):'',a.workAuthorization,a.salaryExpectation,a.equityExpectation,a.constraints,t('Every {count} hours',{count:a.intervalHours}),a.emailAlerts?t('Yes, email me strong matches'):t('No email alerts')];
   const field=(key:'name'|'objective'|'titles'|'locations'|'workAuthorization'|'salaryExpectation'|'equityExpectation'|'constraints',rows=1,maxLength=3000,placeholder?:string)=><label className="setup-field"><span className="sr-only">{t(questions[step])}</span>{rows>1?<textarea aria-describedby="question-hint" rows={rows} maxLength={maxLength} value={a[key]} placeholder={placeholder} onChange={e=>update(key,e.target.value)}/>:<input aria-describedby="question-hint" maxLength={maxLength} value={a[key]} placeholder={placeholder} onChange={e=>update(key,e.target.value)}/>}</label>;
   return <section className={`setup-card ${step===12?'setup-review':''}`}>
@@ -121,11 +144,7 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
     <form onSubmit={e=>{e.preventDefault();if(step===12)void finish();else void move(reviewing?12:step+1);}}>
       <fieldset disabled={busy} className="setup-fields">
       {step===0&&<><p id="question-hint">{t('A name makes this feel a little more like you.')}</p>{field('name',1,100)}</>}
-      {step===1&&<><p id="question-hint">{t('Upload your CV or paste your experience. We will suggest roles for you to confirm.')}</p><div className="setup-upload"><FileText size={28}/><strong>{a.cvFileName||t('PDF, DOCX, or TXT · Up to 5 MB')}</strong><label className="button secondary"><Upload size={16}/>{t('Upload CV')}<input className="setup-file" type="file" accept=".pdf,.docx,.txt" aria-label={t('Upload CV')} onChange={async e=>{
-        const file=e.target.files?.[0];if(!file)return;const input=e.target;setBusy(true);setError('');
-        try{const form=new FormData();form.append('cv',file);const response=await fetch('/api/cv',{method:'POST',body:form});const result=await response.json();if(!response.ok)throw new Error(result.error);setDraft(d=>({...d,answers:{...d.answers,cvText:result.text,cvFileName:result.name}}));setNotice(t(result.truncated?'CV extracted and shortened to 30,000 characters. Review it before saving.':'CV extracted. Review the text below, then continue.'));}
-        catch(e){setError(e instanceof Error?e.message:t('Could not read CV.'));}finally{setBusy(false);input.value='';}
-      }}/></label></div><label>{t('CV text')}<textarea rows={8} value={a.cvText} maxLength={30000} onChange={e=>update('cvText',e.target.value)} placeholder={t('Your experience, skills, and achievements…')}/></label></>}
+      {step===1&&<><p id="question-hint">{t('Upload your CV or paste your experience. We will suggest roles for you to confirm.')}</p><div className="setup-upload"><FileText size={28}/><strong>{a.cvFileName||t('PDF, DOCX, or TXT · Up to 5 MB')}</strong><label className="button secondary"><Upload size={16}/>{t('Upload CV')}<input className="setup-file" type="file" accept=".pdf,.docx,.txt" aria-label={t('Upload CV')} onChange={event=>void uploadCV(event)}/></label></div><label>{t('CV text')}<textarea rows={8} value={a.cvText} maxLength={30000} onChange={e=>update('cvText',e.target.value)} placeholder={t('Your experience, skills, and achievements…')}/></label></>}
       {step===2&&<><p id="question-hint">{t('Tell us in your own words. What would make your next role a good move?')}</p>{field('objective',5,3000,t('For example: a senior product role at a small climate company, preferably remote.'))}</>}
       {step===3&&<><p id="question-hint">{t('Your CV describes your past. Choose the roles you want next. One per line, up to four.')}</p>{field('titles',4,500)}<button type="button" className="text-button" onClick={()=>void suggest('roles')}>{t('Suggest roles from my CV')}</button></>}
       {step===4&&<><p id="question-hint">{t('Choose a location, or keep your search open worldwide.')}</p><div className="setup-choices">{(['anywhere','specific'] as const).map(value=><label key={value} className={a.locationChoice===value?'selected':''}><input type="radio" name="location" checked={a.locationChoice===value} onChange={()=>update('locationChoice',value)}/>{t(value==='anywhere'?'Anywhere':'Specific locations')}</label>)}</div>{a.locationChoice==='specific'&&field('locations',3,365,t('One per line, up to 3'))}</>}
@@ -141,7 +160,7 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
         <div className="setup-summary">{questions.slice(0,12).map((question,index)=><div key={question}><div><span>{t(question)} {optional.has(index)&&<small>· {t('Optional')}</small>}</span><p>{values[index]||t('Not specified')}</p></div><button type="button" className="text-button" aria-label={t('Edit: {question}',{question:t(question)})} onClick={()=>{setReviewing(true);void move(index);}}>{t('Edit')}</button></div>)}</div>
         <section className="matching-summary"><span className="eyebrow">{t('HOW WE WILL MATCH YOU')}</span><h2>{t('Built around what matters to you')}</h2>{matchingCurrent?<p>{draft.matching!.summary}</p>:<p>{t('Generate your matching preferences from your CV and answers, or start with standard matching.')}</p>}
           {!matchingCurrent&&draft.matching&&<p>{t('Your answers changed. Update your matching preferences before saving.')}</p>}
-          <div className="setup-matching-actions"><button type="button" className="button secondary" onClick={()=>void suggest('matching')}>{t(matchingCurrent?'Regenerate matching preferences':'Generate matching preferences')}</button><button type="button" className="text-button" onClick={()=>{setDraft(d=>({...d,matching:standardMatching(d.answers,locale)}));setError('');}}>{t('Use standard matching')}</button></div>
+          <div className="setup-matching-actions"><button type="button" className="button secondary" onClick={()=>void suggest('matching')}>{t(matchingCurrent?'Regenerate matching preferences':'Generate matching preferences')}</button><button type="button" className="text-button" onClick={useStandardMatching}>{t('Use standard matching')}</button></div>
           <p className="footnote">{t('Your explicit dealbreakers remain requirements. Missing information stays unknown.')}</p>
         </section>
         {onboarding&&<p className="footnote">{t('Finishing enables scheduled searches at your chosen frequency. Results appear when the search service is connected.')}</p>}

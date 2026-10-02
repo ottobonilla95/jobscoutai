@@ -1,6 +1,16 @@
 'use client';
-import {brand} from '@core/brand';
-import Link from 'next/link';
 import AccountSettings from './account-settings';
 import {useI18n} from './i18n';
-export default function Settings(){const {t}=useI18n();return <main className="settings-page"><Link className="brand" href="/">{brand.name}</Link><Link className="text-button" href="/">← {t('Opportunities')}</Link><h1>{t('Settings')}</h1><p className="muted">{t('Language and account preferences')}</p><AccountSettings/></main>;}
+import WorkspaceSidebar from './workspace-sidebar';
+
+export default function Settings({name,matchCount}:{name:string;matchCount:number}) {
+  const {t}=useI18n();
+  return <div className="app-shell">
+    <WorkspaceSidebar activeView="settings" name={name} matchCount={matchCount}/>
+    <main className="main-content">
+      <div className="topline"><span>{t('WORKSPACE /')} {t('Settings')}</span><span className="private-badge"><span className="tiny-dot"/>{t('Your private job-search assistant')}</span></div>
+      <header className="page-header"><div><h1>{t('Settings')}</h1><p className="muted">{t('Language and account preferences')}</p></div></header>
+      <AccountSettings/>
+    </main>
+  </div>;
+}

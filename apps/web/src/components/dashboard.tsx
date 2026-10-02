@@ -1,8 +1,7 @@
 'use client';
-import {brand} from '@core/brand';
 import {useI18n} from './i18n';
 import { useCallback, useEffect, useState } from 'react';
-import { Compass, Search, SlidersHorizontal, Activity, ArrowUpRight, ArrowRight, Bookmark, X, LogOut, Clock3, Mail, CircleDot, AlertCircle } from 'lucide-react';
+import { Search, Activity, ArrowUpRight, ArrowRight, Bookmark, X, Clock3, Mail, CircleDot, AlertCircle } from 'lucide-react';
 import type { DashboardData } from '@/lib/dashboard';
 import type { Job, Profile } from '@core/profile';
 import ResearchQueue from './research-queue';
@@ -10,14 +9,14 @@ import SearchProfile from './search-profile';
 import { strongMatch, recommendation, recommendationLabels } from '@core/recommendation';
 import TrackingEditor from './tracking-editor';
 import { sourceOptions, sourceLabel } from '@core/source-settings';
+import WorkspaceSidebar, {type DashboardView} from './workspace-sidebar';
 
-type Tab = 'matches' | 'profile' | 'activity';
-export default function Dashboard({ initial }: { initial: DashboardData }) {
+export default function Dashboard({ initial, initialView }: { initial: DashboardData; initialView?: DashboardView }) {
  const {t,locale,date,number,message:localizeMessage}=useI18n();
 
   const [data,setData] = useState(initial);
   const [draft,setDraft] = useState<Profile>(initial.profile);
-  const [tab,setTab] = useState<Tab>(initial.profile.cvText ? 'matches' : 'profile');
+  const [tab,setTab] = useState<DashboardView>(initialView ?? (initial.profile.cvText ? 'matches' : 'profile'));
   const [filter,setFilter] = useState('all');
   const [shown,setShown] = useState(50);
   const [sourceFilter,setSourceFilter] = useState('all');
@@ -33,6 +32,12 @@ export default function Dashboard({ initial }: { initial: DashboardData }) {
   },[]);
   useEffect(() => { const timer = setInterval(() => { refresh().catch(()=>{}); },10000); return () => clearInterval(timer); },[refresh]);
   const notify = (text: string, error = false) => { setMessage(text); setIsError(error); };
+  function navigateTab(view: DashboardView) {
+    setTab(view);
+    const url = new URL(window.location.href);
+    url.searchParams.set('view', view);
+    window.history.replaceState(null, '', url);
+  }
   async function action(url: string, method = 'POST', body?: unknown) {
     const response = await fetch(url,{method, headers: body ? {'Content-Type':'application/json'} : undefined, body:body ? JSON.stringify(body) : undefined});
     const result = await response.json();
@@ -60,22 +65,11 @@ export default function Dashboard({ initial }: { initial: DashboardData }) {
     catch(e) { notify(e instanceof Error?e.message:t("Could not update job."),true); }
   }
   return <div className="app-shell">
-    <aside className="sidebar">
-      <a className="brand" href="/"><span className="brand-icon"><Compass size={23}/></span><span>{brand.name}</span></a>
-      <div className="workspace-label">{t("YOUR WORKSPACE")}</div>
-      <nav aria-label={t("Workspace")}>
-        <button className={tab==='matches'?'nav-item active':'nav-item'} onClick={()=>setTab('matches')}><Search size={18}/>{t("Opportunities")}<span className="nav-count">{strong.length}</span></button>
-        <button className={tab==='profile'?'nav-item active':'nav-item'} onClick={()=>setTab('profile')}><SlidersHorizontal size={18}/>{t("Search profile")}{dirty&&<span className="dirty-dot"/>}</button>
-        <button className={tab==='activity'?'nav-item active':'nav-item'} onClick={()=>setTab('activity')}><Activity size={18}/>{t("Activity")}</button>
-        <a className="nav-item" href="/settings"><SlidersHorizontal size={18}/>{t('Settings')}</a>
-      </nav>
-      <div className="sidebar-note"><span className="small-label">{t("BUILT AROUND YOUR AMBITION")}</span><p>{t("Less scrolling.")}<br/>{t("More possibility.")}</p><span>{t("Your next role should move")}<br/>{t("you toward your bigger goal.")}</span></div>
-      <div className="sidebar-bottom"><div className="avatar">{data.profile.name ? data.profile.name[0].toUpperCase() : 'Y'}</div><div><strong>{data.profile.name || t("Your workspace")}</strong><small>{t("Your account · Private")}</small></div><button className="icon-button" aria-label={t("Sign out")} onClick={async()=>{try{const response=await fetch('/api/logout',{method:'POST'});if(!response.ok)throw new Error();window.location.assign('/login');}catch{notify(t("Could not sign out. Please try again."),true);}}}><LogOut size={16}/></button></div>
-    </aside>
+    <WorkspaceSidebar activeView={tab} name={data.profile.name} matchCount={strong.length} dirty={dirty} onNavigate={navigateTab} onSignOutError={text=>notify(text,true)}/>
     <main className="main-content">
       <div className="topline"><span>{t("WORKSPACE /")} {tab==='profile'?t("SEARCH PROFILE"):tab==='activity'?t("ACTIVITY"):t("OPPORTUNITIES")}</span><span className="private-badge"><span className="tiny-dot"/>{t("Your private job-search assistant")}</span></div>
       <header className="page-header"><div><span className="eyebrow">{tab==='profile'?t("THE DIRECTION IS YOURS"):tab==='activity'?t("A CLEAR VIEW OF THE WORK"):t("GOOD WORK STARTS WITH A GOOD FIT")}</span>
-        <h1>{tab==='profile'?t("What comes next?"):tab==='activity'?t("Behind the search."):t("Your next chapter.")}</h1><p className="muted">{tab==='profile'?t("Tell {productName} what matters. Every search starts here."):tab==='activity'?t("Search history, delivery status, and a little peace of mind."):t("Meaningful opportunities, selected around your experience and ambition.")}</p></div>
+        <h1>{tab==='profile'?t("Search profile"):tab==='activity'?t("Behind the search."):t("Your next chapter.")}</h1><p className="muted">{tab==='profile'?t("Keep your experience and preferences up to date."):tab==='activity'?t("Search history, delivery status, and a little peace of mind."):t("Meaningful opportunities, selected around your experience and ambition.")}</p></div>
         {tab!=='profile'&&<button className="button primary" disabled={busy||running||data.state.requested} onClick={async()=>{
           setBusy(true);try{const result=await action('/api/search');notify(result.message);}catch(e){notify(e instanceof Error?e.message:t("Search could not start."),true);}finally{setBusy(false);}
         }}><Search size={16}/>{running?t("Searching…"):data.state.requested?t("Search queued"):t("Search now")}</button>}
@@ -83,13 +77,13 @@ export default function Dashboard({ initial }: { initial: DashboardData }) {
       {message&&<div role={isError?'alert':'status'} className={`toast ${isError?'error':''}`}><span>{localizeMessage(message)}</span><button className="icon-button" aria-label={t("Dismiss message")} onClick={()=>setMessage('')}><X size={16}/></button></div>}
       {tab==='matches'&&<>
         <section className="stats" aria-label={t("Search overview")}><Stat label={t("Strong matches")} value={number(strong.length)} note={t("Worth a closer look")} icon={<CircleDot size={18}/>}/><Stat label={t("Saved opportunities")} value={number(saved.length)} note={t("Your personal shortlist")} icon={<Bookmark size={18}/>}/><Stat label={t("Search cadence")} value={t('{count} hours',{count:number(data.profile.intervalHours)})} note={data.profile.enabled?t("Automatic searches enabled"):t("Automatic searches paused")} icon={<Clock3 size={18}/>}/></section>
-        <div className="search-strip"><span className={`status-dot ${data.profile.enabled?'on':''}`}/><div><strong>{running?t("Your search is running"):data.profile.enabled?t("{productName} is on the lookout"):t("{productName} is ready when you are")}</strong><span>{data.profile.enabled?t('Next search: {date}',{date:date(data.state.nextRun)}):t("Set your preferences, then switch on scheduled searches.")}{!workerOnline?t(" · Worker not connected"):''}</span></div><button className="text-button" onClick={()=>setTab('profile')}>{t("Manage search")}<ArrowRight size={15}/></button></div>
-        {needsSetup&&<div className="setup-banner"><div><span className="eyebrow">{t("START WITH YOU")}</span><h2>{t("A great match needs a little context.")}</h2><p>{t("Add your CV and preferences to give your search a clear direction.")}</p></div><button className="button secondary" onClick={()=>setTab('profile')}>{t("Complete your profile")}<ArrowRight size={16}/></button></div>}
+        <div className="search-strip"><span className={`status-dot ${data.profile.enabled?'on':''}`}/><div><strong>{running?t("Your search is running"):data.profile.enabled?t("{productName} is on the lookout"):t("{productName} is ready when you are")}</strong><span>{data.profile.enabled?t('Next search: {date}',{date:date(data.state.nextRun)}):t("Set your preferences, then switch on scheduled searches.")}{!workerOnline?t(" · Worker not connected"):''}</span></div><button className="text-button" onClick={()=>navigateTab('profile')}>{t("Manage search")}<ArrowRight size={15}/></button></div>
+        {needsSetup&&<div className="setup-banner"><div><span className="eyebrow">{t("START WITH YOU")}</span><h2>{t("A great match needs a little context.")}</h2><p>{t("Add your CV and preferences to give your search a clear direction.")}</p></div><button className="button secondary" onClick={()=>navigateTab('profile')}>{t("Complete your profile")}<ArrowRight size={16}/></button></div>}
         <div className="section-heading"><h2>{t("Your opportunities")} <span>{visible.length}</span></h2><span className="source-label">{t("Across your job sources")}</span></div>
         <div className="filter-row" role="group" aria-label={t("Filter opportunities")}>{[['all',t("All opportunities")],['strong',t("Strong matches")],['saved',t("Saved")],['research',t("Research queue")],['applications',t("Applications")],['followups',t("Follow-ups due")],['dismissed',t("Archive")]].map(([key,label])=><button key={key} className={filter===key?'filter active':'filter'} onClick={()=>setFilter(key)}>{label}</button>)}</div>
         {filter==='research'&&<ResearchQueue leads={data.leads} refresh={refresh}/>}
         <label className="source-filter">{t("Show source")}<select value={sourceFilter} onChange={e=>setSourceFilter(e.target.value)}><option value="all">{t("All sources")}</option>{[...new Set(data.jobs.map(j=>j.sourceKey||'linkedin'))].map(key=><option value={key} key={key}>{sourceLabel(key)}</option>)}</select></label>
-        <div className="job-list">{visible.length ? visible.slice(0,shown).map(job=><JobCard key={job.id} job={job} currentVersion={data.version} update={status=>setJobStatus(job,status)} refresh={refresh}/>) : <div className="empty-state"><div className="empty-icon"><Search size={27}/></div><h2>{filter==='saved'?t("Keep the promising ones close."):filter==='dismissed'?t("Nothing dismissed."):t("The right opportunity is worth finding.")}</h2><p>{filter==='saved'?t("Save a job to build your shortlist here."):filter==='dismissed'?t("Jobs you dismiss will appear here."):t("Your real search results will appear here, with clear reasons for each match and a direct link to the original listing.")}</p>{needsSetup&&<button className="text-button" onClick={()=>setTab('profile')}>{t("Set up your search")}<ArrowRight size={15}/></button>}</div>}</div>
+        <div className="job-list">{visible.length ? visible.slice(0,shown).map(job=><JobCard key={job.id} job={job} currentVersion={data.version} update={status=>setJobStatus(job,status)} refresh={refresh}/>) : <div className="empty-state"><div className="empty-icon"><Search size={27}/></div><h2>{filter==='saved'?t("Keep the promising ones close."):filter==='dismissed'?t("Nothing dismissed."):t("The right opportunity is worth finding.")}</h2><p>{filter==='saved'?t("Save a job to build your shortlist here."):filter==='dismissed'?t("Jobs you dismiss will appear here."):t("Your real search results will appear here, with clear reasons for each match and a direct link to the original listing.")}</p>{needsSetup&&<button className="text-button" onClick={()=>navigateTab('profile')}>{t("Set up your search")}<ArrowRight size={15}/></button>}</div>}</div>
         {visible.length>shown&&<button className="button secondary" onClick={()=>setShown(n=>n+50)}>{t('Show more opportunities ({count} remaining)',{count:number(visible.length-shown)})}</button>}
         <p className="footnote">{t("Public listings from your selected sources · Coverage varies by source · Scores guide your review; unstated details remain unknown.")}</p>
       </>}
