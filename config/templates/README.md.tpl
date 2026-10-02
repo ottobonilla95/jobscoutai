@@ -114,7 +114,7 @@ Run `npm run db:migrate` before deploying this feature to apply migration 002. S
 
 The interface supports English and Spanish through a shared translation dictionary in `packages/core/src/i18n`. On first visit, the browser's `Accept-Language` preferences choose the best supported language, including regional variants such as `es-MX`. English is the fallback.
 
-Login and signup have a small language control. Signed-in users can choose **Settings → Language → Automatic (browser), English, or Español**. An explicit account preference takes priority over the browser and follows the account across devices. Before login, a cookie remembers the choice. Automatic mode remembers the most recently detected browser language for background searches and emails.
+The language control shows the current language, **English** or **Español**. Browser detection chooses the initial language. Signed-in users can change it in **Settings → Language**. An explicit account preference takes priority over the browser and follows the account across devices. Before login, a cookie remembers the choice. Browser detection also supplies the language for background searches and emails until an explicit preference is saved.
 
 Interface text, application errors, email templates, and date/number displays are localized. AI evaluation and strategy-import instructions request explanations in the selected language. Original job titles, quoted evidence, CVs, and personal notes are preserved. Changing language marks previous evaluations for reevaluation on a subsequent search; existing generated explanations keep their original language until then. New Spanish accounts receive translated default goal/rubric text. User-authored profile text is never rewritten by a language switch.
 

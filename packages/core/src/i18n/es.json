@@ -1,9 +1,8 @@
 {
   "Language": "Idioma",
-  "Automatic (browser)": "Automático (navegador)",
   "Settings": "Configuración",
   "Language and account preferences": "Preferencias de idioma y cuenta",
-  "Choose a language or follow your browser. Your choice is saved to your account.": "Elige un idioma o usa el del navegador. Tu preferencia se guarda en tu cuenta.",
+  "Choose your language. Your choice is saved to your account.": "Elige tu idioma. Tu preferencia se guarda en tu cuenta.",
   "Could not save your language preference.": "No se pudo guardar tu preferencia de idioma.",
   "A fresh start.": "Un nuevo comienzo.",
   "A great match needs a little context.": "Para encontrar buenas oportunidades, necesitamos conocerte.",
@@ -391,7 +390,6 @@
   "Sponsorship needed; unknown → {action}": "Necesita patrocinio; si se desconoce → {action}",
   " · Worker not connected": " · Proceso de búsqueda no conectado",
   " · Recheck due": " · Nueva comprobación pendiente",
-  "Automatic uses your last detected browser language for scheduled searches and emails. Existing source text and personal notes are unchanged.": "El modo automático usa el último idioma detectado del navegador para las búsquedas programadas y los correos. El texto original y tus notas personales no cambian.",
   "A job description could not be fetched. It will be retried next run.": "No se pudo obtener la descripción de una oferta. Se volverá a intentar en la próxima búsqueda.",
   "A reachable application form was found. No application was submitted.": "Se encontró un formulario de candidatura accesible. No se envió ninguna candidatura.",
   "A score cap refers to an unknown criterion.": "Un límite de puntuación hace referencia a un criterio desconocido.",

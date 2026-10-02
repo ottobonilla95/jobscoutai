@@ -21,5 +21,8 @@ export async function POST(request: Request) {
     text = text.trim();
     if (text.length < 100) return localizedJson({ error: 'Very little text could be extracted. Paste your CV text instead; scanned PDFs need OCR first.' }, { status: 400 });
     return localizedJson({ text: text.slice(0,30000), name: file.name.slice(0,200), truncated: text.length > 30000 });
-  } catch { return localizedJson({ error: 'Could not read that file. Try a text-based PDF or paste your CV below.' }, { status: 400 }); }
+  } catch (error) {
+    console.error('[api/cv] extraction failed', error instanceof Error ? {name:error.name,message:error.message} : {name:'UnknownError'});
+    return localizedJson({ error: 'Could not read that file. Try a text-based PDF or paste your CV below.' }, { status: 400 });
+  }
 }

@@ -21,6 +21,7 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
   const [draft,setDraft]=useState<SetupDraft>(()=>{const value=draftFromProfile(profile,minimum);return onboarding?value:{...value,step:12};});
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
+  const [uploadError,setUploadError]=useState('');
   const [notice,setNotice]=useState('');
   const [saveState,setSaveState]=useState('Progress saved');
   const [reviewing,setReviewing]=useState(!onboarding||draft.step===12);
@@ -38,6 +39,7 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
   const step=draft.step;
 
   function update<K extends keyof SetupAnswers>(key:K,value:SetupAnswers[K]) {
+    if(key==='cvText')setUploadError('');
     setDraft(d=>({...d,answers:{...d.answers,[key]:value}}));setError('');setNotice('');
   }
   async function persist(value:SetupDraft) {
@@ -118,14 +120,14 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
   }
   async function uploadCV(event:ChangeEvent<HTMLInputElement>) {
     const input=event.currentTarget;const file=input.files?.[0];if(!file)return;
-    setBusy(true);setError('');setNotice('');
+    setBusy(true);setError('');setUploadError('');setNotice('');
     try {
       const form=new FormData();form.append('cv',file);
       const response=await fetch('/api/cv',{method:'POST',body:form});
       const result=await response.json();if(!response.ok)throw new Error(result.error);
       setDraft(d=>({...d,answers:{...d.answers,cvText:result.text,cvFileName:result.name}}));
       setNotice(t(result.truncated?'CV extracted and shortened to 30,000 characters. Review it before saving.':'CV extracted. Review the text below, then continue.'));
-    }catch(e){setError(e instanceof Error?e.message:t('Could not read CV.'));}
+    }catch(e){setUploadError(e instanceof Error?e.message:t('Could not read CV.'));}
     finally{setBusy(false);input.value='';}
   }
   function useStandardMatching() {
@@ -134,7 +136,7 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
   const alerts=<div className="setup-alerts"><p>{t('Email alerts will start after you verify your account email. Your preference is saved.')}</p><button type="button" className="text-button" disabled={busy} onClick={verify}>{t('Send verification email')}</button></div>;
   if(completed)return <section className="setup-card setup-complete"><Check size={32}/><h1>{t('Your profile is ready.')}</h1><p>{t('Your search is set up. You can change any answer in Search profile.')}</p>{verificationNeeded&&alerts}{notice&&<p role="status">{notice}</p>}{error&&<p role="alert" className="error-text">{error}</p>}<a className="button primary" href="/">{t('Go to my opportunities')}<ArrowRight size={18}/></a></section>;
   const frequencies=[...new Set([minimum,4,8,12,24,48,168,a.intervalHours].filter(n=>n>=minimum))].sort((x,y)=>x-y);
-  if(!onboarding)return <SearchProfileEditor answers={a} matching={draft.matching} matchingCurrent={matchingCurrent} minimum={minimum} frequencies={frequencies} busy={busy} saveState={saveState} error={error} notice={notice} invalidStep={error?firstIncompleteStep(a,minimum):null} verificationNotice={verificationNeeded?alerts:null} formRef={editor} update={update} onUpload={uploadCV} onSuggest={suggest} onStandardMatching={useStandardMatching} onSave={finish}/>;
+  if(!onboarding)return <SearchProfileEditor answers={a} matching={draft.matching} matchingCurrent={matchingCurrent} minimum={minimum} frequencies={frequencies} busy={busy} saveState={saveState} error={uploadError||error} notice={notice} invalidStep={error?firstIncompleteStep(a,minimum):null} verificationNotice={verificationNeeded?alerts:null} formRef={editor} update={update} onUpload={uploadCV} onSuggest={suggest} onStandardMatching={useStandardMatching} onSave={finish}/>;
   const values=[a.name,a.cvFileName||(a.cvText?t('Experience added'):''),a.objective,a.titles,a.locationChoice==='anywhere'?t('Anywhere'):a.locations,a.remotePreference==='remote'?t('Remote only'):a.remotePreference==='flexible'?t('Also open to office work'):'',a.workAuthorization,a.salaryExpectation,a.equityExpectation,a.constraints,t('Every {count} hours',{count:a.intervalHours}),a.emailAlerts?t('Yes, email me strong matches'):t('No email alerts')];
   const field=(key:'name'|'objective'|'titles'|'locations'|'workAuthorization'|'salaryExpectation'|'equityExpectation'|'constraints',rows=1,maxLength=3000,placeholder?:string)=><label className="setup-field"><span className="sr-only">{t(questions[step])}</span>{rows>1?<textarea aria-describedby="question-hint" rows={rows} maxLength={maxLength} value={a[key]} placeholder={placeholder} onChange={e=>update(key,e.target.value)}/>:<input aria-describedby="question-hint" maxLength={maxLength} value={a[key]} placeholder={placeholder} onChange={e=>update(key,e.target.value)}/>}</label>;
   return <section className={`setup-card ${step===12?'setup-review':''}`}>
@@ -168,7 +170,7 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
       </fieldset>
       {busy&&<p role="status" className="setup-status">{t('Working on it…')}</p>}
       {notice&&<p role="status" className="setup-status">{notice}</p>}
-      {error&&<p role="alert" className="error-text setup-status">{error}</p>}
+      {(uploadError||error)&&<p role="alert" className="error-text setup-status">{uploadError||error}</p>}
       {verificationNeeded&&alerts}
       <div className="setup-navigation">
         {step>0&&step<12&&<button type="button" className="text-button" disabled={busy} onClick={()=>void move(reviewing?12:step-1)}><ArrowLeft size={16}/>{t(reviewing?'Back to review':'Back')}</button>}
