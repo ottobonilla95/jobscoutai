@@ -173,8 +173,10 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
       {(uploadError||error)&&<p role="alert" className="error-text setup-status">{uploadError||error}</p>}
       {verificationNeeded&&alerts}
       <div className="setup-navigation">
-        {step>0&&step<12&&<button type="button" className="text-button" disabled={busy} onClick={()=>void move(reviewing?12:step-1)}><ArrowLeft size={16}/>{t(reviewing?'Back to review':'Back')}</button>}
-        {step===12&&onboarding&&<button type="button" className="text-button" disabled={busy} onClick={()=>void move(11)}><ArrowLeft size={16}/>{t('Back')}</button>}
+        <div className="setup-back">
+          {step>0&&<button type="button" className="text-button" disabled={busy} onClick={()=>void move(step-1)}><ArrowLeft size={16}/>{t('Back')}</button>}
+          {reviewing&&step<12&&<button type="button" className="text-button" disabled={busy} onClick={()=>void move(12)}>{t('Back to review')}</button>}
+        </div>
         <div className="setup-forward">{optional.has(step)&&<button type="button" className="text-button" disabled={busy} onClick={()=>void move(reviewing?12:step+1,true)}>{t('Skip for now')}</button>}<button className="button primary" disabled={busy}>{t(step===12?(onboarding?'Finish setup':'Save search profile'):reviewing?'Done':'Next')}<ArrowRight size={17}/></button></div>
       </div>
     </form>
