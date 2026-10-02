@@ -103,6 +103,14 @@ Backups: `npm run backup` uses `pg_dump` and stores a custom-format dump under `
 - Add `OPENAI_API_KEY` in the server `.env` and in the Vercel project's server environment, then restart web/worker services and redeploy Vercel. The AI SDK connects directly to OpenAI using `AI_MODEL` (default `openai/gpt-5.4-mini`) and `AI_REASONING_EFFORT=medium`. Direct requests disable response storage. `AI_GATEWAY_API_KEY` remains an optional alternative when no OpenAI key is configured. This is an API credential, separate from a ChatGPT subscription. The key is never returned to the browser or stored in a user profile.
 - `npm run check:ai` tests the configured model with synthetic candidate/job text and reports token usage. It performs a real billable model call. No model connection is claimed until this succeeds. Set provider spending limits before opening the service to many users.
 
+## CV builder
+
+Open **CV builder** in the workspace to create, save, and duplicate up to 20 CVs per account. Edit contact details, a professional summary, skills, experience, projects, education, courses, and achievements. Entries can be reordered; empty sections are omitted. Signature uses a dark header and teal accents inspired by the reference CV; Minimal uses a simple text layout. Both export A4 PDFs with selectable text, local embedded fonts, page numbers, and automatic page wrapping. The live preview and download use the same PDF document. English and Spanish section headings are selectable independently from your writing.
+
+Save explicitly before leaving; unsaved changes trigger a discard warning. Concurrent edits in another tab require reloading rather than overwriting. **Save and use for matching** copies the chosen CV's text into Search profile and refreshes matching on future searches. Other builder edits and deletion leave the current matching text intact. An optional PDF/DOCX/TXT import supplies reference text for manual copying into fields; automatic field extraction and AI rewriting are outside this version. Export and preview render in the browser without sending document content to an AI provider.
+
+Run `npm run db:migrate` before deploying this feature to apply migration 002. Saved CVs belong to their account and cascade on account deletion. Bundled CV fonts use the SIL Open Font License in `apps/web/public/fonts/OFL.txt`.
+
 ## Languages
 
 The interface supports English and Spanish through a shared translation dictionary in `packages/core/src/i18n`. On first visit, the browser's `Accept-Language` preferences choose the best supported language, including regional variants such as `es-MX`. English is the fallback.

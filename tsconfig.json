@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022", "lib": ["ES2023", "DOM"], "module": "ESNext",
-    "moduleResolution": "Bundler", "strict": true, "noEmit": true,
+    "moduleResolution": "Bundler", "strict": true, "noEmit": true, "jsx": "react-jsx",
     "esModuleInterop": true, "skipLibCheck": true, "resolveJsonModule": true,
     "types": ["node"]
   },

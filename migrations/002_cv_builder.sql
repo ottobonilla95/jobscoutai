@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS cvs (
+  user_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  id TEXT NOT NULL,
+  value TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, id)
+);
