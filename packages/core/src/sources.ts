@@ -1,33 +1,18 @@
-import {brand} from './brand';
 import { load } from 'cheerio';
 import { z } from 'zod';
 import type { Job, JobListing, Profile } from './profile';
 import { searchLinkedIn, fetchDescription, SourceError } from './linkedin';
 import { parseBoard, sourceLabel } from './source-settings';
+import { activeCountrySources, countrySources, type CountrySource } from './country-sources';
+import { searchCountrySource, describeCountryJob } from './country-adapters';
+import { publicData } from './source-http';
+import { plainText } from './source-html';
+export { plainText } from './source-html';
 
 export type SearchReport = { jobs: JobListing[]; errors: string[]; blocked: string[]; succeeded: number };
-export function plainText(html: string) {
-  const $ = load(html); $('script,style,form').remove(); $('br').replaceWith('\n');
-  $('p,li,h1,h2,h3,div').each((_,e)=>{$(e).prepend('\n');});
-  return $.text().replace(/[ \t]+/g,' ').replace(/\n\s*\n/g,'\n\n').trim().slice(0,24000);
-}
 export function matchesTitle(title: string, profile: Profile) {
   const words = title.toLowerCase().replace(/[^a-z0-9]+/g,' ');
   return profile.titles.some(query => query.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).every(word => words.includes(word)));
-}
-let lastRequest = 0;
-async function publicData(url: string, label: string) {
-  const pause = 1200 - (Date.now()-lastRequest);
-  if (pause > 0) await new Promise(resolve=>setTimeout(resolve,pause));
-  lastRequest=Date.now();
-  const response=await fetch(url,{redirect:'manual',signal:AbortSignal.timeout(20000),headers:{Accept:'application/json, text/html','User-Agent':brand.httpAgent}});
-  if (!response.ok) throw new SourceError(`${label}: HTTP ${response.status}. This source was skipped.`,true);
-  // Bound downloads as well as request count. Never follow redirects to arbitrary hosts.
-  const reader=response.body?.getReader();if(!reader)throw new SourceError(`${label}: empty response.`,true);
-  const chunks:Uint8Array[]=[];let size=0;
-  while(true){const {value,done}=await reader.read();if(done)break;size+=value.length;
-    if(size>5*1024*1024){await reader.cancel();throw new SourceError(`${label}: response too large.`,true);}chunks.push(value);}
-  return Buffer.concat(chunks).toString('utf8');
 }
 export function parseYcListings(html: string): JobListing[] {
   const $=load(html);const jobs=new Map<string,JobListing>();
@@ -93,7 +78,10 @@ export async function searchCompanyBoard(value: string, profile: Profile) {
   return parseCompanyJobs(JSON.parse(await publicData(url,sourceLabel(board.key))),board)
     .filter(job=>matchesTitle(job.title,profile) && (!profile.remoteOnly || /remote/i.test(job.location)));
 }
-export async function searchSources(profile: Profile, adapters = { linkedin:searchLinkedIn, yc:searchYc, company:searchCompanyBoard }): Promise<SearchReport> {
+export async function searchSources(profile: Profile, adapters: {
+  linkedin:typeof searchLinkedIn; yc:typeof searchYc; company:typeof searchCompanyBoard;
+  country?:(source:CountrySource,profile:Profile)=>Promise<JobListing[]>;
+} = { linkedin:searchLinkedIn, yc:searchYc, company:searchCompanyBoard, country:searchCountrySource }): Promise<SearchReport> {
   const report:SearchReport={jobs:[],errors:[],blocked:[],succeeded:0};
   const tasks: {key:string;run:()=>Promise<JobListing[]>}[]=[];
   if(profile.sources.includes('linkedin'))tasks.push({key:'linkedin',run:()=>adapters.linkedin(profile)});
@@ -101,6 +89,7 @@ export async function searchSources(profile: Profile, adapters = { linkedin:sear
   if(profile.sources.includes('companies'))for(const value of [...new Set(profile.companyBoards)]){
     const board=parseBoard(value);if(board&&!tasks.some(task=>task.key===board.key))tasks.push({key:board.key,run:()=>adapters.company(value,profile)});
   }
+  for(const source of activeCountrySources(profile))tasks.push({key:source.key,run:()=>(adapters.country || searchCountrySource)(source,profile)});
   for(const task of tasks){
     try{report.jobs.push(...await task.run());report.succeeded++;}
     catch(error){report.blocked.push(task.key);report.errors.push(error instanceof SourceError?error.message:`${sourceLabel(task.key)} could not be read. Coverage is unknown; retry later.`);}
@@ -113,6 +102,7 @@ export async function searchSources(profile: Profile, adapters = { linkedin:sear
 }
 export async function describeJob(id: string, job: Job) {
   if(!job.sourceKey||job.sourceKey==='linkedin')return fetchDescription(id);
+  if(countrySources.some(source=>source.key===job.sourceKey))return describeCountryJob(id,job);
   if(job.sourceKey==='yc'){
     const parts=id.match(/^yc:([a-z0-9-]+):([a-zA-Z0-9_-]+)$/);if(!parts)throw new SourceError('Invalid Y Combinator job ID.');
     return parseYcDescription(await publicData(`https://www.ycombinator.com/companies/${parts[1]}/jobs/${parts[2]}`,'Y Combinator'));

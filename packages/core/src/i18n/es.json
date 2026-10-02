@@ -645,5 +645,14 @@
   "Up to date": "Actualizado",
   "Update needed": "Necesita actualización",
   "Drafts are saved automatically. Save your profile to apply changes to searches.": "Los borradores se guardan automáticamente. Guarda tu perfil para aplicar los cambios a las búsquedas.",
-  "Keep your experience and preferences up to date.": "Mantén tu experiencia y tus preferencias al día."
+  "Keep your experience and preferences up to date.": "Mantén tu experiencia y tus preferencias al día.",
+  "Automatic sources for Colombia": "Fuentes automáticas para Colombia",
+  "These sources run automatically while Colombia is included in your search locations.": "Estas fuentes se consultan automáticamente mientras Colombia esté incluida en tus ubicaciones de búsqueda.",
+  "{source} returned an unrecognized search page. Coverage is unknown.": "{source} devolvió una página de búsqueda no reconocida. No se puede confirmar la cobertura.",
+  "{source} returned an unrecognized search response. Coverage is unknown.": "{source} devolvió una respuesta de búsqueda no reconocida. No se puede confirmar la cobertura.",
+  "Invalid country job URL or ID.": "La URL o el identificador de la oferta local no es válido.",
+  "Unsupported country job source.": "La fuente local de empleo no es compatible.",
+  "{source}: invalid redirect. This source was skipped.": "{source}: redirección no válida. Se omitió esta fuente.",
+  "{source}: unexpected redirect. This source was skipped.": "{source}: redirección inesperada. Se omitió esta fuente.",
+  "{source}: too many redirects. This source was skipped.": "{source}: demasiadas redirecciones. Se omitió esta fuente."
 }

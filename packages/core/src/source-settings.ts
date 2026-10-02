@@ -1,3 +1,5 @@
+import { activeCountrySources, countrySources } from './country-sources';
+
 export const sourceOptions = [
   { id: 'linkedin', label: 'LinkedIn', detail: 'Public job listings matching your titles and locations.' },
   { id: 'yc', label: 'Y Combinator', detail: 'Recent startup jobs. Titles narrow discovery; your profile guides location and equity matching.' },
@@ -18,10 +20,13 @@ export function parseBoard(value: string): { key: string; provider: 'ashby' | 'g
 export function sourceLabel(key = 'linkedin') {
   if (key === 'linkedin') return 'LinkedIn';
   if (key === 'yc') return 'Y Combinator';
+  const local = countrySources.find(source => source.key === key);
+  if (local) return local.label;
   const [provider, company] = key.split(':');
   return `${company} · ${provider === 'ashby' ? 'Ashby' : 'Greenhouse'}`;
 }
-export function sourceEnabled(profile: { sources: SourceId[]; companyBoards: string[] }, key = 'linkedin') {
+export function sourceEnabled(profile: { sources: SourceId[]; companyBoards: string[]; locations?: readonly string[] }, key = 'linkedin') {
   if (key === 'linkedin' || key === 'yc') return profile.sources.includes(key);
+  if (countrySources.some(source => source.key === key)) return activeCountrySources(profile).some(source => source.key === key);
   return profile.sources.includes('companies') && profile.companyBoards.some(url => parseBoard(url)?.key === key);
 }
