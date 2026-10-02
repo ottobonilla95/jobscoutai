@@ -1,0 +1,70 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {accountsFixture} from './database-fixture';
+import {CvStore,CvError} from '../packages/core/src/cv-store';
+import {cvDraftSchema,cvToText,emptyCv,emptyCvEntry,safeCvWebsite,type SavedCv} from '../packages/core/src/cv';
+const draftOf=(cv:SavedCv)=>({title:cv.title,template:cv.template,language:cv.language,content:cv.content});
+
+test('CV content validates bounded sections and produces ordered matching text without empty entries',()=>{
+  const cv=emptyCv('Ana Martínez','es');
+  cv.content.summary='Ingeniera con experiencia en productos y equipos.';
+  cv.content.skills=['React','TypeScript'];
+  cv.content.experience=[{...emptyCvEntry(),title:'Ingeniera',organization:'Example',dates:'2022–2026',details:'Construí productos.\nLideré equipos.'},emptyCvEntry()];
+  cv.content.projects=[{...emptyCvEntry(),title:'Proyecto independiente'}];
+  const text=cvToText(cv);
+  assert.match(text,/Ana Martínez/);assert.match(text,/Experiencia profesional/);
+  assert.ok(text.indexOf('Ingeniera\nExample')<text.indexOf('Proyecto independiente'));
+  assert.doesNotMatch(text,/Educación/);
+  assert.equal(cvDraftSchema.safeParse({...cv,template:'unknown'}).success,false);
+  assert.equal(cvDraftSchema.safeParse({...cv,content:{...cv.content,skills:Array(81).fill('Skill')}}).success,false);
+  assert.equal(cvDraftSchema.safeParse({...cv,content:{...cv.content,experience:Array(31).fill(emptyCvEntry())}}).success,false);
+  const oversized={...cv,content:{...cv.content,experience:Array(30).fill({...emptyCvEntry(),details:'x'.repeat(4000)})}};
+  assert.equal(cvDraftSchema.safeParse(oversized).success,false);
+  assert.equal(safeCvWebsite('example.com/about'),'https://example.com/about');
+  assert.equal(safeCvWebsite('javascript:alert(1)'),undefined);
+  assert.equal(safeCvWebsite('https://user:secret@example.com'),undefined);
+});
+
+test('CV CRUD is account scoped, detects conflicting edits and leaves the active search CV unchanged',async t=>{
+  const accounts=await accountsFixture(t);
+  const a=await accounts.signup({email:'cv-a@example.test',password:'A private test phrase 2026'});
+  const b=await accounts.signup({email:'cv-b@example.test',password:'A private test phrase 2026'});
+  const cvs=new CvStore(accounts.db,a.id),other=new CvStore(accounts.db,b.id);
+  const store=await accounts.store(a.id),initial=await store.profile();
+  const original=await cvs.create(emptyCv('Ana'));
+  assert.equal((await cvs.list()).length,1);assert.deepEqual(await other.list(),[]);
+  await assert.rejects(()=>other.get(original.id),(e:unknown)=>e instanceof CvError&&e.status===404);
+  await assert.rejects(()=>other.update(original.id,1,emptyCv('Intruder')),/CV not found/);
+  await assert.rejects(()=>other.remove(original.id,1),/CV not found/);
+  await assert.rejects(()=>other.useForMatching(original.id,1),/CV not found/);
+  const edited=await cvs.update(original.id,original.revision,{...draftOf(original),title:'Application CV',content:{...original.content,summary:'A real summary with enough experience to guide matching. '.repeat(4)}});
+  assert.equal(edited.revision,2);
+  await assert.rejects(()=>cvs.update(original.id,1,emptyCv()),(e:unknown)=>e instanceof CvError&&e.status===409);
+  await assert.rejects(()=>cvs.remove(original.id,1),/changed in another tab/);
+  await assert.rejects(()=>cvs.useForMatching(original.id,1),/changed in another tab/);
+  assert.deepEqual(await store.profile(),initial);
+  await cvs.useForMatching(edited.id,edited.revision);
+  const used=await store.profile();
+  assert.equal(used.profile.cvText,cvToText(edited));assert.equal(used.profile.cvFileName,'Application CV.pdf');
+  assert.equal(used.version,initial.version+1);
+  assert.deepEqual({...used.profile,cvText:initial.profile.cvText,cvFileName:initial.profile.cvFileName},initial.profile);
+  const duplicate=await cvs.create({...draftOf(edited),title:'Application CV copy'});
+  assert.notEqual(duplicate.id,edited.id);assert.deepEqual(duplicate.content,edited.content);
+  await cvs.remove(edited.id,edited.revision);
+  assert.equal((await cvs.list()).length,1);assert.equal((await store.profile()).profile.cvText,used.profile.cvText);
+  assert.equal(await accounts.deleteAccount(a.id,'A private test phrase 2026'),true);
+  assert.deepEqual(await cvs.list(),[]);
+});
+
+test('matching refuses insufficient or oversized CV text and saved versions are bounded',async t=>{
+  const accounts=await accountsFixture(t),user=await accounts.signup({email:'cv-limit@example.test',password:'A private test phrase 2026'});
+  const cvs=new CvStore(accounts.db,user.id);
+  const blank=await cvs.create(emptyCv());
+  await assert.rejects(()=>cvs.useForMatching(blank.id,1),/100 characters/);
+  const long=emptyCv();long.content.experience=Array(8).fill({...emptyCvEntry(),details:'x'.repeat(3900)});
+  const oversized=await cvs.create(long);
+  await assert.rejects(()=>cvs.useForMatching(oversized.id,1),/30,000 characters/);
+  for(let i=2;i<20;i++)await cvs.create(emptyCv());
+  await assert.rejects(()=>cvs.create(emptyCv()),/up to 20 CVs/);
+  assert.equal((await cvs.list()).length,20);
+});

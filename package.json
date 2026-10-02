@@ -28,6 +28,8 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.83",
+    "@fontsource/noto-sans": "^5.3.0",
+    "@react-pdf/renderer": "4.4.1",
     "@vercel/functions": "^3.9.9",
     "ai": "^7.0.112",
     "cheerio": "^1.2.0",

@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import { Activity, Compass, LogOut, Search, SlidersHorizontal } from 'lucide-react';
+import { Activity, Compass, FileText, LogOut, Search, SlidersHorizontal } from 'lucide-react';
 import { brand } from '@core/brand';
 import { useI18n } from './i18n';
 
 export type DashboardView = 'matches' | 'profile' | 'activity';
-type WorkspaceView = DashboardView | 'settings';
+type WorkspaceView = DashboardView | 'settings' | 'cv-builder';
 const navigation = [
   {view: 'matches', label: 'Opportunities', href: '/?view=matches', Icon: Search},
   {view: 'profile', label: 'Search profile', href: '/?view=profile', Icon: SlidersHorizontal},
   {view: 'activity', label: 'Activity', href: '/?view=activity', Icon: Activity},
+  {view: 'cv-builder', label: 'CV builder', href: '/cv-builder', Icon: FileText},
   {view: 'settings', label: 'Settings', href: '/settings', Icon: SlidersHorizontal},
 ] as const;
 
@@ -39,7 +40,7 @@ export default function WorkspaceSidebar({activeView, name, matchCount, dirty = 
     <div className="workspace-label">{t('YOUR WORKSPACE')}</div>
     <nav aria-label={t('Workspace')}>
       {navigation.map(({view, label, href, Icon}) => <a key={view} href={href} className={`nav-item${activeView === view ? ' active' : ''}`} aria-current={activeView === view ? 'page' : undefined} onClick={event => {
-        if (view !== 'settings' && onNavigate && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) {
+        if (view !== 'settings' && view !== 'cv-builder' && onNavigate && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) {
           event.preventDefault(); onNavigate(view);
         }
       }}><Icon size={18}/>{t(label)}{view === 'matches' && <span className="nav-count">{matchCount}</span>}{view === 'profile' && dirty && <span className="dirty-dot"/>}</a>)}
