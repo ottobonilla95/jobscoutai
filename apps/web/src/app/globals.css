@@ -819,7 +819,7 @@ label {
   margin-top: 3px;
 }
 
-input:not([type=checkbox]):not([type=file]),textarea {
+input:not([type=checkbox]):not([type=radio]):not([type=file]),textarea {
   display: block;
   width: 100%;
   background: var(--input);
@@ -1558,7 +1558,8 @@ details.panel:not([open])>summary {
   background: var(--mint);
 }
 
-.setup-choices input {
+.setup-choices input[type=radio] {
+  margin: 0;
   width: 18px;
   height: 18px;
   accent-color: var(--green);
@@ -1573,6 +1574,13 @@ details.panel:not([open])>summary {
   margin-top: 32px;
   border-top: 1px solid var(--line);
   padding-top: 24px;
+}
+
+.setup-back {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
 }
 
 .setup-forward {
