@@ -32,7 +32,7 @@ export function colombiaSearchLocations(locations: readonly string[]): string[] 
   }
   return cities.has('') ? [''] : [...cities];
 }
-export function activeCountrySources(profile: { locations?: readonly string[] }): CountrySource[] {
-  const countries = colombiaSearchLocations(profile.locations || []).length ? ['CO'] : [];
+export function activeCountrySources(profile: { locations?: readonly string[]; searchLocations?:readonly {countryCode:string}[] }): CountrySource[] {
+  const countries = profile.searchLocations?.length?profile.searchLocations.map(p=>p.countryCode):colombiaSearchLocations(profile.locations || []).length ? ['CO'] : [];
   return countrySources.filter(source => countries.includes(source.country));
 }

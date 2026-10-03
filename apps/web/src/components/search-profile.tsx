@@ -3,13 +3,17 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { ArrowLeft, ArrowRight, Check, FileText, Upload } from 'lucide-react';
 import type { Profile } from '@core/profile';
 import { draftFromProfile, standardMatching } from '@core/search-setup';
-import { firstIncompleteStep, matchingBasis, setupStepError, type SetupAnswers, type SetupDraft } from '@core/setup-schema';
+import { firstIncompleteStep, matchingBasis, rolesBasis, setupStepError, type SetupAnswers, type SetupDraft } from '@core/setup-schema';
 import { useI18n } from './i18n';
+import LocationPicker from './location-picker';
+import RolePicker from './role-picker';
+import StrategyReview from './strategy-review';
+import {locationQuery} from '@core/locations';
 import SearchProfileEditor, { profileFieldIds } from './search-profile-editor';
 
 const questions=[
   'What should we call you?', 'Bring your experience along', 'What kind of opportunity do you want?',
-  'Which roles interest you?', 'Where would you like to work?', 'How would you like to work?',
+  'Review your suggested roles', 'Which countries or cities should we search?', 'How would you like to work?',
   'Any work authorization or sponsorship requirements?', 'What are your salary expectations?',
   'What are your equity expectations?', 'Any must-haves or dealbreakers?', 'How often should we search?',
   'Would you like email alerts?', 'Your search, ready to go.',
@@ -34,6 +38,7 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
   const queue=useRef<Promise<unknown>>(Promise.resolve());
   const finished=useRef(false);
   const saved=useRef(JSON.stringify(draft));
+  const roleAttempt=useRef('');
   const a=draft.answers;
   const matchingCurrent=Boolean(draft.matching&&draft.matching.basis===matchingBasis(a));
   const step=draft.step;
@@ -73,12 +78,17 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
       const response=await fetch('/api/profile-suggestions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers,kind})});
       const result=await response.json();if(!response.ok)throw new Error(result.error);
       if(kind==='roles'){
-        setDraft(d=>({...d,answers:{...d.answers,titles:result.titles.join('\n')}}));
+        setDraft(d=>rolesBasis(d.answers)===rolesBasis(answers)?({...d,answers:{...d.answers,titles:result.titles.join('\n'),rolesBasis:rolesBasis(answers)}}):d);
         setNotice(t('Suggested from your CV and goal. Edit these roles, then confirm with Next.'));
-      }else setDraft(d=>({...d,matching:result.matching}));
+      }else setDraft(d=>matchingBasis(d.answers)===matchingBasis(answers)?({...d,matching:result.matching}):d);
     }catch(e){setError(e instanceof Error?e.message:t('Could not generate suggestions. Your answers are safe; retry or use standard matching.'));}
     finally{setBusy(false);}
   }
+  useEffect(()=>{
+    if(!onboarding||step!==3||a.titles.trim()||a.cvText.trim().length<100||a.objective.trim().length<10)return;
+    const basis=rolesBasis(a);if(roleAttempt.current===basis)return;roleAttempt.current=basis;
+    void suggest('roles',a);
+  },[onboarding,step,a.cvText,a.objective,a.titles]);
   async function move(next:number,skip=false) {
     setError('');setNotice('');
     let value=draft;
@@ -89,15 +99,14 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
     try{await persist(updated);setDraft(updated);setSaveState('Progress saved');if(next===12)setReviewing(true);}
     catch(e){setError(e instanceof Error?e.message:t('Could not save your progress. Please try again.'));return;}
     finally{setBusy(false);}
-    if(next===3&&!value.answers.titles.trim())await suggest('roles',value.answers);
-    if(next===12&&onboarding&&!reviewing&&firstIncompleteStep(value.answers,minimum)===null&&!value.matching)await suggest('matching',value.answers);
+    if(next===12&&onboarding&&firstIncompleteStep(value.answers,minimum)===null&&(!value.matching||value.matching.basis!==matchingBasis(value.answers)))await suggest('matching',value.answers);
   }
   async function finish() {
     const missing=firstIncompleteStep(a,minimum);
     if(missing!==null){
       setError(t(setupStepError(missing,a,minimum)!));
       if(onboarding)setDraft(d=>({...d,step:missing}));
-      else editor.current?.querySelector<HTMLElement>(`#${missing===4&&a.locationChoice==='specific'?'profile-locations':profileFieldIds[missing]}`)?.focus();
+      else editor.current?.querySelector<HTMLElement>(`#${profileFieldIds[missing]}`)?.focus();
       return;
     }
     if(!matchingCurrent){setError(t('Update your matching preferences or choose standard matching.'));return;}
@@ -136,8 +145,8 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
   const alerts=<div className="setup-alerts"><p>{t('Email alerts will start after you verify your account email. Your preference is saved.')}</p><button type="button" className="text-button" disabled={busy} onClick={verify}>{t('Send verification email')}</button></div>;
   if(completed)return <section className="setup-card setup-complete"><Check size={32}/><h1>{t('Your profile is ready.')}</h1><p>{t('Your search is set up. You can change any answer in Search profile.')}</p>{verificationNeeded&&alerts}{notice&&<p role="status">{notice}</p>}{error&&<p role="alert" className="error-text">{error}</p>}<a className="button primary" href="/">{t('Go to my opportunities')}<ArrowRight size={18}/></a></section>;
   const frequencies=[...new Set([minimum,4,8,12,24,48,168,a.intervalHours].filter(n=>n>=minimum))].sort((x,y)=>x-y);
-  if(!onboarding)return <SearchProfileEditor answers={a} matching={draft.matching} matchingCurrent={matchingCurrent} minimum={minimum} frequencies={frequencies} busy={busy} saveState={saveState} error={uploadError||error} notice={notice} invalidStep={error?firstIncompleteStep(a,minimum):null} verificationNotice={verificationNeeded?alerts:null} formRef={editor} update={update} onUpload={uploadCV} onSuggest={suggest} onStandardMatching={useStandardMatching} onSave={finish}/>;
-  const values=[a.name,a.cvFileName||(a.cvText?t('Experience added'):''),a.objective,a.titles,a.locationChoice==='anywhere'?t('Anywhere'):a.locations,a.remotePreference==='remote'?t('Remote only'):a.remotePreference==='flexible'?t('Also open to office work'):'',a.workAuthorization,a.salaryExpectation,a.equityExpectation,a.constraints,t('Every {count} hours',{count:a.intervalHours}),a.emailAlerts?t('Yes, email me strong matches'):t('No email alerts')];
+  if(!onboarding)return <SearchProfileEditor answers={a} matching={draft.matching} matchingCurrent={matchingCurrent} minimum={minimum} frequencies={frequencies} busy={busy} saveState={saveState} error={uploadError||error} notice={notice} invalidStep={error?firstIncompleteStep(a,minimum):null} verificationNotice={verificationNeeded?alerts:null} formRef={editor} update={update} onUpload={uploadCV} onSuggest={suggest} onStandardMatching={useStandardMatching} onSave={finish} onLocations={places=>setDraft(d=>({...d,answers:{...d.answers,selectedLocations:places,locations:places.map(locationQuery).join('\n'),locationChoice:'specific'}}))} onMatching={matching=>setDraft(d=>({...d,matching}))}/>;
+  const values=[a.name,a.cvFileName||(a.cvText?t('Experience added'):''),a.objective,a.titles,a.selectedLocations.map(locationQuery).join('\n')||a.locations,a.remotePreference==='remote'?t('Remote only'):a.remotePreference==='flexible'?t('Also open to office work'):'',a.workAuthorization,a.salaryExpectation,a.equityExpectation,a.constraints,t('Every {count} hours',{count:a.intervalHours}),a.emailAlerts?t('Yes, email me strong matches'):t('No email alerts')];
   const field=(key:'name'|'objective'|'titles'|'locations'|'workAuthorization'|'salaryExpectation'|'equityExpectation'|'constraints',rows=1,maxLength=3000,placeholder?:string)=><label className="setup-field"><span className="sr-only">{t(questions[step])}</span>{rows>1?<textarea aria-describedby="question-hint" rows={rows} maxLength={maxLength} value={a[key]} placeholder={placeholder} onChange={e=>update(key,e.target.value)}/>:<input aria-describedby="question-hint" maxLength={maxLength} value={a[key]} placeholder={placeholder} onChange={e=>update(key,e.target.value)}/>}</label>;
   return <section className={`setup-card ${step===12?'setup-review':''}`}>
     {onboarding&&<div className="setup-progress"><div><span>{t('YOUR SEARCH STARTS HERE')}</span><span>{t('Step {current} of {total}',{current:step+1,total:13})}</span></div><progress max={13} value={step+1} aria-label={t('Profile setup progress')}/></div>}
@@ -148,8 +157,8 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
       {step===0&&<><p id="question-hint">{t('A name makes this feel a little more like you.')}</p>{field('name',1,100)}</>}
       {step===1&&<><p id="question-hint">{t('Upload your CV or paste your experience. We will suggest roles for you to confirm.')}</p><div className="setup-upload"><FileText size={28}/><strong>{a.cvFileName||t('PDF, DOCX, or TXT · Up to 5 MB')}</strong><label className="button secondary"><Upload size={16}/>{t('Upload CV')}<input className="setup-file" type="file" accept=".pdf,.docx,.txt" aria-label={t('Upload CV')} onChange={event=>void uploadCV(event)}/></label></div><label>{t('CV text')}<textarea rows={8} value={a.cvText} maxLength={30000} onChange={e=>update('cvText',e.target.value)} placeholder={t('Your experience, skills, and achievements…')}/></label></>}
       {step===2&&<><p id="question-hint">{t('Tell us in your own words. What would make your next role a good move?')}</p>{field('objective',5,3000,t('For example: a senior product role at a small climate company, preferably remote.'))}</>}
-      {step===3&&<><p id="question-hint">{t('Your CV describes your past. Choose the roles you want next. One per line, up to four.')}</p>{field('titles',4,500)}<button type="button" className="text-button" onClick={()=>void suggest('roles')}>{t('Suggest roles from my CV')}</button></>}
-      {step===4&&<><p id="question-hint">{t('Choose a location, or keep your search open worldwide.')}</p><div className="setup-choices">{(['anywhere','specific'] as const).map(value=><label key={value} className={a.locationChoice===value?'selected':''}><input type="radio" name="location" checked={a.locationChoice===value} onChange={()=>update('locationChoice',value)}/>{t(value==='anywhere'?'Anywhere':'Specific locations')}</label>)}</div>{a.locationChoice==='specific'&&field('locations',3,365,t('One per line, up to 3'))}</>}
+      {step===3&&<><p id="question-hint">{t('Based on your CV and the opportunity you want, here are roles to review. Edit, remove, or add roles, then confirm with Next.')}</p><RolePicker value={a.titles} onChange={value=>update('titles',value)}/><button type="button" className="text-button" onClick={()=>void suggest('roles')}>{t('Regenerate from my CV and goal')}</button>{a.rolesBasis&&a.rolesBasis!==rolesBasis(a)&&<p className="footnote">{t('Your CV or goal changed. Review your roles or regenerate suggestions.')}</p>}</>}
+      {step===4&&<LocationPicker value={a.selectedLocations} legacyLocations={a.locations} invalid={Boolean(error)} onChange={places=>{setDraft(d=>({...d,answers:{...d.answers,selectedLocations:places,locations:places.map(locationQuery).join('\n'),locationChoice:'specific'}}));setError('');}}/>}
       {step===5&&<><p id="question-hint">{t('Remote jobs can still have location and work-authorization restrictions.')}</p><div className="setup-choices">{(['remote','flexible'] as const).map(value=><label key={value} className={a.remotePreference===value?'selected':''}><input type="radio" name="remote" checked={a.remotePreference===value} onChange={()=>update('remotePreference',value)}/>{t(value==='remote'?'Remote only':'Also open to office work')}</label>)}</div></>}
       {step===6&&<><p id="question-hint">{t('Tell us only what you know, such as where you can work or where you need sponsorship. You can leave this blank.')}</p>{field('workAuthorization',4,1000)}</>}
       {step===7&&<><p id="question-hint">{t('Include the currency, pay period, and any flexibility. Leave blank if you are open.')}</p>{field('salaryExpectation',1,300,t('For example: €70,000–90,000 per year, flexible'))}</>}
@@ -160,7 +169,7 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
       {step===12&&<>
         <p>{t('Review your answers. You can change any of them now or later in Search profile.')}</p>
         <div className="setup-summary">{questions.slice(0,12).map((question,index)=><div key={question}><div><span>{t(question)} {optional.has(index)&&<small>· {t('Optional')}</small>}</span><p>{values[index]||t('Not specified')}</p></div><button type="button" className="text-button" aria-label={t('Edit: {question}',{question:t(question)})} onClick={()=>{setReviewing(true);void move(index);}}>{t('Edit')}</button></div>)}</div>
-        <section className="matching-summary"><span className="eyebrow">{t('HOW WE WILL MATCH YOU')}</span><h2>{t('Built around what matters to you')}</h2>{matchingCurrent?<p>{draft.matching!.summary}</p>:<p>{t('Generate your matching preferences from your CV and answers, or start with standard matching.')}</p>}
+        <section className="matching-summary"><span className="eyebrow">{t('HOW WE WILL MATCH YOU')}</span><h2>{t('Built around what matters to you')}</h2>{matchingCurrent?<><p>{draft.matching!.summary}</p><StrategyReview matching={draft.matching!} onChange={matching=>setDraft(d=>({...d,matching}))}/></>:<p>{t('Generate your matching preferences from your CV and answers, or start with standard matching.')}</p>}
           {!matchingCurrent&&draft.matching&&<p>{t('Your answers changed. Update your matching preferences before saving.')}</p>}
           <div className="setup-matching-actions"><button type="button" className="button secondary" onClick={()=>void suggest('matching')}>{t(matchingCurrent?'Regenerate matching preferences':'Generate matching preferences')}</button><button type="button" className="text-button" onClick={useStandardMatching}>{t('Use standard matching')}</button></div>
           <p className="footnote">{t('Your explicit dealbreakers remain requirements. Missing information stays unknown.')}</p>

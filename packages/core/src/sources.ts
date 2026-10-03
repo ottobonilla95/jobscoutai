@@ -1,3 +1,4 @@
+import {searchTitles} from './discovery';
 import { load } from 'cheerio';
 import { z } from 'zod';
 import type { Job, JobListing, Profile } from './profile';
@@ -11,8 +12,8 @@ export { plainText } from './source-html';
 
 export type SearchReport = { jobs: JobListing[]; errors: string[]; blocked: string[]; succeeded: number };
 export function matchesTitle(title: string, profile: Profile) {
-  const words = title.toLowerCase().replace(/[^a-z0-9]+/g,' ');
-  return profile.titles.some(query => query.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).every(word => words.includes(word)));
+  const words = title.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ');
+  return searchTitles(profile).some(query => query.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).every(word => words.split(' ').includes(word)));
 }
 export function parseYcListings(html: string): JobListing[] {
   const $=load(html);const jobs=new Map<string,JobListing>();

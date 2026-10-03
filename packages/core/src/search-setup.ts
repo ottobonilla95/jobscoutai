@@ -1,11 +1,14 @@
 import type { Profile } from './profile';
 import { profileSchema } from './profile';
 import { defaultStrategy, type Strategy } from './strategy';
+import {locationQuery} from './locations';
+import type {Discovery} from './discovery';
+import {countryCodes} from './locations';
 import { translate } from './i18n';
 import { firstIncompleteStep, lines, matchingBasis, type SetupAnswers, type SetupDraft } from './setup-schema';
 
 export function answersFromProfile(p:Profile):SetupAnswers {
-  return {name:p.name,cvText:p.cvText,cvFileName:p.cvFileName,objective:p.onboardingCompleted?p.objective:'',
+  return {selectedLocations:p.searchLocations,rolesBasis:'',name:p.name,cvText:p.cvText,cvFileName:p.cvFileName,objective:p.onboardingCompleted?p.objective:'',
     titles:p.onboardingCompleted?p.titles.join('\n'):'',locations:p.locations.filter(Boolean).join('\n'),
     locationChoice:p.onboardingCompleted?(p.locations.some(Boolean)?'specific':'anywhere'):'',
     remotePreference:p.onboardingCompleted?(p.remoteOnly?'remote':'flexible'):'',workAuthorization:p.workAuthorization,
@@ -21,13 +24,14 @@ export function standardMatching(a:SetupAnswers,locale:'en'|'es'):SetupDraft['ma
   return {basis:matchingBasis(a),kind:'standard',strategy:strategyForAnswers(a,defaultStrategy.groups.map(g=>({...g,label:translate(locale,g.label),criteria:g.criteria.map(c=>({...c,label:translate(locale,c.label),rubric:translate(locale,c.rubric)}))})),locale),summary:translate(locale,'We match your experience, target roles, career goals, and working preferences. Unstated details stay unknown.')};
 }
 // Hard requirements come only from the user's explicit answers, never from the CV or AI.
-export function strategyForAnswers(a:SetupAnswers,groups:Strategy['groups'],locale:'en'|'es'):Strategy {
+export function strategyForAnswers(a:SetupAnswers,groups:Strategy['groups'],locale:'en'|'es',discovery:Discovery|null=null,workAccess:Strategy['workAccess']=[]):Strategy {
   const requirements:Strategy['requirements']=[];
   if(a.constraints.trim()) {
     requirements.push({id:'user_dealbreakers',label:translate(locale,'Must-haves and dealbreakers'),instruction:`Apply only explicitly stated must-haves; do not invent exclusions. User answer: ${a.constraints.trim()}`,unknown:'research'});
   }
-  if(a.workAuthorization.trim())requirements.push({id:'user_work_access',label:translate(locale,'Work authorization'),instruction:`Use only this declared work-access requirement; never infer authorization from citizenship or a CV. User answer: ${a.workAuthorization.trim()}`,unknown:'research'});
-  return {...defaultStrategy,groups,requirements};
+  const accessCoversLocations=a.selectedLocations.length>0&&a.selectedLocations.every(place=>workAccess.some(rule=>rule.country===place.countryCode));
+  if(a.workAuthorization.trim()&&!accessCoversLocations)requirements.push({id:'user_work_access',label:translate(locale,'Work authorization'),instruction:`Use only the user's declared work-access policy; never infer authorization from citizenship or a CV. A job need not restate the candidate's own work rights. Use available location evidence. If the user explicitly accepts unstated sponsorship in a country, silence alone is not a failure or an unknown requirement. For alternative locations, an accessible location may satisfy the policy. User answer: ${a.workAuthorization.trim()}`,unknown:'research'});
+  return {...defaultStrategy,groups,requirements,discovery,workAccess:workAccess.filter(rule=>countryCodes.includes(rule.country))};
 }
 export function completeSetup(p:Profile,draft:SetupDraft,minimum:number,email:string,verified:boolean):Profile {
   const step=firstIncompleteStep(draft.answers,minimum);
@@ -35,7 +39,7 @@ export function completeSetup(p:Profile,draft:SetupDraft,minimum:number,email:st
   if(!draft.matching||draft.matching.basis!==matchingBasis(draft.answers))throw new Error('Update your matching preferences or choose standard matching.');
   const a=draft.answers;
   return profileSchema.parse({...p,name:a.name,cvText:a.cvText,cvFileName:a.cvFileName,objective:a.objective,
-    titles:lines(a.titles),locations:a.locationChoice==='anywhere'?['']:lines(a.locations),remoteOnly:a.remotePreference==='remote',
+    titles:lines(a.titles),searchLocations:a.selectedLocations,locations:a.selectedLocations.map(locationQuery),remoteOnly:a.remotePreference==='remote',
     workAuthorization:a.workAuthorization,salaryExpectation:a.salaryExpectation,equityExpectation:a.equityExpectation,
     constraints:a.constraints,intervalHours:a.intervalHours,email,emailAlertsRequested:a.emailAlerts,emailEnabled:a.emailAlerts&&verified,
     strategy:draft.matching.strategy,matchingSummary:draft.matching.summary,onboardingCompleted:true,setupDraft:null,

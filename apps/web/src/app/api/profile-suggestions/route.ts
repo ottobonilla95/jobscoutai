@@ -11,7 +11,8 @@ export async function POST(request:Request) {
   const denied=await guard(request);if(denied)return denied;
   if(!integrations().ai)return localizedJson({error:'AI suggestions are unavailable. Enter roles yourself or choose standard matching.'},{status:503});
   try {
-    const {answers,kind}=z.object({answers:setupAnswersSchema,kind:z.enum(['roles','matching'])}).parse(JSON.parse(new TextDecoder().decode(await limitedBody(request))));
+    const {answers,kind}=z.object({answers:setupAnswersSchema,kind:z.enum(['roles','matching'])}).parse(JSON.parse(new TextDecoder().decode(await limitedBody(request,600000))));
+    if(kind==='roles'&&answers.objective.trim().length<10)return localizedJson({error:'Enter a goal before generating roles.'},{status:400});
     if(answers.cvText.trim().length<100||(kind==='matching'&&firstIncompleteStep(answers,minimumSearchIntervalHours())!==null))return localizedJson({error:'Complete the required questions before generating suggestions.'},{status:400});
     const account=(await currentAccount())!;
     if(!await getAccounts().allow(`profile-suggestions:${account.id}`,12,86400000))return localizedJson({error:'Daily suggestion limit reached. Try tomorrow or choose standard matching.'},{status:429});

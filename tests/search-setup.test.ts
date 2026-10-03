@@ -8,7 +8,7 @@ import { minimumSearchIntervalHours } from '../packages/core/src/search-policy';
 
 function readyDraft() {
   const draft=draftFromProfile({...defaultProfile,onboardingCompleted:false},4);
-  draft.answers={...draft.answers,cvText:'Product engineer with seven years building accessible web applications, leading delivery, and working closely with customers.',objective:'Build useful climate products with a small team.',titles:'Product Engineer',locationChoice:'anywhere',remotePreference:'remote'};
+  draft.answers={...draft.answers,cvText:'Product engineer with seven years building accessible web applications, leading delivery, and working closely with customers.',objective:'Build useful climate products with a small team.',titles:'Product Engineer',locationChoice:'specific',selectedLocations:[{kind:'country',countryCode:'CO',city:'',region:''}],remotePreference:'remote'};
   draft.matching=standardMatching(draft.answers,'en');draft.step=12;
   return draft;
 }
@@ -17,13 +17,13 @@ test('onboarding requires experience, goals, confirmed roles and explicit locati
   assert.equal(empty.answers.titles,'');assert.equal(empty.answers.objective,'');assert.equal(firstIncompleteStep(empty.answers,4),1);
   assert.throws(()=>completeSetup(defaultProfile,empty,4,'user@example.test',false));
   const draft=readyDraft();assert.equal(firstIncompleteStep(draft.answers,4),null);
-  for(const [key,value,step] of [['cvText','',1],['objective','',2],['titles','',3],['locationChoice','',4],['remotePreference','',5],['intervalHours',2,10]] as const){
+  for(const [key,value,step] of [['cvText','',1],['objective','',2],['titles','',3],['selectedLocations',[],4],['remotePreference','',5],['intervalHours',2,10]] as const){
     assert.equal(firstIncompleteStep({...draft.answers,[key]:value},4),step);
     assert.throws(()=>completeSetup(defaultProfile,{...draft,answers:{...draft.answers,[key]:value}},4,'user@example.test',false));
   }
   const complete=completeSetup({...defaultProfile,onboardingCompleted:false},draft,4,'user@example.test',false);
   assert.equal(complete.onboardingCompleted,true);assert.equal(complete.enabled,true);assert.equal(complete.setupDraft,null);
-  assert.deepEqual(complete.locations,['']);assert.equal(complete.salaryExpectation,'');assert.equal(complete.equityExpectation,'');
+  assert.deepEqual(complete.locations,['Colombia']);assert.equal(complete.salaryExpectation,'');assert.equal(complete.equityExpectation,'');
   assert.deepEqual(complete.strategy.requirements,[]);assert.deepEqual(complete.strategy.workAccess,[]);
 });
 test('matching must be refreshed when meaningful answers change, while optional identity and schedule edits preserve it',()=>{
@@ -103,7 +103,7 @@ test('AI suggestions validate roles and scoring, account for usage, and cannot a
   const roles=await suggestProfile(draft.answers,'roles','es',roleModel);
   assert.ok('titles' in roles);
   assert.deepEqual(roles.titles,['Product Engineer','Frontend Engineer']);assert.equal(roles.inputTokens,10);assert.equal(roles.outputTokens,20);
-  const matching=await suggestProfile(draft.answers,'matching','en',mock({groups:defaultProfile.strategy.groups,summary:'We prioritize your engineering experience and stated climate-product goals.',requirements:[{instruction:'Only jobs with equity.'}],workAccess:[{country:'US',access:'authorized'}]}));
+  const matching=await suggestProfile(draft.answers,'matching','en',mock({discovery:{intent:'Find climate product roles that fit the candidate goal.',titleVariants:['Product Engineer'],evidencePriorities:['Relevant product responsibilities'],questions:[]},workAccessProposals:[],groups:defaultProfile.strategy.groups,summary:'We prioritize your engineering experience and stated climate-product goals.',requirements:[{instruction:'Only jobs with equity.'}],workAccess:[{country:'US',access:'authorized'}]}));
   assert.ok('matching' in matching);
   assert.deepEqual(matching.matching?.strategy.requirements,[]);assert.deepEqual(matching.matching?.strategy.workAccess,[]);
   assert.equal(matching.matching?.basis,matchingBasis(draft.answers));assert.equal(matching.matching?.kind,'generated');
