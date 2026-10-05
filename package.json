@@ -27,11 +27,11 @@
     "check:database": "node --env-file-if-exists=.env --import tsx scripts/check-database.ts"
   },
   "dependencies": {
-    "@ai-sdk/openai": "^4.0.83",
+    "@ai-sdk/openai": "^4.0.84",
     "@fontsource/noto-sans": "^5.3.0",
     "@react-pdf/renderer": "4.4.1",
     "@vercel/functions": "^3.9.9",
-    "ai": "^7.0.112",
+    "ai": "^7.0.128",
     "cheerio": "^1.2.0",
     "lucide-react": "^1.47.0",
     "mammoth": "^1.12.3",

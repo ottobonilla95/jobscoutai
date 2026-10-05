@@ -4,6 +4,8 @@ import { setupDraftSchema, type SetupDraft } from './setup-schema';
 import { Database, type Row } from './database';
 import { profileSchema, type Profile, type Job, type JobListing, type Assessment, type Run, type Tracking, type Verification } from './profile';
 import { sourceEnabled } from './source-settings';
+import {discoveryStateSchema,searchDiscoverySchema,type DiscoveryState,type SearchDiscovery} from './adaptive-search-schema';
+import {discoveryScope} from './discovery-state';
 
 /** Every query is scoped to the authenticated account, including joins and writes. */
 export class Store {
@@ -12,6 +14,8 @@ export class Store {
     const row=await this.db.prepare(`SELECT * FROM profile WHERE user_id=?${lock?' FOR UPDATE':''}`).get(this.userId);
     if(!row)throw new Error('Account not found.');
     const profile=profileSchema.parse(JSON.parse(row.value));
+    const discovery=await this.discoveryState(discoveryScope(profile));
+    profile.discoveredCompanyBoards=discovery.boards.map(b=>b.url);
     profile.intervalHours=Math.max(profile.intervalHours,minimumSearchIntervalHours());
     return {profile,version:Number(row.version)};
   }
@@ -23,6 +27,7 @@ export class Store {
     });
   }
   async saveProfile(profile: Profile) {
+    profile={...profile,discoveredCompanyBoards:[]};
     profile=profileSchema.parse({...profile,intervalHours:Math.max(profile.intervalHours,minimumSearchIntervalHours())});
     await this.db.transaction(async db=>{
       const old=await new Store(db,this.userId).profile(true);
@@ -61,8 +66,21 @@ export class Store {
       return id;
     });
   }
-  async progress(id:string,counts:{discovered:number;evaluated:number;matched:number;inputTokens:number;outputTokens:number}){
-    await this.db.prepare('UPDATE runs SET discovered=?,evaluated=?,matched=?,input_tokens=?,output_tokens=? WHERE user_id=? AND id=?').run(counts.discovered,counts.evaluated,counts.matched,counts.inputTokens,counts.outputTokens,this.userId,id);
+  async discoveryState(scope:string):Promise<DiscoveryState>{
+    const row=await this.db.prepare('SELECT value FROM discovery_state WHERE user_id=? AND scope=?').get(this.userId,scope);
+    return row?discoveryStateSchema.parse(JSON.parse(row.value)):{attempts:[],boards:[]};
+  }
+  async saveDiscoveryState(scope:string,value:DiscoveryState,version:number){
+    const serialized=JSON.stringify(discoveryStateSchema.parse(value));
+    return this.db.transaction(async db=>{
+      const current=await db.prepare('SELECT version FROM profile WHERE user_id=? FOR UPDATE').get(this.userId);
+      if(Number(current?.version)!==version)return false;
+      await db.prepare('INSERT INTO discovery_state(user_id,scope,value) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET scope=excluded.scope,value=excluded.value').run(this.userId,scope,serialized);
+      return true;
+    });
+  }
+  async progress(id:string,counts:{discovered:number;evaluated:number;matched:number;inputTokens:number;outputTokens:number},discovery?:SearchDiscovery){
+    await this.db.prepare('UPDATE runs SET discovered=?,evaluated=?,matched=?,input_tokens=?,output_tokens=?,discovery=COALESCE(?,discovery) WHERE user_id=? AND id=?').run(counts.discovered,counts.evaluated,counts.matched,counts.inputTokens,counts.outputTokens,discovery?JSON.stringify(searchDiscoverySchema.parse(discovery)):null,this.userId,id);
   }
   async finish(id:string,status:Run['status'],counts:{discovered:number;evaluated:number;matched:number;inputTokens:number;outputTokens:number},error:string|null){
     await this.db.transaction(async db=>{
@@ -103,7 +121,7 @@ export class Store {
     return selected;
   }
   async jobs():Promise<Job[]>{return (await this.db.prepare('SELECT * FROM jobs WHERE user_id=? ORDER BY score DESC NULLS LAST,first_seen DESC').all(this.userId)).map(jobFromRow);}
-  async runs():Promise<Run[]>{return (await this.db.prepare('SELECT * FROM runs WHERE user_id=? ORDER BY started_at DESC LIMIT 30').all(this.userId)).map(row=>({id:String(row.id),startedAt:row.started_at,finishedAt:row.finished_at,status:row.status,discovered:Number(row.discovered),evaluated:Number(row.evaluated),matched:Number(row.matched),inputTokens:Number(row.input_tokens),outputTokens:Number(row.output_tokens),error:row.error}));}
+  async runs():Promise<Run[]>{return (await this.db.prepare('SELECT * FROM runs WHERE user_id=? ORDER BY started_at DESC LIMIT 30').all(this.userId)).map(row=>({id:String(row.id),startedAt:row.started_at,finishedAt:row.finished_at,status:row.status,discovered:Number(row.discovered),evaluated:Number(row.evaluated),matched:Number(row.matched),inputTokens:Number(row.input_tokens),outputTokens:Number(row.output_tokens),error:row.error,discovery:row.discovery?searchDiscoverySchema.parse(JSON.parse(row.discovery)):null}));}
   async deliveries(){return this.db.prepare('SELECT * FROM deliveries WHERE user_id=? ORDER BY created_at DESC LIMIT 20').all(this.userId);}
   async reservedJobs(){return (await this.db.prepare('SELECT job_id FROM delivery_jobs WHERE user_id=?').all(this.userId)).map(r=>String(r.job_id));}
   async enqueueDelivery(id:string,payload:unknown,jobIds:string[]){

@@ -2591,3 +2591,13 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
 /* Scope choice controls to prevent form-wide input sizing from stretching radios. */
 .setup-fields .setup-choices label { display:flex; align-items:center; }
 .setup-fields .setup-choices input[type=radio] { display:inline-block; width:18px; height:18px; flex:0 0 18px; margin:0; }
+
+.search-discovery-report { margin-top:16px; }
+.search-discovery-report summary { cursor:pointer; font-weight:600; }
+.discovery-round { border-top:1px solid var(--line); margin-top:16px; padding-top:12px; }
+.discovery-round h3 { font-size:1rem; }
+.discovery-table { overflow-x:auto; }
+.discovery-table table { width:100%; border-collapse:collapse; font-size:.85rem; }
+.discovery-table th,.discovery-table td { text-align:left; padding:10px; border-bottom:1px solid var(--line); vertical-align:top; }
+.discovery-table small { display:block; color:var(--muted); margin-top:4px; }
+.discovered-employers a,.discovery-round a { overflow-wrap:anywhere; }

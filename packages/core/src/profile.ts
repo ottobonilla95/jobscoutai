@@ -3,6 +3,7 @@ import {searchLocationSchema,maxSearchLocations} from './locations';
 import { setupDraftSchema } from './setup-schema';
 import { strategySchema, defaultStrategy, type Research, type evaluateStrategy } from './strategy';
 import { parseBoard } from './source-settings';
+import type {SearchDiscovery} from './adaptive-search-schema';
 import {goalClarificationsSchema} from './goal-clarifications';
 
 export const profileSchema = z.object({
@@ -27,6 +28,7 @@ export const profileSchema = z.object({
   remoteOnly: z.boolean(),
   sources: z.array(z.enum(['linkedin','yc','companies'])).min(1).max(3).default(['linkedin']),
   companyBoards: z.array(z.string().trim().max(250).refine(value => Boolean(parseBoard(value)), 'Use an Ashby or Greenhouse company board URL.')).max(5).default([]),
+  discoveredCompanyBoards:z.array(z.string().max(250).refine(v=>Boolean(parseBoard(v)))).max(20).default([]),
   constraints: z.string().trim().max(3000),
   salaryExpectation: z.string().trim().max(300),
   equityExpectation: z.string().trim().max(500),
@@ -45,7 +47,7 @@ export const defaultProfile: Profile = {
   objective: 'Find a role that matches my experience, priorities, and career goals.',
   cvText: '', cvFileName: '',
   searchLocations:[], titles: ['Software Engineer'], locations: [''], remoteOnly: false,
-  sources: ['linkedin'], companyBoards: [],
+  sources: ['linkedin'], companyBoards: [],discoveredCompanyBoards:[],
   constraints: '', salaryExpectation: '', equityExpectation: '', email: '',
   intervalHours: 4, minimumScore: 80, maxJobsPerRun: 10,
   enabled: false, emailEnabled: false,
@@ -74,6 +76,7 @@ export type Job = JobListing & {
   notifiedAt: string | null; evaluatedVersion: number | null;
 };
 export type Run = {
+  discovery:SearchDiscovery|null;
   id: string; startedAt: string; finishedAt: string | null;
   status: 'running' | 'completed' | 'partial' | 'failed';
   discovered: number; evaluated: number; matched: number; inputTokens: number; outputTokens: number;
