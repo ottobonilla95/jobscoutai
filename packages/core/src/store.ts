@@ -33,13 +33,15 @@ export class Store {
     profile=profileSchema.parse({...profile,intervalHours:Math.max(profile.intervalHours,minimumSearchIntervalHours())});
     await this.db.transaction(async db=>{
       const old=await new Store(db,this.userId).profile(true);
-      const fields=(p:Profile)=>JSON.stringify([p.workAuthorization,p.objective,p.cvText,p.titles,p.constraints,p.salaryExpectation,p.equityExpectation,p.goalClarifications,p.remoteOnly,p.locations,p.searchLocations,p.sources,p.companyBoards,p.strategy,p.postedWithinDays,p.includeUnknownDates,p.outputLanguage]);
+      const fields=(p:Profile)=>JSON.stringify([p.researchEnabled,p.workAuthorization,p.objective,p.cvText,p.titles,p.constraints,p.salaryExpectation,p.equityExpectation,p.goalClarifications,p.remoteOnly,p.locations,p.searchLocations,p.sources,p.companyBoards,p.strategy,p.postedWithinDays,p.includeUnknownDates,p.outputLanguage]);
       await db.prepare('UPDATE profile SET value=?,version=version+? WHERE user_id=?').run(JSON.stringify(profile),fields(profile)!==fields(old.profile)?1:0,this.userId);
       if(profile.enabled&&!old.profile.enabled)await db.prepare('UPDATE state SET next_run=? WHERE user_id=?').run(new Date().toISOString(),this.userId);
       else if(profile.intervalHours!==old.profile.intervalHours)await db.prepare('UPDATE state SET next_run=? WHERE user_id=?').run(new Date(Date.now()+profile.intervalHours*3600000).toISOString(),this.userId);
     });
   }
   async state(){return (await this.db.prepare('SELECT * FROM state WHERE user_id=?').get(this.userId))!;}
+  async requestResearch(id:string){await this.db.transaction(async db=>{await db.prepare('UPDATE jobs SET research_requested=1 WHERE user_id=? AND id=?').run(this.userId,id);await new Store(db,this.userId).requestRun();});}
+  async clearResearchRequest(id:string){await this.db.prepare('UPDATE jobs SET research_requested=0 WHERE user_id=? AND id=?').run(this.userId,id);}
   async requestRun(){await this.db.prepare('UPDATE state SET requested=1 WHERE user_id=?').run(this.userId);}
   async heartbeat(owner?:string){
     await this.db.prepare('UPDATE state SET heartbeat=? WHERE user_id=?').run(new Date().toISOString(),this.userId);
@@ -145,7 +147,7 @@ export class Store {
 
 function jobFromRow(row: Row): Job {
   return { id: String(row.id), title: String(row.title), company: String(row.company), location: String(row.location), url: String(row.url),
-    research:row.research?researchDossierSchema.parse(JSON.parse(row.research)):null,descriptionCheckedAt:row.description_checked_at?String(row.description_checked_at):null,
+    researchRequested:Boolean(row.research_requested),research:row.research?researchDossierSchema.parse(JSON.parse(row.research)):null,descriptionCheckedAt:row.description_checked_at?String(row.description_checked_at):null,
     tracking: row.tracking?JSON.parse(String(row.tracking)):{}, verification:row.verification?JSON.parse(String(row.verification)):null,duplicateOf:row.duplicate_of as string|null,
     sourceKey: String(row.source_key || 'linkedin'),
     postedAt: row.posted_at as string | null, description: row.description as string | null, firstSeen: String(row.first_seen), lastSeen: String(row.last_seen),

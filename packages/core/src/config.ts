@@ -16,6 +16,7 @@ export function dataDirectory(): string {
 
 export function integrations() {
   return {
+    research:Boolean(process.env.OPENAI_API_KEY),
     ai: Boolean(process.env.OPENAI_API_KEY || process.env.AI_GATEWAY_API_KEY),
     email: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
     model: process.env.AI_MODEL || 'openai/gpt-5.4-mini',

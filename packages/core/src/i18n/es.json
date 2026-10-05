@@ -857,5 +857,17 @@
   "Questions still worth answering": "Preguntas pendientes de aclarar",
   "No research questions have been recorded.": "No se han registrado preguntas de investigación.",
   "Answered": "Respondida",
-  "Unanswered": "Sin responder"
+  "Unanswered": "Sin responder",
+  "Research checked {count} excerpts. Answered questions: {answered}; unresolved or conflicting: {unresolved}.": "Se comprobaron {count} extractos. Preguntas respondidas: {answered}; sin resolver o contradictorias: {unresolved}.",
+  "Please wait a few minutes before requesting more research.": "Espera unos minutos antes de pedir más investigación.",
+  "Enable goal research and configure web research access before requesting an investigation.": "Activa la investigación de tus objetivos y configura el acceso a investigación web antes de solicitarla.",
+  "This opportunity is not eligible for research. Review its status and selected source.": "Esta oportunidad no puede investigarse. Revisa su estado y la fuente seleccionada.",
+  "Research queued for the next eligible worker run. Your search cadence and AI call budget still apply.": "Investigación en cola para la siguiente búsqueda disponible. Se mantienen la frecuencia de búsqueda y el límite de llamadas de IA.",
+  "Could not request research.": "No se pudo solicitar la investigación.",
+  "Queuing research…": "Añadiendo investigación a la cola…",
+  "Investigate what matters to me": "Investigar lo que me importa",
+  "Investigate promising opportunities using my goals": "Investigar oportunidades prometedoras según mis objetivos",
+  "Checks up to two opportunities per run using your shared AI call budget. Unverified details stay unanswered.": "Comprueba hasta dos oportunidades por búsqueda dentro de tu límite compartido de llamadas de IA. Los detalles no verificados quedan sin respuesta.",
+  "Investigation could not finish. Saved evidence remains available; unresolved questions will be retried.": "No se pudo terminar la investigación. Las evidencias guardadas siguen disponibles; las preguntas pendientes se volverán a intentar.",
+  "Research queued": "Investigación en cola"
 }
