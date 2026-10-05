@@ -2,12 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {MockLanguageModelV4} from 'ai/test';
 import {defaultProfile,profileSchema} from '../packages/core/src/profile';
-import {addLocation,countrySuggestions,locationLabel,locationQuery,parseCitySuggestions,searchLocationSchema,type SearchLocation} from '../packages/core/src/locations';
+import {addLocation,countryCodes,countrySuggestions,locationLabel,locationQuery,maxSearchLocations,parseCitySuggestions,searchLocationSchema,type SearchLocation} from '../packages/core/src/locations';
 import {searchTitles} from '../packages/core/src/discovery';
 import {activeCountrySources} from '../packages/core/src/country-sources';
 import {matchesTitle} from '../packages/core/src/sources';
 import {draftFromProfile,completeSetup,standardMatching} from '../packages/core/src/search-setup';
-import {matchingBasis,setupStepError} from '../packages/core/src/setup-schema';
+import {matchingBasis,setupDraftSchema,setupStepError} from '../packages/core/src/setup-schema';
+import {proposalSchema} from '../packages/core/src/import-strategy';
 import {suggestProfile} from '../packages/core/src/profile-suggestions';
 import {evaluateStrategy} from '../packages/core/src/strategy';
 import {jobEvaluationContext} from '../packages/core/src/ranker';
@@ -29,18 +30,36 @@ test('countries are localized, cities include their country, and ambiguous citie
  assert.equal(searchLocationSchema.safeParse(country('XX')).success,false);
  assert.equal(searchLocationSchema.safeParse({...country('ES'),city:'Madrid'}).success,false);
 });
-test('whole-country selection replaces its cities; duplicates and over-budget selections are prevented',()=>{
+test('countries broaden their cities and cities narrow their country, even at capacity',()=>{
  const madrid=city('Madrid','ES');let places=addLocation([],madrid);assert.equal(addLocation(places,madrid),places);
- places=addLocation(places,country('ES'));assert.deepEqual(places,[country('ES')]);assert.equal(addLocation(places,madrid),places);
- places=addLocation(addLocation(places,country('GB')),country('CO'));assert.equal(addLocation(places,country('DE')),places);
+ places=addLocation(places,country('ES'));assert.deepEqual(places,[country('ES')]);assert.deepEqual(addLocation(places,madrid),[madrid]);
+ places=[country('ES'),...countryCodes.filter(code=>code!=='ES').slice(0,maxSearchLocations-1).map(country)];
+ assert.equal(addLocation(places,country('GB')),places);
+ const narrowed=addLocation(places,madrid);assert.equal(narrowed.length,maxSearchLocations);assert.ok(narrowed.includes(madrid));assert.ok(!narrowed.some(p=>p.kind==='country'&&p.countryCode==='ES'));
+ assert.deepEqual(addLocation([madrid,city('Barcelona','ES')],country('ES')),[country('ES')]);
+ assert.deepEqual(addLocation([madrid],city('Barcelona','ES')),[madrid,city('Barcelona','ES')]);
+});
+test('ten mixed locations survive draft validation, completion, profile storage shape and strategy imports',()=>{
+ const selectedLocations=Array.from({length:maxSearchLocations},(_,i)=>city('A'.repeat(79)+i,'CO','B'.repeat(80)));
+ const a={...answers(),selectedLocations,locations:selectedLocations.map(locationQuery).join('\n')};
+ const draft={answers:a,step:12,matching:standardMatching(a,'en')};
+ assert.equal(setupStepError(4,a,4),null);assert.equal(setupDraftSchema.safeParse(draft).success,true);
+ const profile=completeSetup(defaultProfile,draft,4,'user@example.test',false);
+ assert.deepEqual(profile.searchLocations,selectedLocations);assert.deepEqual(profile.locations,selectedLocations.map(locationQuery));
+ assert.equal(proposalSchema.safeParse({...profile,warnings:[]}).success,true);
+ const tooMany={...a,selectedLocations:[...selectedLocations,country('DE')]};
+ assert.ok(setupStepError(4,tooMany,4));assert.equal(setupDraftSchema.safeParse({...draft,answers:tooMany}).success,false);
+ assert.equal(profileSchema.safeParse({...profile,searchLocations:tooMany.selectedLocations}).success,false);
+ assert.equal(profileSchema.safeParse({...profile,locations:[...profile.locations,'Germany']}).success,false);
 });
 test('city lookup accepts known places only, deduplicates and excludes addresses and unrecognized countries',()=>{
  const properties={name:'Bogotá',countrycode:'co',state:'Bogotá, Capital District',type:'city'};
  const places=parseCitySuggestions({features:[{properties},{properties},{properties:{...properties,type:'street'}},{properties:{...properties,countrycode:'xx'}}]});
  assert.deepEqual(places,[city('Bogotá','CO')]);assert.throws(()=>parseCitySuggestions({features:'malformed'}));
+ assert.deepEqual(parseCitySuggestions({features:[{properties},{properties:{...properties,name:'Madrid',countrycode:'es',state:'Madrid'}}]},'ES'),[city('Madrid','ES')]);
 });
 test('new setup requires explicit selected places; old unfiltered profiles remain readable without changing their active search',()=>{
- const a=answers();assert.equal(setupStepError(4,{...a,selectedLocations:[],locationChoice:'anywhere'},4),'Select 1–3 countries or cities from the suggestions.');
+ const a=answers();assert.equal(setupStepError(4,{...a,selectedLocations:[],locationChoice:'anywhere'},4),'Select at least one country or city from the suggestions.');
  const legacy=profileSchema.parse({...defaultProfile,locations:['']});assert.deepEqual(legacy.searchLocations,[]);
  const matching=standardMatching(a,'en');const profile=completeSetup(defaultProfile,{answers:a,step:12,matching},4,'user@example.test',false);
  const longCity=city('A'.repeat(80),'GB','B'.repeat(80));

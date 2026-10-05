@@ -9,7 +9,9 @@ export const searchLocationSchema = z.object({
   city:z.string().trim().max(80).default(''), region:z.string().trim().max(80).default(''),
 }).refine(place=>place.kind==='country' ? !place.city && !place.region : Boolean(place.city),'Choose a country or a named city.');
 export type SearchLocation = z.infer<typeof searchLocationSchema>;
-export const maxSearchLocations=3;
+// Discovery checks at most eight titles per location; keep saved searches bounded.
+export const maxSearchLocations=10;
+export const maxLocationTextLength=maxSearchLocations*241;
 export function countryName(code:string,locale:Locale='en') {return new Intl.DisplayNames([locale],{type:'region'}).of(code)||code;}
 export function locationQuery(place:SearchLocation) {
   return place.kind==='country'?countryName(place.countryCode):[place.city,place.region,countryName(place.countryCode)].filter(Boolean).join(', ');
@@ -19,8 +21,10 @@ export function locationLabel(place:SearchLocation,locale:Locale) {
 }
 export function locationKey(place:SearchLocation) {return [place.kind,place.countryCode,normalize(place.city),normalize(place.region)].join(':');}
 export function addLocation(selected:SearchLocation[],place:SearchLocation) {
-  if(selected.some(p=>locationKey(p)===locationKey(place)||p.kind==='country'&&p.countryCode===place.countryCode))return selected;
-  const next=place.kind==='country'?selected.filter(p=>p.countryCode!==place.countryCode):selected;
+  if(selected.some(p=>locationKey(p)===locationKey(place)))return selected;
+  // Choosing a city narrows an existing whole-country search. Choosing a country
+  // broadens its cities. Keep both operations possible even at the selection cap.
+  const next=selected.filter(p=>p.countryCode!==place.countryCode || (place.kind==='city'&&p.kind==='city'));
   return next.length>=maxSearchLocations?selected:[...next,place];
 }
 export function normalize(value:string){return value.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().trim();}
@@ -34,12 +38,12 @@ const photonSchema=z.object({features:z.array(z.object({properties:z.object({
   name:z.string().max(80),countrycode:z.string(),state:z.string().max(80).optional(),type:z.string().optional(),
   osm_key:z.string().optional(),osm_value:z.string().optional(),
 })})).max(30)});
-export function parseCitySuggestions(raw:unknown):SearchLocation[] {
+export function parseCitySuggestions(raw:unknown,countryCode?:string):SearchLocation[] {
   const result:SearchLocation[]=[];
   for(const {properties:p} of photonSchema.parse(raw).features){
     if(p.type!=='city' && !(p.osm_key==='place' && ['city','town','village'].includes(p.osm_value||'')))continue;
     const place=searchLocationSchema.safeParse({kind:'city',countryCode:p.countrycode.toUpperCase(),city:p.name,region:p.state&&(normalize(p.state)===normalize(p.name)||normalize(p.state).startsWith(normalize(p.name)+','))?'':p.state||''});
-    if(place.success&&!result.some(other=>locationKey(other)===locationKey(place.data)))result.push(place.data);
+    if(place.success&&(!countryCode||place.data.countryCode===countryCode)&&!result.some(other=>locationKey(other)===locationKey(place.data)))result.push(place.data);
   }
   return result.slice(0,6);
 }

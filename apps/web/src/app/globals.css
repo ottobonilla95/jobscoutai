@@ -2553,6 +2553,26 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
 .icon-button:focus-visible { outline:2px solid var(--green); outline-offset:2px; }
 .location-picker { min-width:0; }
 .location-picker .footnote { margin:8px 0; }
+.location-chip { flex-wrap:wrap; max-width:100%; }
+.location-chip > span { overflow-wrap:anywhere; }
+.location-refine { font-size:13px; padding:4px; }
+.location-city-scope { margin-bottom:12px; }
+.goal-clarifications { margin:24px 0; }
+.goal-clarifications h2 { font-size:20px; }
+.goal-question-fields { border:0; padding:0; margin:0; min-width:0; }
+.goal-question { padding:20px 0; border-bottom:1px solid var(--line); }
+.goal-question label > small { display:block; color:var(--muted); font-weight:400; margin:6px 0; }
+.goal-question textarea { width:100%; margin:10px 0; }
+.goal-question .check-label { display:flex; align-items:flex-start; gap:10px; font-size:14px; }
+.goal-question .check-label input { width:18px; height:18px; flex:0 0 18px; margin-top:3px; }
+.goal-question .check-label small { display:block; font-weight:400; color:var(--muted); }
+.goal-answer-options, .goal-question-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+.goal-answer-options .button { white-space:normal; text-align:left; }
+.goal-answer-options [aria-pressed=true] { background:var(--green); color:var(--ink); }
+.goal-answer-summary { margin:20px 0; }
+.goal-answer-summary dt { font-weight:600; }
+.goal-answer-summary dt .pill { display:inline-block; margin-left:8px; }
+.goal-answer-summary dd { margin:8px 0 18px; white-space:pre-wrap; overflow-wrap:anywhere; }
 .location-results { list-style:none; padding:0; margin:8px 0; max-height:280px; overflow:auto; background:var(--input); border:1px solid var(--line); border-radius:8px; }
 .location-results:empty { display:none; }
 .location-results button { width:100%; text-align:left; border:0; background:transparent; color:var(--ink); font:inherit; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px 16px; cursor:pointer; }

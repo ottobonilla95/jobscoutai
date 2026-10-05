@@ -3,12 +3,14 @@ import {searchLocationSchema,maxSearchLocations} from './locations';
 import { setupDraftSchema } from './setup-schema';
 import { strategySchema, defaultStrategy, type Research, type evaluateStrategy } from './strategy';
 import { parseBoard } from './source-settings';
+import {goalClarificationsSchema} from './goal-clarifications';
 
 export const profileSchema = z.object({
   onboardingCompleted:z.boolean().default(true),
   setupDraft:setupDraftSchema.nullable().default(null),
   workAuthorization:z.string().max(1000).default(''),
   matchingSummary:z.string().max(1200).default(''),
+  goalClarifications:goalClarificationsSchema.default([]), clarificationBasis:z.string().max(70000).default(''),
   emailAlertsRequested:z.boolean().default(false),
   outputLanguage: z.enum(['en','es']).default('en'),
   strategy: strategySchema.default(defaultStrategy),
@@ -21,7 +23,7 @@ export const profileSchema = z.object({
   cvFileName: z.string().max(200),
   titles: z.array(z.string().trim().min(2).max(120)).min(1).max(4),
   searchLocations:z.array(searchLocationSchema).max(maxSearchLocations).default([]),
-  locations: z.array(z.string().trim().max(240)).min(1).max(3),
+  locations: z.array(z.string().trim().max(240)).min(1).max(maxSearchLocations),
   remoteOnly: z.boolean(),
   sources: z.array(z.enum(['linkedin','yc','companies'])).min(1).max(3).default(['linkedin']),
   companyBoards: z.array(z.string().trim().max(250).refine(value => Boolean(parseBoard(value)), 'Use an Ashby or Greenhouse company board URL.')).max(5).default([]),
@@ -37,7 +39,7 @@ export const profileSchema = z.object({
 }).refine(p => !p.sources.includes('companies') || p.companyBoards.length > 0, 'Add at least one company board.');
 export type Profile = z.infer<typeof profileSchema>;
 export const defaultProfile: Profile = {
-  onboardingCompleted:true, setupDraft:null, workAuthorization:'', matchingSummary:'', emailAlertsRequested:false,
+  onboardingCompleted:true, setupDraft:null, workAuthorization:'', matchingSummary:'', goalClarifications:[],clarificationBasis:'',emailAlertsRequested:false,
   outputLanguage:'en', strategy: defaultStrategy, postedWithinDays: 7, includeUnknownDates: true, dailyEvaluationLimit: 50,
   name: '',
   objective: 'Find a role that matches my experience, priorities, and career goals.',
