@@ -1,3 +1,4 @@
+import {investigateOpportunity,dueForInvestigation} from './investigator';
 import { AIBudgetError } from './ai-usage';
 import { integrations } from './config';
 import { verifyListing } from './verification';
@@ -16,8 +17,8 @@ import {searchTitles} from './discovery';
 import {activeCountrySources} from './country-sources';
 import {parseBoard} from './source-settings';
 
-const defaults = { verify: verifyListing, search: (profile:Profile,session?:SearchSession)=>searchSources(profile,undefined,session), describe: describeJob, rank: rankJob, notify: notifyMatches,plan:planAdaptiveSearch };
-type Dependencies={search:(profile:Profile,session?:SearchSession)=>Promise<SearchReport|JobListing[]>;describe:typeof describeJob;rank:typeof rankJob;notify:typeof notifyMatches;verify?:typeof verifyListing;plan?:(input:PlannerInput)=>Promise<AdaptivePlan>};
+const defaults = { verify: verifyListing, search: (profile:Profile,session?:SearchSession)=>searchSources(profile,undefined,session), describe: describeJob, rank: rankJob, notify: notifyMatches,plan:planAdaptiveSearch,investigate:investigateOpportunity };
+type Dependencies={investigate?:typeof investigateOpportunity;search:(profile:Profile,session?:SearchSession)=>Promise<SearchReport|JobListing[]>;describe:typeof describeJob;rank:typeof rankJob;notify:typeof notifyMatches;verify?:typeof verifyListing;plan?:(input:PlannerInput)=>Promise<AdaptivePlan>};
 export async function runSearch({ store, force = false, accountId, canNotify = true, dependencies = defaults }: {
   store: Store; force?: boolean; canNotify?:boolean; accountId?:string; dependencies?:Dependencies;
 }) {
@@ -142,6 +143,14 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     if(dependencies.verify&&await current()){
       const stale=(await store.jobs()).filter(j=>j.status!=='dismissed'&&!j.duplicateOf&&!verified.has(j.id)&&(!j.verification||Date.now()-Date.parse(j.verification.checkedAt)>14*86400000)).slice(0,3-verified.size);
       for(const job of stale){if(Date.now()>=session.deadline)break;await store.verify(job.id,await dependencies.verify(job.url));}
+    }
+    if(dependencies.investigate&&profile.researchEnabled&&await current()){
+      const candidates=(await store.jobs()).filter(j=>!session.blocked.has(j.sourceKey||'linkedin')&&dueForInvestigation(j,profile,version)).sort((a,b)=>Number(Boolean(b.researchRequested))-Number(Boolean(a.researchRequested))).slice(0,2);
+      for(const job of candidates){
+        if(Date.now()>=session.deadline||!await current())break;
+        try{const result=await dependencies.investigate(store,job.id,{deadline:session.deadline});counts.inputTokens+=result.inputTokens;counts.outputTokens+=result.outputTokens;if(result.status==='unavailable')break;}
+        catch(error){errors.push(error instanceof AIBudgetError?error.message:'Investigation could not finish. Saved evidence remains available; unresolved questions will be retried.');if(error instanceof AIBudgetError)break;}
+      }
     }
     counts.matched=(await store.jobs()).filter(j=>evaluated.has(j.id)&&strongMatch(j,profile,version)).length;
     const latest=await store.profile();

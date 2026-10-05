@@ -2,7 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {integrations} from './config';
 import {getAccounts, type Accounts} from './accounts';
 export class AIBudgetError extends Error {}
-export async function beginGeneration(accountId:string,kind:'ranking'|'strategy',dailyLimit:number,accounts:Accounts=getAccounts()){
+export async function beginGeneration(accountId:string,kind:'ranking'|'strategy'|'research',dailyLimit:number,accounts:Accounts=getAccounts()){
  const id=randomUUID();const day=new Date().toISOString().slice(0,10);
  const configured=Number(process.env.AI_DAILY_CALL_LIMIT||500);const globalLimit=Number.isFinite(configured)&&configured>0?Math.floor(configured):500;
  return accounts.db.transaction(async db=>{

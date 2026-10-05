@@ -1,0 +1,41 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {MockLanguageModelV4} from 'ai/test';
+import {storeFixture} from './database-fixture';import {defaultProfile,type Assessment,type Job} from '../packages/core/src/profile';
+import {investigateOpportunity,validatedInvestigation,publicResearchUrl,dueForInvestigation,type InvestigationOutput} from '../packages/core/src/investigator';
+import {listingDossier,evidenceRecord} from '../packages/core/src/research-memory';import {generationForAccount} from '../packages/core/src/ai-usage';import {Accounts} from '../packages/core/src/accounts';
+const job:Job={id:'investigation',title:'Product Engineer',company:'Example Company',location:'Spain',url:'https://example.test/jobs/1',postedAt:null,description:'This specific role has twenty guaranteed hours per week and no on-call duties.',firstSeen:'2026-01-01T00:00:00.000Z',lastSeen:'2026-01-01T00:00:00.000Z',assessment:null,status:'new',notifiedAt:null,evaluatedVersion:1};
+const assessment:Assessment={score:70,eligibility:'uncertain',summary:'Check hours.',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null};
+const companyUrl='https://example.test/about',quote='Example Company serves over two thousand customers.';
+const output:InvestigationOutput={questions:[{question:'What weekly hours are guaranteed in this role?',topic:'Hours',scope:'job',claims:[{url:job.url,quote:'twenty guaranteed hours per week',scope:'job',stance:'supports'}]},{question:'What customers does the employer serve?',topic:'Customers',scope:'company',claims:[{url:companyUrl,quote,scope:'company',stance:'supports'}]}]};
+function model(value:unknown,onPrompt?:(prompt:string)=>void){return new MockLanguageModelV4({doGenerate:async options=>{onPrompt?.(JSON.stringify(options.prompt));return {content:[{type:'text' as const,text:JSON.stringify(value)},{type:'source' as const,sourceType:'url' as const,id:'company',url:companyUrl,title:'Company information'}],finishReason:{unified:'stop' as const,raw:undefined},usage:{inputTokens:{total:12,noCache:12,cacheRead:undefined,cacheWrite:undefined},outputTokens:{total:22,text:22,reasoning:undefined}},warnings:[]};}});}
+test('investigation saves only checked exact quotes, uses the user goal and records generation ownership',async t=>{
+ const store=await storeFixture(t);await store.saveProfile({...defaultProfile,objective:'Find part-time work with predictable hours',cvText:'PRIVATE CV NEVER INCLUDED IN RESEARCH'});const version=(await store.profile()).version;await store.upsert(job);await store.assess(job.id,assessment,version);
+ const reads:string[]=[];let prompt='';const result=await investigateOpportunity(store,job.id,{model:model(output,p=>prompt=p),read:async url=>{reads.push(url);return {url,status:200,html:url===job.url?`<p>${job.description}</p>`:`<p>${quote}</p>`};}});
+ assert.equal(result.verifiedEvidence,2);assert.equal(result.answered,2);assert.deepEqual(reads,[job.url,companyUrl]);assert.ok(prompt.includes('part-time'));assert.ok(!prompt.includes('PRIVATE CV'));assert.equal(result.inputTokens,12);
+ const saved=(await store.job(job.id))!;assert.equal(saved.research?.generationIds[0],result.generationId);assert.equal(saved.research?.questions[0].answer,'twenty guaranteed hours per week');assert.equal(saved.assessment?.eligibility,'uncertain');assert.equal(dueForInvestigation(saved,(await store.profile()).profile,version),false);
+ const accounts=new Accounts(store.db);assert.equal((await generationForAccount(result.generationId!,store.userId,accounts))?.status,'completed');assert.equal(await generationForAccount(result.generationId!,'other-account',accounts),null);
+});
+test('uncited, private, fabricated and wrong-employer quotes cannot answer questions; company facts cannot establish job terms',()=>{
+ const previous=listingDossier(job,assessment,1);const pages=new Map([[companyUrl,{text:quote,retrievedAt:job.firstSeen}],[job.url,{text:job.description!,retrievedAt:job.firstSeen}]]);
+ const invalid:InvestigationOutput={questions:[{...output.questions[0],claims:[{url:companyUrl,quote,scope:'job',stance:'supports'}]},{...output.questions[1],claims:[{url:'https://127.0.0.1/admin',quote,scope:'company',stance:'supports'},{url:companyUrl,quote:'Unpublished imaginary funding round',scope:'company',stance:'supports'}]}]};
+ const result=validatedInvestigation(invalid,job,previous,pages,new Set(), 'test-generation','en');assert.equal(result.verifiedEvidence,0);assert.equal(result.unresolved,2);
+ const wrong=validatedInvestigation(output,{...job,company:'Different Employer'},previous,pages,new Set([companyUrl]),'test-generation','en');assert.equal(wrong.verifiedEvidence,1);
+ assert.equal(publicResearchUrl('https://127.0.0.1/x'),null);assert.equal(publicResearchUrl('http://example.com'),null);assert.equal(publicResearchUrl('https://user:secret@example.com'),null);
+});
+test('contradictory checked quotes remain conflicts instead of a fabricated resolution',()=>{
+ const previous=listingDossier(job,assessment,1);previous.evidence.push(evidenceRecord({topic:'Hours',claim:'Hours conflict',quote:'Forty guaranteed hours per week.',url:job.url,scope:'job',origin:'listing',stance:'contradicts',retrievedAt:job.firstSeen,recordedAt:job.firstSeen}));
+ const result=validatedInvestigation({questions:[output.questions[0]]},job,previous,new Map([[job.url,{text:job.description!,retrievedAt:job.firstSeen}]]),new Set(),'test-generation','en');assert.equal(result.dossier.questions[0].status,'conflicting');assert.equal(result.answered,0);assert.equal(result.dossier.questions[0].evidenceIds.length,2);
+});
+test('profile changes cancel research writes and source redirects do not substitute another role',async t=>{
+ const store=await storeFixture(t);await store.upsert(job);await store.assess(job.id,assessment,1);let reads=0;
+ const result=await investigateOpportunity(store,job.id,{model:model(output),read:async url=>{reads++;return {url:'https://example.test/different-job',status:200,html:`<p>${job.description} ${quote}</p>`};}});assert.equal(result.verifiedEvidence,0);assert.equal(result.unresolved,2);
+ await store.requestResearch(job.id);
+ const changed=await investigateOpportunity(store,job.id,{model:model(output),read:async url=>{reads++;await store.saveProfile({...defaultProfile,objective:'My goal has changed to a stable leadership role.'});return {url,status:200,html:`<p>${job.description}</p>`};}});assert.equal(changed.status,'profile_changed');assert.equal((await store.job(job.id))?.research?.generationIds.length,1);assert.equal(reads,3);
+});
+test('worker prioritizes explicit research, limits investigations to two and respects blocked sources',async t=>{
+ const {runSearch}=await import('../packages/core/src/worker');const old=process.env.AI_GATEWAY_API_KEY;process.env.AI_GATEWAY_API_KEY='fixture';t.after(()=>{if(old===undefined)delete process.env.AI_GATEWAY_API_KEY;else process.env.AI_GATEWAY_API_KEY=old;});
+ const store=await storeFixture(t);await store.saveProfile({...defaultProfile,cvText:'An experienced engineer building reliable products and accessible web applications for customers for several years.',researchEnabled:true});const version=(await store.profile()).version;
+ for(let i=0;i<3;i++){await store.upsert({...job,id:`job${i}`,url:`https://example.test/jobs/${i}`,title:`Engineer ${i}`});await store.assess(`job${i}`,assessment,version);}await store.requestResearch('job2');const calls:string[]=[];
+ await runSearch({store,force:true,dependencies:{search:async()=>[],describe:async()=>job.description!,rank:async()=>({assessment,inputTokens:0,outputTokens:0}),notify:async()=>0,investigate:async (_store,id)=>{calls.push(id);return {status:'completed',generationId:null,inputTokens:2,outputTokens:3,verifiedEvidence:0,answered:0,unresolved:1};}}});
+ assert.equal(calls.length,2);assert.equal(calls[0],'job2');assert.equal((await store.runs())[0].inputTokens,4);
+ calls.length=0;await runSearch({store,force:true,dependencies:{search:async()=>({jobs:[],errors:['Source unavailable'],blocked:['linkedin'],succeeded:0}),describe:async()=>job.description!,rank:async()=>({assessment,inputTokens:0,outputTokens:0}),notify:async()=>0,investigate:async()=>{throw new Error('Blocked source must not be investigated');}}});assert.equal(calls.length,0);
+});

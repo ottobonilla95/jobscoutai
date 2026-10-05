@@ -202,3 +202,9 @@ Opportunities have separate recommendations and application stages. A working, f
 Application checks use bounded public HTTPS requests, validate and pin public DNS addresses, restrict redirects, and inspect reachable forms. Closed or unavailable pages exclude a role; access challenges, JavaScript-only forms, and ambiguous pages remain unknown. The worker checks at most three stale/unverified listings each run; a per-job button checks on demand. Freshness expires after 14 days. This is not a guarantee that submission will succeed and does not authenticate to portals.
 
 Still outside this release: broad company-first research beyond supported job boards, funding/founder research, cofounder matching, problem-discovery sprints, Google Sheet synchronization, automatic follow-up emails, and scheduled Wellfound/Indeed connectors. Those portals remain manual links. The research queue supports keeping human research while the advertised-job search runs.
+
+### Goal-driven investigation
+
+The worker investigates up to two current, promising or explicitly requested opportunities per run when `researchEnabled` and `OPENAI_API_KEY` are configured. It shares the account/global daily AI call budget with matching and planning. Each investigation uses at most one web search, four questions and four checked public pages; inaccessible, uncited, redirected or unsupported claims remain unanswered. Exact quotes are saved with source dates. Company pages must name the employer and remain name matches, not verified identity. Company facts cannot establish specific job terms or change eligibility gates. The dashboard queues manual investigations for the next eligible worker run and offers an opt-out under search settings.
+
+Apply migration 006 after 005 before updating web and worker. This feature does not submit applications, contact employers, or estimate tax/retained cash.
