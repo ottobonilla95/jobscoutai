@@ -7,6 +7,7 @@ export default function ResearchDossierView({dossier,currentVersion}:{dossier:Re
  return <details className="job-details research-dossier"><summary>{t('Research memory and sources')}</summary>
   {dossier.profileVersion!==currentVersion&&<p className="footnote">{t('This research used an earlier profile. Its sources remain available; the next investigation will use your current priorities.')}</p>}
   <p>{dossier.summary}</p><p className="footnote">{t('Research updated: {date}',{date:date(dossier.updatedAt)})}</p>
+  {dossier.evidence.some(e=>e.scope==='company')&&<p className="footnote">{t('Company sources are matched by name. Confirm the employer identity before relying on them.')}</p>}
   <h3>{t('Evidence and source dates')}</h3>
   {!dossier.evidence.length?<p className="muted">{t('No supported excerpts have been saved yet.')}</p>:<ul className="research-evidence-list">{dossier.evidence.map(e=><li key={e.id}>
    <strong>{e.topic}</strong> <span className="pill neutral">{t(e.scope==='company'?'Company evidence':'Role evidence')}</span> <span className="pill neutral">{t(e.stance==='contradicts'?'Conflicting evidence':'Supporting evidence')}</span>

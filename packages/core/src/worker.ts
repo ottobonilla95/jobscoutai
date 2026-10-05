@@ -1,3 +1,5 @@
+import {ResearchTasks} from './research-tasks';
+import type {ResearchStats} from './research-task-schema';
 import {investigateOpportunity,dueForInvestigation} from './investigator';
 import { AIBudgetError } from './ai-usage';
 import { integrations } from './config';
@@ -29,6 +31,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
   const scope=discoveryScope(profile);
   let state=freshDiscoveryState(await store.discoveryState(scope));
   const counts={discovered:0,evaluated:0,matched:0,inputTokens:0,outputTokens:0};
+  const research:ResearchStats={attempted:0,completed:0,resumed:0,verifiedEvidence:0,answered:0,unresolved:0,retryScheduled:0,failed:0,stopReason:profile.researchEnabled?'finished':'disabled'};
   const report:SearchDiscovery={profileVersion:version,rounds:[],requests:0,requestLimit:24,stopReason:'round_limit'};
   const session:SearchSession={round:0,page:0,remaining:24,deadline:started+8*60000,seen:new Set(),blocked:new Set(),history:new Map(state.attempts.map(a=>[queryKey(a),a.checkedAt])),cache:new Map(),perSource:new Map(),attempts:[],items:[]};
   const errors:string[]=[];let failed=false,hadSuccess=false;
@@ -145,20 +148,25 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       for(const job of stale){if(Date.now()>=session.deadline)break;await store.verify(job.id,await dependencies.verify(job.url));}
     }
     if(dependencies.investigate&&profile.researchEnabled&&await current()){
-      const candidates=(await store.jobs()).filter(j=>!session.blocked.has(j.sourceKey||'linkedin')&&dueForInvestigation(j,profile,version)).sort((a,b)=>Number(Boolean(b.researchRequested))-Number(Boolean(a.researchRequested))).slice(0,2);
+      const tasks=new ResearchTasks(store),eligible=(await store.jobs()).filter(j=>!session.blocked.has(j.sourceKey||'linkedin')&&dueForInvestigation(j,profile,version)).sort((a,b)=>Number(Boolean(b.researchRequested))-Number(Boolean(a.researchRequested)));
+      const readiness=await Promise.all(eligible.map(j=>tasks.ready(j,version)));const candidates=eligible.filter((_,i)=>readiness[i]).slice(0,2);if(eligible.filter((_,i)=>readiness[i]).length>2)research.stopReason='opportunity_limit';
       for(const job of candidates){
-        if(Date.now()>=session.deadline||!await current())break;
-        try{const result=await dependencies.investigate(store,job.id,{deadline:session.deadline});counts.inputTokens+=result.inputTokens;counts.outputTokens+=result.outputTokens;if(result.status==='unavailable')break;}
-        catch(error){errors.push(error instanceof AIBudgetError?error.message:'Investigation could not finish. Saved evidence remains available; unresolved questions will be retried.');if(error instanceof AIBudgetError)break;}
+        if(Date.now()>=session.deadline){research.stopReason='time_budget';break;}if(!await current())break;
+        try{const result=await dependencies.investigate(store,job.id,{deadline:session.deadline});counts.inputTokens+=result.inputTokens;counts.outputTokens+=result.outputTokens;
+          if(result.status==='unavailable'){research.stopReason='unavailable';break;}if(result.status==='deferred'||result.status==='profile_changed')continue;
+          research.attempted++;research.resumed+=Number(Boolean(result.resumed));research.completed+=Number(result.status==='completed');research.verifiedEvidence+=result.verifiedEvidence;research.answered+=result.answered;research.unresolved+=result.unresolved;research.retryScheduled+=Number(result.status==='retry'&&!result.failed);research.failed+=Number(Boolean(result.failed));
+        }catch(error){research.attempted++;research.failed++;errors.push(error instanceof AIBudgetError?error.message:'Investigation could not finish. Saved evidence remains available; unresolved questions will be retried.');if(error instanceof AIBudgetError){research.stopReason='daily_budget';break;}}
+        await store.researchProgress(id,research);
       }
     }
+    if(research.retryScheduled||research.failed)errors.push('Some research remains unfinished. Saved sources and retry status are available on each opportunity.');
     counts.matched=(await store.jobs()).filter(j=>evaluated.has(j.id)&&strongMatch(j,profile,version)).length;
     const latest=await store.profile();
     if(latest.version===version&&canNotify){try{await dependencies.notify(store,latest.profile,version);}catch(error){errors.push(error instanceof Error?error.message:'Notification failed.');}}
     failed=!hadSuccess&&errors.length>0;
   }catch(error){failed=true;errors.push(error instanceof Error?error.message:'Search failed.');}
   finally{
-    clearInterval(heartbeat);report.requests=24-session.remaining;await store.progress(id,counts,report);
+    clearInterval(heartbeat);await store.researchProgress(id,research);report.requests=24-session.remaining;await store.progress(id,counts,report);
     await store.finish(id,failed?'failed':errors.length?'partial':'completed',counts,[...new Set(errors)].join(' ').slice(0,1500)||null);
   }
   return {id,status:failed?'failed':errors.length?'partial':'completed',...counts};

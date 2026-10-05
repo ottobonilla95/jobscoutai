@@ -11,7 +11,7 @@ export async function POST(request:Request,context:{params:Promise<{id:string}>}
   const job=await store.job(id);if(!job)return localizedJson({error:'Job not found.'},{status:404});
   const {profile}=await store.profile();
   if(!profile.researchEnabled||!integrations().research)return localizedJson({error:'Enable goal research and configure web research access before requesting an investigation.'},{status:409});
-  if(job.status==='dismissed'||job.duplicateOf||job.verification?.status==='closed'||job.assessment?.eligibility==='ineligible'||!sourceEnabled(profile,job.sourceKey))return localizedJson({error:'This opportunity is not eligible for research. Review its status and selected source.'},{status:409});
+  if(job.status==='dismissed'||job.duplicateOf||job.verification?.status==='closed'||job.assessment?.eligibility==='ineligible'||job.assessment?.evaluation?.decision==='exclude'||!sourceEnabled(profile,job.sourceKey))return localizedJson({error:'This opportunity is not eligible for research. Review its status and selected source.'},{status:409});
   await store.requestResearch(id);
   return localizedJson({message:'Research queued for the next eligible worker run. Your search cadence and AI call budget still apply.'});
  });

@@ -1,3 +1,4 @@
+import type {ResearchTask,ResearchStats} from './research-task-schema';
 import {reviewedPreferenceSchema,type OpportunityFeedback} from './feedback-schema';
 import type {ResearchDossier} from './research-memory-schema';
 import { z } from 'zod';
@@ -74,14 +75,14 @@ export type JobListing = {
   sourceKey?: string; description?: string | null;
 };
 export type Job = JobListing & {
-  feedback?:OpportunityFeedback|null;researchRequested?:boolean;research?:ResearchDossier|null;descriptionCheckedAt?:string|null;
+  researchRequestId?:string|null;researchTask?:Pick<ResearchTask,'status'|'attempts'|'nextAttemptAt'|'updatedAt'>|null;feedback?:OpportunityFeedback|null;researchRequested?:boolean;research?:ResearchDossier|null;descriptionCheckedAt?:string|null;
   description: string | null; firstSeen: string; lastSeen: string;
   assessment: Assessment | null; status: 'new' | 'saved' | 'dismissed';
   tracking?: Tracking; verification?: Verification | null; duplicateOf?: string | null;
   notifiedAt: string | null; evaluatedVersion: number | null;
 };
 export type Run = {
-  discovery:SearchDiscovery|null;
+  research?:ResearchStats|null;discovery:SearchDiscovery|null;
   id: string; startedAt: string; finishedAt: string | null;
   status: 'running' | 'completed' | 'partial' | 'failed';
   discovered: number; evaluated: number; matched: number; inputTokens: number; outputTokens: number;
