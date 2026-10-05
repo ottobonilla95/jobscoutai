@@ -1,6 +1,7 @@
 import {searchTitles} from './discovery';
 import { load } from 'cheerio';
 import type { JobListing, Profile } from './profile';
+import {searchQuery,orderedQueries,type SearchSession} from './search-session';
 
 export class SourceError extends Error {
   constructor(message: string, public readonly stop = false) { super(message); }
@@ -48,11 +49,13 @@ async function publicPage(url: string): Promise<string> {
   }
   return html;
 }
-export async function searchLinkedIn(profile: Profile): Promise<JobListing[]> {
+export async function searchLinkedIn(profile: Profile,session?:SearchSession): Promise<JobListing[]> {
   const jobs = new Map<string, JobListing>();
-  // One page per title/location: a deliberate bounded first version, not exhaustive coverage.
-  for (const title of searchTitles(profile)) for (const location of profile.locations) {
-    const query = new URLSearchParams({ keywords: title, start: '0', f_TPR: `r${profile.postedWithinDays*86400}`, sortBy: 'DD' });
+  const queries=searchTitles(profile).flatMap(query=>profile.locations.map(location=>({source:'linkedin',query,location,page:session?.page||0})));
+  for (const attempt of orderedQueries(queries,session)) {
+    const {query:title,location,page}=attempt;
+    const results=await searchQuery(session,attempt,async()=>{
+    const query = new URLSearchParams({ keywords: title, start: String(page*25), f_TPR: `r${profile.postedWithinDays*86400}`, sortBy: 'DD' });
     if (location) query.set('location', location);
     if (profile.remoteOnly) query.set('f_WT', '2');
     const html = await publicPage(`https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?${query}`);
@@ -60,6 +63,8 @@ export async function searchLinkedIn(profile: Profile): Promise<JobListing[]> {
     if (html.trim() && !results.length && !/no results|no matching jobs|no jobs found/i.test(html)) {
       throw new SourceError('LinkedIn returned an unrecognized search page. Coverage is unknown.', true);
     }
+    return results;
+    });
     for (const job of results) jobs.set(job.id, job);
   }
   return [...jobs.values()];

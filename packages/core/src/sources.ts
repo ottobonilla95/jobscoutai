@@ -8,6 +8,7 @@ import { activeCountrySources, countrySources, type CountrySource } from './coun
 import { searchCountrySource, describeCountryJob } from './country-adapters';
 import { publicData } from './source-http';
 import { plainText } from './source-html';
+import {searchQuery,type SearchSession} from './search-session';
 export { plainText } from './source-html';
 
 export type SearchReport = { jobs: JobListing[]; errors: string[]; blocked: string[]; succeeded: number };
@@ -42,8 +43,8 @@ export function parseYcDescription(html: string) {
   const header=$('h1').first().closest('.ycdc-card').clone();header.find('a,button,form').remove();
   return `${plainText(header.html()||'')}\n\n${description}`.slice(0,24000);
 }
-export async function searchYc(profile: Profile) {
-  return parseYcListings(await publicData('https://www.ycombinator.com/jobs/role/all','Y Combinator'))
+export async function searchYc(profile: Profile,session?:SearchSession) {
+  return (await searchQuery(session,{source:'yc',query:'*',location:'',page:0},async()=>parseYcListings(await publicData('https://www.ycombinator.com/jobs/role/all','Y Combinator'))))
     .filter(job=>matchesTitle(job.title,profile) && (!profile.remoteOnly || /remote/i.test(job.location)));
 }
 const ashbySchema=z.object({jobs:z.array(z.object({
@@ -72,29 +73,33 @@ export function parseCompanyJobs(raw: unknown, board: NonNullable<ReturnType<typ
       url:url.href,postedAt:null,description:plainText(decoded.includes('<')?decoded:j.content)};
   });
 }
-export async function searchCompanyBoard(value: string, profile: Profile) {
+export async function searchCompanyBoard(value: string, profile: Profile,session?:SearchSession) {
   const board=parseBoard(value);if(!board)throw new SourceError('Unsupported company board URL.',true);
   const url=board.provider==='ashby'?`https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(board.slug)}?includeCompensation=true`:
     `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board.slug)}/jobs?content=true`;
-  return parseCompanyJobs(JSON.parse(await publicData(url,sourceLabel(board.key))),board)
+  return (await searchQuery(session,{source:board.key,query:'*',location:'',page:0},async()=>parseCompanyJobs(JSON.parse(await publicData(url,sourceLabel(board.key))),board)))
     .filter(job=>matchesTitle(job.title,profile) && (!profile.remoteOnly || /remote/i.test(job.location)));
 }
 export async function searchSources(profile: Profile, adapters: {
   linkedin:typeof searchLinkedIn; yc:typeof searchYc; company:typeof searchCompanyBoard;
-  country?:(source:CountrySource,profile:Profile)=>Promise<JobListing[]>;
-} = { linkedin:searchLinkedIn, yc:searchYc, company:searchCompanyBoard, country:searchCountrySource }): Promise<SearchReport> {
+  country?:(source:CountrySource,profile:Profile,session?:SearchSession)=>Promise<JobListing[]>;
+} = { linkedin:searchLinkedIn, yc:searchYc, company:searchCompanyBoard, country:(source,profile,session)=>searchCountrySource(source,profile,undefined,session) },session?:SearchSession): Promise<SearchReport> {
   const report:SearchReport={jobs:[],errors:[],blocked:[],succeeded:0};
   const tasks: {key:string;run:()=>Promise<JobListing[]>}[]=[];
-  if(profile.sources.includes('linkedin'))tasks.push({key:'linkedin',run:()=>adapters.linkedin(profile)});
-  if(profile.sources.includes('yc'))tasks.push({key:'yc',run:()=>adapters.yc(profile)});
-  if(profile.sources.includes('companies'))for(const value of [...new Set(profile.companyBoards)]){
-    const board=parseBoard(value);if(board&&!tasks.some(task=>task.key===board.key))tasks.push({key:board.key,run:()=>adapters.company(value,profile)});
+  if(profile.sources.includes('linkedin'))tasks.push({key:'linkedin',run:()=>adapters.linkedin(profile,session)});
+  if(profile.sources.includes('yc'))tasks.push({key:'yc',run:()=>adapters.yc(profile,session)});
+  if(profile.sources.includes('companies'))for(const value of [...new Set([...profile.companyBoards,...profile.discoveredCompanyBoards])]){
+    const board=parseBoard(value);if(board&&!tasks.some(task=>task.key===board.key))tasks.push({key:board.key,run:()=>adapters.company(value,profile,session)});
   }
-  for(const source of activeCountrySources(profile))tasks.push({key:source.key,run:()=>(adapters.country || searchCountrySource)(source,profile)});
+  for(const source of activeCountrySources(profile))tasks.push({key:source.key,run:()=>(adapters.country || ((s,p,c)=>searchCountrySource(s,p,undefined,c)))(source,profile,session)});
   for(const task of tasks){
+    if(session&&(session.blocked.has(task.key)||session.remaining<=0||Date.now()>=session.deadline))continue;
     try{report.jobs.push(...await task.run());report.succeeded++;}
-    catch(error){report.blocked.push(task.key);report.errors.push(error instanceof SourceError?error.message:`${sourceLabel(task.key)} could not be read. Coverage is unknown; retry later.`);}
+    catch(error){report.blocked.push(task.key);session?.blocked.add(task.key);report.errors.push(error instanceof SourceError?error.message:`${sourceLabel(task.key)} could not be read. Coverage is unknown; retry later.`);}
   }
+  // Preserve successful queries preceding a source failure; filters still apply.
+  if(session)report.jobs.push(...session.items.filter(job=>matchesTitle(job.title,profile)&&(!profile.remoteOnly||/\b(remote|remoto|teletrabajo)\b/i.test(job.location))));
+  report.jobs=[...new Map(report.jobs.map(job=>[job.id,job])).values()];
   report.jobs=report.jobs.filter(job=>{
     const date=job.postedAt?Date.parse(job.postedAt):NaN;
     return Number.isNaN(date)?profile.includeUnknownDates:date>=Date.now()-profile.postedWithinDays*86400000;

@@ -6,6 +6,7 @@ import type { JobListing, Profile } from './profile';
 import { SourceError } from './linkedin';
 import { publicData } from './source-http';
 import { jsonLdObjects, plainText } from './source-html';
+import {searchQuery,orderedQueries,type SearchSession} from './search-session';
 
 const origins: Record<CountrySourceKey, string> = {
   'getonbrd-co': 'https://www.getonbrd.com',
@@ -137,16 +138,18 @@ export async function describeCountryJob(id: string, job: JobListing, read = pub
   if (!url || id !== `${key}:${suffix}`) throw new SourceError('Invalid country job URL or ID.');
   return parseCountryDescription(key, await read(url.href,key,true));
 }
-export async function searchCountrySource(source: CountrySource, profile: Profile, read = publicData): Promise<JobListing[]> {
+export async function searchCountrySource(source: CountrySource, profile: Profile, read = publicData,session?:SearchSession): Promise<JobListing[]> {
   const places=profile.searchLocations.filter(p=>p.countryCode==='CO');
   const cities=places.length?(places.some(p=>p.kind==='country')?['']:places.map(p=>p.city)):colombiaSearchLocations(profile.locations);
   if (!cities.length) return [];
   const jobs = new Map<string,JobListing>();
   const queries = new Set<string>();
-  for (const title of searchTitles(profile)) for (const city of source.key === 'getonbrd-co' ? [''] : cities) {
+  const requests=searchTitles(profile).flatMap(query=>(source.key==='getonbrd-co'?['']:cities).map(city=>({source:source.key,query,location:city||'Colombia',page:source.key==='getonbrd-co'?session?.page||0:0,city})));
+  for (const attempt of orderedQueries(requests,session)) {
+    const {query:title,city,page}=attempt;
     let url: string;
     if (source.key === 'getonbrd-co') {
-      const query = new URLSearchParams({query:title,country_code:'co',per_page:'20',page:'1',lang:profile.outputLanguage,
+      const query = new URLSearchParams({query:title,country_code:'co',per_page:'20',page:String(page+1),lang:profile.outputLanguage,
         expand:JSON.stringify(['company','location_cities','location_tenants','location_regions'])});
       if (profile.remoteOnly) query.set('remote','true');
       url = `${origins[source.key]}/api/v0/search/jobs?${query}`;
@@ -158,9 +161,12 @@ export async function searchCountrySource(source: CountrySource, profile: Profil
       url = `${origins[source.key]}/jobs?${new URLSearchParams({search:title,location:city || 'Colombia'})}`;
     }
     if (queries.has(url)) continue; queries.add(url);
+    const listings=await searchQuery(session,attempt,async()=>{
     const body = await read(url,source.label,true);
     const listings = source.key === 'getonbrd-co' ? parseGetOnBoardJobs(JSON.parse(body)) :
       source.key === 'elempleo-co' ? parseElEmpleoJobs(body) : parseMichaelPageJobs(body);
+    return listings;
+    });
     for (const listing of listings) {
       if (profile.remoteOnly && !/\b(remote|remoto|teletrabajo)\b/i.test(listing.location)) continue;
       jobs.set(listing.id,listing);
