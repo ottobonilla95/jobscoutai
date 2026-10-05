@@ -164,6 +164,14 @@ Activity expands **How this search adapted** to show each actual checked query/p
 
 Apply migration **004** with `npm run db:migrate` before deploying both web and worker. Adaptive plans have account-owned generation IDs, validated saved results and token usage, using the existing `/api/generations/{generationId}` endpoint. Older runs remain readable without discovery reports.
 
+## Evidence and research memory
+
+Job evaluations save supported source excerpts, retrieval/recording dates and unanswered concerns in an account-owned dossier. The opportunity card exposes this history under **Research memory and sources**. Exact quote checks discard unsupported excerpts. Cached descriptions retain their original retrieval date; a new assessment is not presented as a fresh source lookup. New facts merge with previous records instead of replacing them. Changing the profile preserves historical evidence while marking old research as using an earlier profile.
+
+Company-scoped records can be reused by the investigator. Company names only establish a possible identity match; company facts never establish role-specific conditions or legal work rights. Contradictions and questions stay explicit. Existing notes, dismissed opportunities and tracking remain preserved.
+
+Apply migration **005** before deploying the web app and worker. Older jobs without a dossier remain readable and gain one when assessed again.
+
 ## Retrieval and scoring boundaries
 
 - Uses LinkedIn's public guest job-search and description endpoints over HTTP. No LinkedIn login, cookies, or browser session is required by this adapter. These are unofficial endpoints; changes, throttling, and access challenges are reported, and requests stop on access restrictions.

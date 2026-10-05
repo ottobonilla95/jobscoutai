@@ -21,6 +21,10 @@ try{
    await tx.exec(await readFile(new URL('../migrations/004_adaptive_discovery.sql',import.meta.url),'utf8'));
    await tx.exec('INSERT INTO schema_migrations(version) VALUES(4)');
   }
+  if(!await tx.prepare('SELECT 1 FROM schema_migrations WHERE version=5').get()){
+   await tx.exec(await readFile(new URL('../migrations/005_research_memory.sql',import.meta.url),'utf8'));
+   await tx.exec('INSERT INTO schema_migrations(version) VALUES(5)');
+  }
  });
  console.log('PostgreSQL schema is up to date.');
 }finally{await db.close();}
