@@ -16,10 +16,12 @@ export function pinnedLookup(addresses:LookupAddress[]):LookupFunction{
  return (_host,options,callback)=>options.all?callback(null,addresses):callback(null,addresses[0].address,addresses[0].family);
 }
 export function safeUrl(value:string){const url=new URL(value);if(url.protocol!=='https:'||url.username||url.password||url.port&&url.port!=='443'||url.hostname.endsWith('.local')||url.hostname==='localhost')throw new Error('Only public HTTPS application pages can be checked.');return url;}
-export async function publicHtml(value:string):Promise<{html:string;url:string;status:number}>{
+export async function publicHtml(value:string,options:{signal?:AbortSignal}={}):Promise<{html:string;url:string;status:number}>{
  let url=safeUrl(value);
  for(let hop=0;hop<4;hop++){
+  options.signal?.throwIfAborted();
   const addresses=await lookup(url.hostname,{all:true});if(!addresses.length||addresses.some(a=>!publicAddress(a.address)))throw new Error('This address cannot be checked.');
+  options.signal?.throwIfAborted();
   const lookupPinned=pinnedLookup(addresses);
   const page=await new Promise<{status:number;html:string;redirect?:string}>((resolve,reject)=>{
    const req=request(url,{headers:{'User-Agent':brand.httpAgent,Accept:'text/html'},lookup:lookupPinned},res=>{
@@ -27,7 +29,7 @@ export async function publicHtml(value:string):Promise<{html:string;url:string;s
     if(res.headers['content-type']&&!res.headers['content-type'].includes('text/html')){res.resume();reject(new Error('The application page is not readable HTML.'));return;}
     let size=0;const chunks:Buffer[]=[];res.on('data',chunk=>{size+=chunk.length;if(size>2*1024*1024){res.destroy();reject(new Error('Page exceeds the check limit.'));}else chunks.push(chunk);});
     res.on('end',()=>resolve({status,html:Buffer.concat(chunks).toString('utf8')}));res.on('error',reject);
-   });const timeout=setTimeout(()=>req.destroy(new Error('Page check timed out.')),12000);req.on('close',()=>clearTimeout(timeout));req.on('error',reject);req.end();
+   });const timeout=setTimeout(()=>req.destroy(new Error('Page check timed out.')),12000);const abort=()=>req.destroy(new Error('Page check cancelled.'));options.signal?.addEventListener('abort',abort,{once:true});req.on('close',()=>{clearTimeout(timeout);options.signal?.removeEventListener('abort',abort);});req.on('error',reject);if(options.signal?.aborted)abort();else req.end();
   });
   if(page.redirect){url=safeUrl(new URL(page.redirect,url).href);continue;}
   return {...page,url:url.href};

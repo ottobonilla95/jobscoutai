@@ -1,3 +1,4 @@
+import {researchTaskSchema,researchStatsSchema,type ResearchStats} from './research-task-schema';
 import {feedbackSchema} from './feedback-schema';
 import {ResearchMemory} from './research-memory';
 import {researchDossierSchema} from './research-memory-schema';
@@ -41,8 +42,8 @@ export class Store {
     });
   }
   async state(){return (await this.db.prepare('SELECT * FROM state WHERE user_id=?').get(this.userId))!;}
-  async requestResearch(id:string){await this.db.transaction(async db=>{await db.prepare('UPDATE jobs SET research_requested=1 WHERE user_id=? AND id=?').run(this.userId,id);await new Store(db,this.userId).requestRun();});}
-  async clearResearchRequest(id:string){await this.db.prepare('UPDATE jobs SET research_requested=0 WHERE user_id=? AND id=?').run(this.userId,id);}
+  async requestResearch(id:string){await this.db.transaction(async db=>{await db.prepare('UPDATE jobs SET research_requested=1,research_request_id=? WHERE user_id=? AND id=?').run(randomUUID(),this.userId,id);await new Store(db,this.userId).requestRun();});}
+  async clearResearchRequest(id:string,requestId:string|null=null){await this.db.prepare('UPDATE jobs SET research_requested=0 WHERE user_id=? AND id=? AND research_request_id IS NOT DISTINCT FROM ?').run(this.userId,id,requestId);}
   async requestRun(){await this.db.prepare('UPDATE state SET requested=1 WHERE user_id=?').run(this.userId);}
   async heartbeat(owner?:string){
     await this.db.prepare('UPDATE state SET heartbeat=? WHERE user_id=?').run(new Date().toISOString(),this.userId);
@@ -51,7 +52,7 @@ export class Store {
   async claim(force=false):Promise<string|null>{
     return this.db.transaction(async db=>{
       // Lock the always-present profile first, just as profile edits do, then state.
-      const {profile}=await new Store(db,this.userId).profile(true);
+      const {profile,version}=await new Store(db,this.userId).profile(true);
       const state=await db.prepare('SELECT * FROM state WHERE user_id=? FOR UPDATE').get(this.userId);
       const lock=await db.prepare('SELECT * FROM locks WHERE user_id=?').get(this.userId);
       if(!profile.onboardingCompleted)return null;
@@ -62,7 +63,12 @@ export class Store {
         return null;
       }
       const due=profile.enabled&&(!state.next_run||Date.parse(state.next_run)<=Date.now());
-      if((lock&&Number(lock.expires)>Date.now())||(!force&&!state.requested&&!due))return null;
+      const retryRows=profile.researchEnabled?await db.prepare(`SELECT j.source_key FROM research_tasks t JOIN jobs j ON j.user_id=t.user_id AND j.id=t.job_id
+        WHERE t.user_id=? AND t.profile_version=? AND j.research_requested=1 AND j.status!='dismissed' AND j.duplicate_of IS NULL
+        AND COALESCE(j.verification::jsonb->>'status','')!='closed' AND COALESCE(j.assessment::jsonb->>'eligibility','')!='ineligible' AND COALESCE(j.assessment::jsonb->'evaluation'->>'decision','')!='exclude'
+        AND ((t.value::jsonb->>'status'='waiting' AND t.value::jsonb->>'nextAttemptAt'<=?) OR (t.value::jsonb->>'status'='running' AND (t.value::jsonb->>'expiresAt')::bigint<=?))`).all(this.userId,version,new Date().toISOString(),Date.now()):[];
+      const manualResearchDue=retryRows.some(row=>sourceEnabled(profile,String(row.source_key)));
+      if((lock&&Number(lock.expires)>Date.now())||(!force&&!state.requested&&!due&&!manualResearchDue))return null;
       const id=randomUUID(),now=new Date().toISOString();
       await db.prepare("UPDATE runs SET status='failed',finished_at=?,error='Previous worker stopped before completion.' WHERE user_id=? AND status='running'").run(now,this.userId);
       await db.prepare('INSERT INTO locks(user_id,owner,expires) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET owner=excluded.owner,expires=excluded.expires').run(this.userId,id,Date.now()+180000);
@@ -110,7 +116,7 @@ export class Store {
   async verify(id:string,verification:Verification){await this.db.prepare('UPDATE jobs SET verification=? WHERE user_id=? AND id=?').run(JSON.stringify(verification),this.userId,id);}
   async setStatus(id:string,status:Job['status']){await this.db.prepare('UPDATE jobs SET status=? WHERE user_id=? AND id=?').run(status,this.userId,id);}
   async markDistinct(id:string){await this.db.prepare('UPDATE jobs SET duplicate_of=NULL,duplicate_reviewed=1 WHERE user_id=? AND id=?').run(this.userId,id);}
-  async job(id:string){const row=await this.db.prepare('SELECT * FROM jobs WHERE user_id=? AND id=?').get(this.userId,id);return row?jobFromRow(row):null;}
+  async job(id:string){const row=await this.db.prepare('SELECT j.*,t.value AS research_task FROM jobs j LEFT JOIN research_tasks t ON t.user_id=j.user_id AND t.job_id=j.id AND t.profile_version=(SELECT version FROM profile WHERE user_id=?) WHERE j.user_id=? AND j.id=?').get(this.userId,this.userId,id);return row?jobFromRow(row):null;}
   async leads(){return (await this.db.prepare('SELECT * FROM leads WHERE user_id=? ORDER BY created_at DESC').all(this.userId)).map(r=>({id:String(r.id),...JSON.parse(r.value),createdAt:String(r.created_at)}));}
   async saveLead(id:string,value:unknown,existing=false){
     if(existing)return (await this.db.prepare('UPDATE leads SET value=? WHERE user_id=? AND id=?').run(JSON.stringify(value),this.userId,id)).changes;
@@ -125,8 +131,9 @@ export class Store {
     while(selected.length<limit&&groups.size)for(const [key,group] of groups){if(selected.length>=limit)break;selected.push(group.shift()!);if(!group.length)groups.delete(key);}
     return selected;
   }
-  async jobs():Promise<Job[]>{return (await this.db.prepare('SELECT * FROM jobs WHERE user_id=? ORDER BY score DESC NULLS LAST,first_seen DESC').all(this.userId)).map(jobFromRow);}
-  async runs():Promise<Run[]>{return (await this.db.prepare('SELECT * FROM runs WHERE user_id=? ORDER BY started_at DESC LIMIT 30').all(this.userId)).map(row=>({id:String(row.id),startedAt:row.started_at,finishedAt:row.finished_at,status:row.status,discovered:Number(row.discovered),evaluated:Number(row.evaluated),matched:Number(row.matched),inputTokens:Number(row.input_tokens),outputTokens:Number(row.output_tokens),error:row.error,discovery:row.discovery?searchDiscoverySchema.parse(JSON.parse(row.discovery)):null}));}
+  async jobs():Promise<Job[]>{return (await this.db.prepare('SELECT j.*,t.value AS research_task FROM jobs j LEFT JOIN research_tasks t ON t.user_id=j.user_id AND t.job_id=j.id AND t.profile_version=(SELECT version FROM profile WHERE user_id=?) WHERE j.user_id=? ORDER BY score DESC NULLS LAST,first_seen DESC').all(this.userId,this.userId)).map(jobFromRow);}
+  async researchProgress(id:string,stats:ResearchStats){await this.db.prepare('UPDATE runs SET research_stats=? WHERE user_id=? AND id=?').run(JSON.stringify(researchStatsSchema.parse(stats)),this.userId,id);}
+  async runs():Promise<Run[]>{return (await this.db.prepare('SELECT * FROM runs WHERE user_id=? ORDER BY started_at DESC LIMIT 30').all(this.userId)).map(row=>({id:String(row.id),startedAt:row.started_at,finishedAt:row.finished_at,status:row.status,discovered:Number(row.discovered),evaluated:Number(row.evaluated),matched:Number(row.matched),inputTokens:Number(row.input_tokens),outputTokens:Number(row.output_tokens),error:row.error,research:row.research_stats?researchStatsSchema.parse(JSON.parse(row.research_stats)):null,discovery:row.discovery?searchDiscoverySchema.parse(JSON.parse(row.discovery)):null}));}
   async deliveries(){return this.db.prepare('SELECT * FROM deliveries WHERE user_id=? ORDER BY created_at DESC LIMIT 20').all(this.userId);}
   async reservedJobs(){return (await this.db.prepare('SELECT job_id FROM delivery_jobs WHERE user_id=?').all(this.userId)).map(r=>String(r.job_id));}
   async enqueueDelivery(id:string,payload:unknown,jobIds:string[]){
@@ -147,8 +154,9 @@ export class Store {
 }
 
 function jobFromRow(row: Row): Job {
+  const task=row.research_task?researchTaskSchema.parse(JSON.parse(row.research_task)):null;
   return { id: String(row.id), title: String(row.title), company: String(row.company), location: String(row.location), url: String(row.url),
-    feedback:row.feedback?feedbackSchema.parse(JSON.parse(row.feedback)):null,researchRequested:Boolean(row.research_requested),research:row.research?researchDossierSchema.parse(JSON.parse(row.research)):null,descriptionCheckedAt:row.description_checked_at?String(row.description_checked_at):null,
+    researchRequestId:row.research_request_id?String(row.research_request_id):null,researchTask:task?{status:task.status,attempts:task.attempts,nextAttemptAt:task.nextAttemptAt,updatedAt:task.updatedAt}:null,feedback:row.feedback?feedbackSchema.parse(JSON.parse(row.feedback)):null,researchRequested:Boolean(row.research_requested),research:row.research?researchDossierSchema.parse(JSON.parse(row.research)):null,descriptionCheckedAt:row.description_checked_at?String(row.description_checked_at):null,
     tracking: row.tracking?JSON.parse(String(row.tracking)):{}, verification:row.verification?JSON.parse(String(row.verification)):null,duplicateOf:row.duplicate_of as string|null,
     sourceKey: String(row.source_key || 'linkedin'),
     postedAt: row.posted_at as string | null, description: row.description as string | null, firstSeen: String(row.first_seen), lastSeen: String(row.last_seen),

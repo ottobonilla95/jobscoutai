@@ -52,7 +52,7 @@ export class Accounts {
    // Foreign keys cascade through every account-owned table, including delivery_jobs.
    const deleted=await db.prepare('DELETE FROM accounts WHERE id=? AND password_hash=?').run(id,row.password_hash);
    if(!deleted.changes)return false;
-   const keys=[`login:${row.email}`,`reset:${row.email}`,...['verify-email','strategy','verify','profile-suggestions','manual-search','delete-account','locations'].map(prefix=>`${prefix}:${id}`)];
+   const keys=[`login:${row.email}`,`reset:${row.email}`,...['verify-email','strategy','verify','profile-suggestions','manual-search','delete-account','locations','research','feedback'].map(prefix=>`${prefix}:${id}`)];
    for(const key of keys)await db.prepare('DELETE FROM rate_limits WHERE key=?').run(digest(key));
    return true;
   });
