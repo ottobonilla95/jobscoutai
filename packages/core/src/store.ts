@@ -1,3 +1,4 @@
+import {feedbackSchema} from './feedback-schema';
 import {ResearchMemory} from './research-memory';
 import {researchDossierSchema} from './research-memory-schema';
 import { randomUUID } from 'node:crypto';
@@ -33,7 +34,7 @@ export class Store {
     profile=profileSchema.parse({...profile,intervalHours:Math.max(profile.intervalHours,minimumSearchIntervalHours())});
     await this.db.transaction(async db=>{
       const old=await new Store(db,this.userId).profile(true);
-      const fields=(p:Profile)=>JSON.stringify([p.researchEnabled,p.workAuthorization,p.objective,p.cvText,p.titles,p.constraints,p.salaryExpectation,p.equityExpectation,p.goalClarifications,p.remoteOnly,p.locations,p.searchLocations,p.sources,p.companyBoards,p.strategy,p.postedWithinDays,p.includeUnknownDates,p.outputLanguage]);
+      const fields=(p:Profile)=>JSON.stringify([p.reviewedPreferences,p.researchEnabled,p.workAuthorization,p.objective,p.cvText,p.titles,p.constraints,p.salaryExpectation,p.equityExpectation,p.goalClarifications,p.remoteOnly,p.locations,p.searchLocations,p.sources,p.companyBoards,p.strategy,p.postedWithinDays,p.includeUnknownDates,p.outputLanguage]);
       await db.prepare('UPDATE profile SET value=?,version=version+? WHERE user_id=?').run(JSON.stringify(profile),fields(profile)!==fields(old.profile)?1:0,this.userId);
       if(profile.enabled&&!old.profile.enabled)await db.prepare('UPDATE state SET next_run=? WHERE user_id=?').run(new Date().toISOString(),this.userId);
       else if(profile.intervalHours!==old.profile.intervalHours)await db.prepare('UPDATE state SET next_run=? WHERE user_id=?').run(new Date(Date.now()+profile.intervalHours*3600000).toISOString(),this.userId);
@@ -147,7 +148,7 @@ export class Store {
 
 function jobFromRow(row: Row): Job {
   return { id: String(row.id), title: String(row.title), company: String(row.company), location: String(row.location), url: String(row.url),
-    researchRequested:Boolean(row.research_requested),research:row.research?researchDossierSchema.parse(JSON.parse(row.research)):null,descriptionCheckedAt:row.description_checked_at?String(row.description_checked_at):null,
+    feedback:row.feedback?feedbackSchema.parse(JSON.parse(row.feedback)):null,researchRequested:Boolean(row.research_requested),research:row.research?researchDossierSchema.parse(JSON.parse(row.research)):null,descriptionCheckedAt:row.description_checked_at?String(row.description_checked_at):null,
     tracking: row.tracking?JSON.parse(String(row.tracking)):{}, verification:row.verification?JSON.parse(String(row.verification)):null,duplicateOf:row.duplicate_of as string|null,
     sourceKey: String(row.source_key || 'linkedin'),
     postedAt: row.posted_at as string | null, description: row.description as string | null, firstSeen: String(row.first_seen), lastSeen: String(row.last_seen),

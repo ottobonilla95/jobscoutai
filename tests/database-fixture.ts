@@ -11,6 +11,7 @@ export async function accountsFixture(t:TestContext){
  await pg.exec(await readFile(new URL('../migrations/004_adaptive_discovery.sql',import.meta.url),'utf8'));
  await pg.exec(await readFile(new URL('../migrations/005_research_memory.sql',import.meta.url),'utf8'));
  await pg.exec(await readFile(new URL('../migrations/006_goal_investigation.sql',import.meta.url),'utf8'));
+ await pg.exec(await readFile(new URL('../migrations/007_reviewed_feedback.sql',import.meta.url),'utf8'));
  const db=new Database(pg as Connection,fn=>pg.transaction(async tx=>{
   const nested=new Database(tx as Connection,f=>f(nested),async()=>{});return fn(nested);
  }),()=>pg.close());

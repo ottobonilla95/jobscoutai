@@ -6,6 +6,8 @@ import type { DashboardData } from '@/lib/dashboard';
 import type { Job, Profile } from '@core/profile';
 import ResearchDossierView from './research-dossier';
 import ResearchAction from './research-action';
+import OpportunityFeedback from './opportunity-feedback';
+import ReviewedPreferences from './reviewed-preferences';
 import ResearchQueue from './research-queue';
 import SearchDiscoveryReport from './search-discovery-report';
 import SearchProfile from './search-profile';
@@ -92,6 +94,7 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
         <p className="footnote">{t("Public listings from your selected sources · Coverage varies by source · Scores guide your review; unstated details remain unknown.")}</p>
       </>}
       {tab==='profile'&&<>
+        <ReviewedPreferences profile={data.profile} version={data.version} refresh={refresh}/>
         <SearchProfile profile={data.profile} minimum={data.minimumSearchIntervalHours} onSaved={async()=>{const response=await fetch('/api/dashboard');if(!response.ok)throw new Error(t('Could not refresh the dashboard.'));const next=await response.json();setData(next);setDraft(next.profile);setDirty(false);}}/>
         <details className="panel search-controls"><summary><h2>{t('Search sources and automatic searches')}</h2></summary>
           <form onSubmit={e=>{e.preventDefault();void save();}}>
@@ -130,6 +133,7 @@ function JobCard({job,currentVersion,update,refresh}:{job:Job;currentVersion:num
     {a&&<details className="job-details"><summary>{t("Why this could fit")} <span>+</span></summary><div className="details-grid"><div><h3>{t("The match")}</h3><ul>{a.reasons.map((r,i)=><li key={i}>{r}</li>)}</ul><h3>{t("Questions to explore")}</h3>{a.concerns.length?<ul>{a.concerns.map((r,i)=><li key={i}>{r}</li>)}</ul>:<p>{t("None flagged by the evaluator.")}</p>}</div><div><h3>{t("What the listing actually says")}</h3><dl><dt>{t("Salary")}</dt><dd>{a.salaryEvidence || t("Not specified")}</dd><dt>{t("Equity")}</dt><dd>{a.equityEvidence || t("Not specified")}</dd>{a.founderPathEvidence&&<><dt>{t("Ownership evidence")}</dt><dd>{a.founderPathEvidence}</dd></>}</dl></div></div>{job.description&&<details className="description"><summary>{t("Read the source description")}</summary><p>{job.description}</p></details>}</details>}
     <ResearchDossierView dossier={job.research} currentVersion={currentVersion}/>
     <ResearchAction job={job} refresh={refresh}/>
+    <OpportunityFeedback key={`${job.id}:${job.feedback?.id}:${job.feedback?.status}`} job={job} refresh={refresh}/>
     <TrackingEditor job={job} refresh={refresh}/>
     <div className="job-footer"><a className="text-button" href={job.url} target="_blank" rel="noopener noreferrer">{t("View original listing")}<ArrowUpRight size={15}/></a><div>{job.status==='dismissed'?<button className="text-button muted" onClick={()=>update('new')}>{t("Restore")}</button>:<><button className={`text-button ${job.status==='saved'?'saved':'muted'}`} onClick={()=>update(job.status==='saved'?'new':'saved')}><Bookmark size={15} fill={job.status==='saved'?'currentColor':'none'}/>{job.status==='saved'?t("Saved"):t("Save")}</button><button className="icon-button" aria-label={t('Dismiss {title}',{title:job.title})} onClick={()=>update('dismissed')}><X size={17}/></button></>}</div></div>
   </article>;

@@ -1,3 +1,4 @@
+import {reviewedPreferenceSchema,type OpportunityFeedback} from './feedback-schema';
 import type {ResearchDossier} from './research-memory-schema';
 import { z } from 'zod';
 import {searchLocationSchema,maxSearchLocations} from './locations';
@@ -15,6 +16,7 @@ export const profileSchema = z.object({
   goalClarifications:goalClarificationsSchema.default([]), clarificationBasis:z.string().max(70000).default(''),
   emailAlertsRequested:z.boolean().default(false),
   outputLanguage: z.enum(['en','es']).default('en'),
+  reviewedPreferences:z.array(reviewedPreferenceSchema).max(8).default([]),
   researchEnabled:z.boolean().default(true),
   strategy: strategySchema.default(defaultStrategy),
   postedWithinDays: z.number().int().min(1).max(90).default(7),
@@ -44,7 +46,7 @@ export const profileSchema = z.object({
 export type Profile = z.infer<typeof profileSchema>;
 export const defaultProfile: Profile = {
   onboardingCompleted:true, setupDraft:null, workAuthorization:'', matchingSummary:'', goalClarifications:[],clarificationBasis:'',emailAlertsRequested:false,
-  researchEnabled:true,outputLanguage:'en', strategy: defaultStrategy, postedWithinDays: 7, includeUnknownDates: true, dailyEvaluationLimit: 50,
+  reviewedPreferences:[],researchEnabled:true,outputLanguage:'en', strategy: defaultStrategy, postedWithinDays: 7, includeUnknownDates: true, dailyEvaluationLimit: 50,
   name: '',
   objective: 'Find a role that matches my experience, priorities, and career goals.',
   cvText: '', cvFileName: '',
@@ -72,7 +74,7 @@ export type JobListing = {
   sourceKey?: string; description?: string | null;
 };
 export type Job = JobListing & {
-  researchRequested?:boolean;research?:ResearchDossier|null;descriptionCheckedAt?:string|null;
+  feedback?:OpportunityFeedback|null;researchRequested?:boolean;research?:ResearchDossier|null;descriptionCheckedAt?:string|null;
   description: string | null; firstSeen: string; lastSeen: string;
   assessment: Assessment | null; status: 'new' | 'saved' | 'dismissed';
   tracking?: Tracking; verification?: Verification | null; duplicateOf?: string | null;
