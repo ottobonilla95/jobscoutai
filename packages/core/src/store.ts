@@ -1,3 +1,5 @@
+import {ResearchMemory} from './research-memory';
+import {researchDossierSchema} from './research-memory-schema';
 import { randomUUID } from 'node:crypto';
 import { minimumSearchIntervalHours } from './search-policy';
 import { setupDraftSchema, type SetupDraft } from './setup-schema';
@@ -99,8 +101,8 @@ export class Store {
     const duplicate=await this.db.prepare('SELECT id FROM jobs WHERE user_id=? AND id!=? AND (url=? OR (? AND lower(trim(company))=lower(trim(?)) AND lower(trim(title))=lower(trim(?)) AND lower(trim(location))=lower(trim(?)))) AND duplicate_of IS NULL ORDER BY first_seen LIMIT 1').get(this.userId,listing.id,listing.url,namedEmployer,listing.company,listing.title,listing.location);
     if(duplicate)await this.db.prepare('UPDATE jobs SET duplicate_of=? WHERE user_id=? AND id=? AND duplicate_reviewed=0').run(duplicate.id,this.userId,listing.id);
   }
-  async description(id:string,text:string){await this.db.prepare('UPDATE jobs SET description=? WHERE user_id=? AND id=?').run(text,this.userId,id);}
-  async assess(id:string,assessment:Assessment,version:number){await this.db.prepare('UPDATE jobs SET assessment=?,score=?,evaluated_version=? WHERE user_id=? AND id=?').run(JSON.stringify(assessment),assessment.score,version,this.userId,id);}
+  async description(id:string,text:string){await this.db.prepare('UPDATE jobs SET description=?,description_checked_at=? WHERE user_id=? AND id=?').run(text,new Date().toISOString(),this.userId,id);}
+  async assess(id:string,assessment:Assessment,version:number){await this.db.prepare('UPDATE jobs SET assessment=?,score=?,evaluated_version=? WHERE user_id=? AND id=?').run(JSON.stringify(assessment),assessment.score,version,this.userId,id);await new ResearchMemory(this).capture(id,assessment,version);}
   async track(id:string,tracking:Tracking){return (await this.db.prepare('UPDATE jobs SET tracking=? WHERE user_id=? AND id=?').run(JSON.stringify(tracking),this.userId,id)).changes;}
   async verify(id:string,verification:Verification){await this.db.prepare('UPDATE jobs SET verification=? WHERE user_id=? AND id=?').run(JSON.stringify(verification),this.userId,id);}
   async setStatus(id:string,status:Job['status']){await this.db.prepare('UPDATE jobs SET status=? WHERE user_id=? AND id=?').run(status,this.userId,id);}
@@ -143,6 +145,7 @@ export class Store {
 
 function jobFromRow(row: Row): Job {
   return { id: String(row.id), title: String(row.title), company: String(row.company), location: String(row.location), url: String(row.url),
+    research:row.research?researchDossierSchema.parse(JSON.parse(row.research)):null,descriptionCheckedAt:row.description_checked_at?String(row.description_checked_at):null,
     tracking: row.tracking?JSON.parse(String(row.tracking)):{}, verification:row.verification?JSON.parse(String(row.verification)):null,duplicateOf:row.duplicate_of as string|null,
     sourceKey: String(row.source_key || 'linkedin'),
     postedAt: row.posted_at as string | null, description: row.description as string | null, firstSeen: String(row.first_seen), lastSeen: String(row.last_seen),

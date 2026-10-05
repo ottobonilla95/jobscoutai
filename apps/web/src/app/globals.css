@@ -2601,3 +2601,8 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
 .discovery-table th,.discovery-table td { text-align:left; padding:10px; border-bottom:1px solid var(--line); vertical-align:top; }
 .discovery-table small { display:block; color:var(--muted); margin-top:4px; }
 .discovered-employers a,.discovery-round a { overflow-wrap:anywhere; }
+
+.research-evidence-list { list-style:none; padding:0; }
+.research-evidence-list li { border-top:1px solid var(--line); padding:16px 0; }
+.research-dossier blockquote { margin:12px 0; padding-left:16px; border-left:2px solid var(--green); white-space:pre-wrap; }
+.research-dossier li,.research-dossier p { overflow-wrap:anywhere; }

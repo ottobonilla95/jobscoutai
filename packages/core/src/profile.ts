@@ -1,3 +1,4 @@
+import type {ResearchDossier} from './research-memory-schema';
 import { z } from 'zod';
 import {searchLocationSchema,maxSearchLocations} from './locations';
 import { setupDraftSchema } from './setup-schema';
@@ -70,6 +71,7 @@ export type JobListing = {
   sourceKey?: string; description?: string | null;
 };
 export type Job = JobListing & {
+  research?:ResearchDossier|null;descriptionCheckedAt?:string|null;
   description: string | null; firstSeen: string; lastSeen: string;
   assessment: Assessment | null; status: 'new' | 'saved' | 'dismissed';
   tracking?: Tracking; verification?: Verification | null; duplicateOf?: string | null;
