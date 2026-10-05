@@ -7,6 +7,7 @@ export async function accountsFixture(t:TestContext){
  const pg=new PGlite();
  await pg.exec(await readFile(new URL('../migrations/001_postgres.sql',import.meta.url),'utf8'));
  await pg.exec(await readFile(new URL('../migrations/002_cv_builder.sql',import.meta.url),'utf8'));
+ await pg.exec(await readFile(new URL('../migrations/003_generation_results.sql',import.meta.url),'utf8'));
  const db=new Database(pg as Connection,fn=>pg.transaction(async tx=>{
   const nested=new Database(tx as Connection,f=>f(nested),async()=>{});return fn(nested);
  }),()=>pg.close());

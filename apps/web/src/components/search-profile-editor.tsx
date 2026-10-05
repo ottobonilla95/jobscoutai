@@ -6,6 +6,9 @@ import RolePicker from './role-picker';
 import StrategyReview from './strategy-review';
 import type {SearchLocation} from '@core/locations';
 import { useI18n } from './i18n';
+import GoalClarifications from './goal-clarifications';
+import GoalAnswerSummary from './goal-answer-summary';
+import type {GoalClarification} from '@core/goal-clarifications';
 
 export const profileFieldIds: Record<number, string> = {
   1: 'profile-cv', 2: 'profile-objective', 3: 'profile-titles-0',
@@ -27,7 +30,9 @@ type Props = {
   formRef: RefObject<HTMLFormElement | null>;
   update: <K extends keyof SetupAnswers>(key: K, value: SetupAnswers[K]) => void;
   onUpload: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
-  onSuggest: (kind: 'roles' | 'matching') => Promise<void>;
+  onSuggest: (kind: 'roles' | 'matching' | 'clarifications') => Promise<void>;
+  onClarifications:(questions:GoalClarification[])=>void;
+  onClearClarifications:()=>void;
   onStandardMatching: () => void;
   onSave: () => Promise<void>;
   onLocations:(places:SearchLocation[])=>void;
@@ -37,7 +42,7 @@ type Props = {
 export default function SearchProfileEditor({
   answers: a, matching, matchingCurrent, minimum, frequencies, busy, saveState,
   error, notice, invalidStep, verificationNotice, formRef, update, onUpload,
-  onSuggest, onStandardMatching, onSave, onLocations, onMatching,
+  onSuggest, onStandardMatching, onSave, onLocations, onMatching,onClarifications,onClearClarifications,
 }: Props) {
   const { t } = useI18n();
   const fieldError = (step: number) => invalidStep === step || undefined;
@@ -62,6 +67,8 @@ export default function SearchProfileEditor({
               <div className="profile-role-field"><RolePicker id="profile-titles" value={a.titles} invalid={fieldError(3)} onChange={value=>update('titles',value)}/><button type="button" className="text-button" onClick={() => void onSuggest('roles')}><Sparkles size={14}/>{t('Regenerate from my CV and goal')}</button></div>
             </div>
           </section>
+
+          <section className="panel profile-panel"><GoalClarifications answers={a} onChange={onClarifications} onGenerate={()=>void onSuggest('clarifications')} onClear={onClearClarifications}/></section>
 
           <section className="panel profile-panel" aria-labelledby="profile-location-heading">
             <div className="profile-panel-heading"><MapPin size={19}/><div><h2 id="profile-location-heading">{t('Location and work')}</h2><p>{t('Where and how your next role should fit your life.')}</p></div></div>
@@ -93,6 +100,7 @@ export default function SearchProfileEditor({
             <div className="profile-panel-heading"><Sparkles size={19}/><h2 id="profile-matching-heading">{t('Matching preferences')}</h2></div>
             <span className={`pill ${matchingCurrent ? 'green' : 'neutral'}`}>{t(matchingCurrent ? 'Up to date' : 'Update needed')}</span>
             <p className="profile-matching-copy">{matchingCurrent ? matching!.summary : t(matching ? 'Your answers changed. Update your matching preferences before saving.' : 'Generate your matching preferences from your CV and answers, or start with standard matching.')}</p>
+            <GoalAnswerSummary answers={a}/>
             {matchingCurrent&&matching&&<StrategyReview matching={matching} onChange={onMatching}/>}
             <div className="profile-matching-actions"><button type="button" className="button secondary full" onClick={() => void onSuggest('matching')}>{t(matchingCurrent ? 'Regenerate matching preferences' : 'Generate matching preferences')}</button><button type="button" className="text-button" onClick={onStandardMatching}>{t('Use standard matching')}</button></div>
             <p className="footnote">{t('Your explicit dealbreakers remain requirements. Missing information stays unknown.')}</p>

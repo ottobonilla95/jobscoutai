@@ -5,6 +5,7 @@ import { defaultProfile, profileSchema } from '../packages/core/src/profile';
 import { draftFromProfile, completeSetup, standardMatching } from '../packages/core/src/search-setup';
 import { firstIncompleteStep, matchingBasis, setupDraftSchema } from '../packages/core/src/setup-schema';
 import { minimumSearchIntervalHours } from '../packages/core/src/search-policy';
+import {maxSearchLocations,locationQuery} from '../packages/core/src/locations';
 
 function readyDraft() {
   const draft=draftFromProfile({...defaultProfile,onboardingCompleted:false},4);
@@ -12,6 +13,19 @@ function readyDraft() {
   draft.matching=standardMatching(draft.answers,'en');draft.step=12;
   return draft;
 }
+test('ten city selections persist in both resumable drafts and active profiles',async t=>{
+  const store=await storeFixture(t);const draft=readyDraft();
+  draft.answers.selectedLocations=Array.from({length:maxSearchLocations},(_,i)=>({kind:'city' as const,countryCode:'CO',city:`City ${i}`,region:''}));
+  draft.answers.locations=draft.answers.selectedLocations.map(locationQuery).join('\n');
+  draft.matching=standardMatching(draft.answers,'en');
+  await store.saveSetupDraft(draft);
+  assert.deepEqual(draftFromProfile((await store.profile()).profile,4).answers.selectedLocations,draft.answers.selectedLocations);
+  await store.saveProfile(completeSetup(defaultProfile,draft,4,'user@example.test',false));
+  const restored=(await store.profile()).profile;
+  assert.deepEqual(restored.searchLocations,draft.answers.selectedLocations);
+  assert.deepEqual(restored.locations,draft.answers.selectedLocations.map(locationQuery));
+  assert.equal(restored.setupDraft,null);
+});
 test('onboarding requires experience, goals, confirmed roles and explicit location/work choices',()=>{
   const empty=draftFromProfile({...defaultProfile,onboardingCompleted:false},4);
   assert.equal(empty.answers.titles,'');assert.equal(empty.answers.objective,'');assert.equal(firstIncompleteStep(empty.answers,4),1);

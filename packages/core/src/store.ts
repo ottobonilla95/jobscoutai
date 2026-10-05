@@ -26,7 +26,7 @@ export class Store {
     profile=profileSchema.parse({...profile,intervalHours:Math.max(profile.intervalHours,minimumSearchIntervalHours())});
     await this.db.transaction(async db=>{
       const old=await new Store(db,this.userId).profile(true);
-      const fields=(p:Profile)=>JSON.stringify([p.workAuthorization,p.objective,p.cvText,p.titles,p.constraints,p.salaryExpectation,p.equityExpectation,p.remoteOnly,p.locations,p.searchLocations,p.sources,p.companyBoards,p.strategy,p.postedWithinDays,p.includeUnknownDates,p.outputLanguage]);
+      const fields=(p:Profile)=>JSON.stringify([p.workAuthorization,p.objective,p.cvText,p.titles,p.constraints,p.salaryExpectation,p.equityExpectation,p.goalClarifications,p.remoteOnly,p.locations,p.searchLocations,p.sources,p.companyBoards,p.strategy,p.postedWithinDays,p.includeUnknownDates,p.outputLanguage]);
       await db.prepare('UPDATE profile SET value=?,version=version+? WHERE user_id=?').run(JSON.stringify(profile),fields(profile)!==fields(old.profile)?1:0,this.userId);
       if(profile.enabled&&!old.profile.enabled)await db.prepare('UPDATE state SET next_run=? WHERE user_id=?').run(new Date().toISOString(),this.userId);
       else if(profile.intervalHours!==old.profile.intervalHours)await db.prepare('UPDATE state SET next_run=? WHERE user_id=?').run(new Date(Date.now()+profile.intervalHours*3600000).toISOString(),this.userId);

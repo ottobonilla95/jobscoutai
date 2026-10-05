@@ -10,6 +10,7 @@ export default function StrategyReview({matching,onChange}:{matching:NonNullable
   onChange({...matching,strategy:{...strategy,discovery:{...plan,[key]:key==='intent'?value:value.split('\n').map(s=>s.trim()).filter(Boolean)}}});
  }
  return <div className="strategy-review">
+  <label>{t('What we understand you want')}<textarea rows={4} maxLength={1200} value={matching.summary} onChange={event=>onChange({...matching,summary:event.target.value})}/><small>{t('Review this interpretation before saving. Edit anything that does not reflect your goals.')}</small></label>
   {plan&&<>
    <PlanField key={`intent-${plan.intent}`} label={t('What we will look for')} value={plan.intent} limit={1200} rows={3} onCommit={value=>updatePlan('intent',value)}/>
    <PlanField key={`titles-${plan.titleVariants.join('|')}`} label={t('Equivalent search titles')} value={plan.titleVariants.join('\n')} limit={950} rows={3} maxLines={8} hint={t('One per line, up to 8. Your confirmed roles take priority; each search uses up to 8 titles in total.')} onCommit={value=>updatePlan('titleVariants',value)}/>
