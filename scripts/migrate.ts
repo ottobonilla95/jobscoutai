@@ -37,6 +37,10 @@ try{
    await tx.exec(await readFile(new URL('../migrations/008_resumable_research.sql',import.meta.url),'utf8'));
    await tx.exec('INSERT INTO schema_migrations(version) VALUES(8)');
   }
+  if(!await tx.prepare('SELECT 1 FROM schema_migrations WHERE version=9').get()){
+   await tx.exec(await readFile(new URL('../migrations/009_search_chat.sql',import.meta.url),'utf8'));
+   await tx.exec('INSERT INTO schema_migrations(version) VALUES(9)');
+  }
  });
  console.log('PostgreSQL schema is up to date.');
 }finally{await db.close();}

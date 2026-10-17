@@ -1,0 +1,4 @@
+CREATE TABLE search_chats (
+ user_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+ value TEXT NOT NULL
+);

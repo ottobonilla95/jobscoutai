@@ -12,6 +12,7 @@ import ReviewedPreferences from './reviewed-preferences';
 import ResearchQueue from './research-queue';
 import SearchDiscoveryReport from './search-discovery-report';
 import SearchProfile from './search-profile';
+import SearchChat from './search-chat';
 import { strongMatch, recommendation, recommendationLabels } from '@core/recommendation';
 import TrackingEditor from './tracking-editor';
 import { sourceOptions, sourceLabel } from '@core/source-settings';
@@ -23,7 +24,7 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
 
   const [data,setData] = useState(initial);
   const [draft,setDraft] = useState<Profile>(initial.profile);
-  const [tab,setTab] = useState<DashboardView>(initialView ?? (initial.profile.cvText ? 'matches' : 'profile'));
+  const [tab,setTab] = useState<DashboardView>(initialView ?? 'matches');
   const [filter,setFilter] = useState('all');
   const [shown,setShown] = useState(50);
   const [sourceFilter,setSourceFilter] = useState('all');
@@ -38,6 +39,7 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
     setData(await response.json());
   },[]);
   useEffect(() => { const timer = setInterval(() => { refresh().catch(()=>{}); },10000); return () => clearInterval(timer); },[refresh]);
+  useEffect(()=>{if(!dirty)setDraft(data.profile);},[data.profile,dirty]);
   const notify = (text: string, error = false) => { setMessage(text); setIsError(error); };
   function navigateTab(view: DashboardView) {
     setTab(view);
@@ -82,18 +84,21 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
         }}><Search size={16}/>{running?t("Searching…"):data.state.requested?t("Search queued"):t("Search now")}</button>}
       </header>
       {message&&<div role={isError?'alert':'status'} className={`toast ${isError?'error':''}`}><span>{localizeMessage(message)}</span><button className="icon-button" aria-label={t("Dismiss message")} onClick={()=>setMessage('')}><X size={16}/></button></div>}
-      {tab==='matches'&&<>
+      <div className="search-workspace" hidden={tab!=='matches'}>
+        <SearchChat profileKey={JSON.stringify({...data.profile,discoveredCompanyBoards:[]})} onSaved={refresh}/>
+        <div className="search-results">
         <section className="stats" aria-label={t("Search overview")}><Stat label={t("Strong matches")} value={number(strong.length)} note={t("Worth a closer look")} icon={<CircleDot size={18}/>}/><Stat label={t("Saved opportunities")} value={number(saved.length)} note={t("Your personal shortlist")} icon={<Bookmark size={18}/>}/><Stat label={t("Search cadence")} value={t('{count} hours',{count:number(data.profile.intervalHours)})} note={data.profile.enabled?t("Automatic searches enabled"):t("Automatic searches paused")} icon={<Clock3 size={18}/>}/></section>
         <div className="search-strip"><span className={`status-dot ${data.profile.enabled?'on':''}`}/><div><strong>{running?t("Your search is running"):data.profile.enabled?t("{productName} is on the lookout"):t("{productName} is ready when you are")}</strong><span>{data.profile.enabled?t('Next search: {date}',{date:date(data.state.nextRun)}):t("Set your preferences, then switch on scheduled searches.")}{!workerOnline?t(" · Worker not connected"):''}</span></div><button className="text-button" onClick={()=>navigateTab('profile')}>{t("Manage search")}<ArrowRight size={15}/></button></div>
         {needsSetup&&<div className="setup-banner"><div><span className="eyebrow">{t("START WITH YOU")}</span><h2>{t("A great match needs a little context.")}</h2><p>{t("Add your CV and preferences to give your search a clear direction.")}</p></div><button className="button secondary" onClick={()=>navigateTab('profile')}>{t("Complete your profile")}<ArrowRight size={16}/></button></div>}
-        <div className="section-heading"><h2>{t("Your opportunities")} <span>{visible.length}</span></h2><span className="source-label">{t("Across your job sources")}</span></div>
+        <div className="section-heading"><h2>{t("Your opportunities")} <span>{visible.length}</span></h2><span className="source-label">{data.runs[0]?t('Latest search: {date}',{date:date(data.runs[0].startedAt)}):t("Across your job sources")}</span></div>
         <div className="filter-row" role="group" aria-label={t("Filter opportunities")}>{[['all',t("All opportunities")],['strong',t("Strong matches")],['saved',t("Saved")],['research',t("Research queue")],['applications',t("Applications")],['followups',t("Follow-ups due")],['dismissed',t("Archive")]].map(([key,label])=><button key={key} className={filter===key?'filter active':'filter'} onClick={()=>setFilter(key)}>{label}</button>)}</div>
         {filter==='research'&&<ResearchQueue leads={data.leads} refresh={refresh}/>}
         <label className="source-filter">{t("Show source")}<select value={sourceFilter} onChange={e=>setSourceFilter(e.target.value)}><option value="all">{t("All sources")}</option>{[...new Set(data.jobs.map(j=>j.sourceKey||'linkedin'))].map(key=><option value={key} key={key}>{sourceLabel(key)}</option>)}</select></label>
         <div className="job-list">{visible.length ? visible.slice(0,shown).map(job=><JobCard key={job.id} job={job} currentVersion={data.version} update={status=>setJobStatus(job,status)} refresh={refresh}/>) : <div className="empty-state"><div className="empty-icon"><Search size={27}/></div><h2>{filter==='saved'?t("Keep the promising ones close."):filter==='dismissed'?t("Nothing dismissed."):t("The right opportunity is worth finding.")}</h2><p>{filter==='saved'?t("Save a job to build your shortlist here."):filter==='dismissed'?t("Jobs you dismiss will appear here."):t("Your real search results will appear here, with clear reasons for each match and a direct link to the original listing.")}</p>{needsSetup&&<button className="text-button" onClick={()=>navigateTab('profile')}>{t("Set up your search")}<ArrowRight size={15}/></button>}</div>}</div>
         {visible.length>shown&&<button className="button secondary" onClick={()=>setShown(n=>n+50)}>{t('Show more opportunities ({count} remaining)',{count:number(visible.length-shown)})}</button>}
         <p className="footnote">{t("Public listings from your selected sources · Coverage varies by source · Scores guide your review; unstated details remain unknown.")}</p>
-      </>}
+        </div>
+      </div>
       {tab==='profile'&&<>
         <ReviewedPreferences profile={data.profile} version={data.version} refresh={refresh}/>
         <SearchProfile profile={data.profile} minimum={data.minimumSearchIntervalHours} onSaved={async()=>{const response=await fetch('/api/dashboard');if(!response.ok)throw new Error(t('Could not refresh the dashboard.'));const next=await response.json();setData(next);setDraft(next.profile);setDirty(false);}}/>

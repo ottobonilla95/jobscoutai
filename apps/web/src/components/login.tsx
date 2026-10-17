@@ -15,7 +15,7 @@ export default function Login({mode='login',signupOpen=true}:{mode?:'login'|'sig
   {!signup&&<LanguageSelect/>}
   <span className="eyebrow">{t("YOUR SEARCH. YOUR NEXT CHAPTER.")}</span>
   <h1>{signup?t("Find what comes next."):t("Welcome back.")}</h1>
-  <p className="muted">{signup?t("Create your account, add your CV, and build a search around what matters to you."):t("Sign in to your opportunities and search profile.")}</p>
+  <p className="muted">{signup?t("Create your account, add your CV, and chat with your assistant to build a search around you."):t("Sign in to your opportunities and search profile.")}</p>
   <form onSubmit={async e=>{e.preventDefault();setBusy(true);setError('');
    try{const response=await fetch(`/api/${mode}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email.trim(),password})});
     const data=await response.json();if(!response.ok)throw new Error(data.error);window.location.assign(signup?'/onboarding':'/');

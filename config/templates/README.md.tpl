@@ -49,9 +49,9 @@ npm run dev
 npm run worker:watch
 ```
 
-Open `http://localhost:3000/signup`, create an account with email and password, and complete Search profile. Sign in at `/login` on subsequent visits. Upload a text-based PDF, DOCX, or TXT CV, or paste the text. Review the extracted text before saving. Only extracted text is stored; the original uploaded file is not retained. Scanned PDFs need OCR elsewhere.
+Open `http://localhost:3000/signup`, create an account with email and password, and set up your search through the assistant chat. Upload a text-based PDF, DOCX, or TXT CV, or paste your experience into the conversation. The assistant gathers goals, roles, locations, working preferences, and search settings, then offers a review card with Save preferences and Save and start searching. Review the extracted CV text before saving. Only extracted text is stored; the original uploaded file is not retained. Scanned PDFs need OCR elsewhere.
 
-Searches and emails start disabled. Configure your profile, then enable them or use Search now. A queued manual search is picked up on the worker's next check, even while automatic searches are paused. Missing credentials produce explicit errors; there are no fabricated matches or simulated provider responses in the app.
+Drafts and conversations are saved per account without changing the active search. Saving a completed setup enables automatic searches unless you asked to pause them. Email alerts require explicit opt-in and a verified account email. The dashboard keeps the same conversation beside your latest opportunities; describe changes there or edit Search profile directly. Changes rebuild matching preferences when needed and keep previous results visible. Conflicting edits from another tab refresh the conversation instead of overwriting newer settings. Chat requires the configured AI provider and shares the account's daily AI budget with matching and research. A queued manual search is picked up on the worker's next check, even while automatic searches are paused. Missing credentials produce explicit errors; there are no fabricated matches or simulated provider responses in the app. Run `npm run db:migrate` before starting this version to install the account-scoped conversation table.
 
 Other commands:
 
