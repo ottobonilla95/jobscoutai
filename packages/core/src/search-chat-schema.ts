@@ -16,7 +16,7 @@ export const chatMessageSchema=z.object({id:z.string(),role:z.enum(['user','assi
 export const searchChatSchema=z.object({
   revision:z.number().int().nonnegative(), baseFingerprint:z.string(),
   messages:z.array(chatMessageSchema).max(200),
-  draft:setupDraftSchema, settings:chatSettingsSchema, ready:z.boolean(),
+  draft:setupDraftSchema, settings:chatSettingsSchema, ready:z.boolean(), cvReviewed:z.boolean().default(false),
 });
 export type SearchChat=z.infer<typeof searchChatSchema>;
 export type ChatSettings=z.infer<typeof chatSettingsSchema>;
@@ -38,5 +38,6 @@ export type ChatTurn=z.infer<typeof chatTurnSchema>;
 export const chatRequestSchema=z.discriminatedUnion('action',[
   z.object({action:z.literal('message'),revision:z.number().int().nonnegative(),text:z.string().trim().min(1).max(32000)}),
   z.object({action:z.literal('upload'),revision:z.number().int().nonnegative(),text:z.string().trim().min(100).max(30000),name:z.string().max(200)}),
+  z.object({action:z.literal('confirm-cv'),revision:z.number().int().nonnegative(),text:z.string().trim().min(100).max(30000),name:z.string().max(200)}),
   z.object({action:z.literal('commit'),revision:z.number().int().nonnegative()}),
 ]);

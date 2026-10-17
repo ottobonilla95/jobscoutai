@@ -4,7 +4,7 @@ import {getAccounts} from '@core/accounts';
 import {integrations} from '@core/config';
 import {minimumSearchIntervalHours} from '@core/search-policy';
 import {chatRequestSchema} from '@core/search-chat-schema';
-import {applyChatTurn, attachChatCV, ChatConflict, commitSearchChat, generateChatTurn, loadSearchChat, saveSearchChat} from '@core/search-chat';
+import {applyChatTurn, attachChatCV, updateChatCV, confirmChatCV, requireReviewedCV, ChatConflict, commitSearchChat, generateChatTurn, loadSearchChat, saveSearchChat} from '@core/search-chat';
 import {beginGeneration, finishGeneration, AIBudgetError} from '@core/ai-usage';
 import {suggestProfile} from '@core/profile-suggestions';
 
@@ -28,10 +28,12 @@ export async function POST(request:Request){
       if(input.action==='commit')return localizedJson(await commitSearchChat(store,input.revision,minimum,account.email,await getAccounts().verified(account.id),locale));
       const chat=await loadSearchChat(store,minimum,locale);
       if(chat.revision!==input.revision)throw new ChatConflict();
-      if(input.action==='upload')return localizedJson({chat:await saveSearchChat(store,attachChatCV(chat,input.text,input.name,locale),input.revision)});
+      const {profile}=await store.profile();
+      if(input.action==='upload')return localizedJson({chat:await saveSearchChat(store,profile.onboardingCompleted?attachChatCV(chat,input.text,input.name,locale):updateChatCV(chat,input.text,input.name),input.revision)});
+      if(input.action==='confirm-cv')return localizedJson({chat:await saveSearchChat(store,confirmChatCV(chat,input.text,input.name,locale),input.revision)});
+      requireReviewedCV(chat,!profile.onboardingCompleted);
       if(!integrations().ai)return localizedJson({error:'Chat is unavailable until AI matching is connected. Your conversation is saved. Please try again later.'},{status:503});
       if(!await getAccounts().allow(`search-chat:${account.id}`,60,3600000))return localizedJson({error:'Please wait a little before sending more messages.'},{status:429});
-      const {profile}=await store.profile();
       async function generated<T extends {inputTokens:number;outputTokens:number}>(run:()=>Promise<T>):Promise<T>{
         const id=await beginGeneration(account.id,'strategy',profile.dailyEvaluationLimit);
         try{const result=await run();await finishGeneration(id,'completed',result.inputTokens,result.outputTokens);return result;}

@@ -6,6 +6,7 @@ import type {SearchChat as Conversation} from '@core/search-chat-schema';
 import {locationLabel} from '@core/locations';
 import {sourceLabel} from '@core/source-settings';
 import {useI18n} from './i18n';
+import OnboardingCV, {OnboardingSteps} from './onboarding-cv';
 
 export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onboarding?:boolean;onSaved?:()=>Promise<void>;profileKey?:string}){
   const {t,locale,message:localizeMessage}=useI18n();
@@ -16,6 +17,7 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
   const [setupSaved,setSetupSaved]=useState(false);
   const [pendingText,setPendingText]=useState('');
   const [verifying,setVerifying]=useState(false);
+  const [reviewCV,setReviewCV]=useState(false);
   const sending=useRef(false);const transcript=useRef<HTMLDivElement>(null);
   const composer=useRef<HTMLTextAreaElement>(null);
   const load=useCallback(async()=>{
@@ -54,6 +56,13 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
     }catch(e){setError(e instanceof Error?e.message:t('Could not read CV.'));}
     finally{sending.current=false;setBusy(false);}
   }
+  async function continueFromCV(cvText:string,name:string){
+    if(!chat||sending.current)return;
+    sending.current=true;setBusy(true);setError('');setNotice('');
+    try{await request({action:'confirm-cv',revision:chat.revision,text:cvText,name});setReviewCV(false);}
+    catch(e){setError(e instanceof Error?e.message:t('Could not save.'));}
+    finally{sending.current=false;setBusy(false);}
+  }
   async function save(startSearch:boolean){
     if(!chat||sending.current)return;
     sending.current=true;setBusy(true);setError('');setNotice('');
@@ -79,8 +88,9 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
     }
   }
   const answers=chat?.draft.answers;
+  if(onboarding&&(!chat||!chat.cvReviewed||reviewCV))return <OnboardingCV key={chat?.revision??'loading'} cvText={answers?.cvText??''} name={answers?.cvFileName??''} loading={!chat} busy={busy} error={error} notice={notice} onUpload={upload} onContinue={continueFromCV} onRetry={()=>{setError('');void load().catch(e=>setError(e.message));}}/>;
   return <section className={`search-chat${onboarding?' search-chat-onboarding':''}`} aria-label={t('Your search assistant')}>
-    <header className="chat-header"><div className="chat-heading"><span className="chat-avatar"><MessageCircle size={19}/></span><div><h2>{t('Your search assistant')}</h2><p>{t(onboarding?'A conversation to find your next chapter.':'Keep shaping your search.')}</p></div></div><span className="chat-saved"><span className="tiny-dot"/>{t(busy?'Working…':chat?.ready?'Draft saved · Preferences not applied':'Conversation saved')}</span></header>
+    <header className="chat-header">{onboarding&&<OnboardingSteps step={2}/>}<div className="chat-heading"><span className="chat-avatar"><MessageCircle size={19}/></span><div><h2>{t('Your search assistant')}</h2><p>{t(onboarding?'A conversation to find your next chapter.':'Keep shaping your search.')}</p></div></div><span className="chat-saved"><span className="tiny-dot"/>{t(busy?'Working…':chat?.ready?'Draft saved · Preferences not applied':'Conversation saved')}</span>{onboarding&&<button type="button" className="text-button chat-review-cv" disabled={busy} onClick={()=>{setError('');setNotice('');setReviewCV(true);}}><FileText size={14}/>{t('Back to CV')}</button>}</header>
     <div className="chat-transcript" ref={transcript} role="log" aria-live="polite" aria-relevant="additions" aria-label={t('Search conversation')} aria-busy={busy} tabIndex={0}>
       {!chat&&!error&&<p className="muted">{t('Loading your conversation…')}</p>}
       {chat?.messages.map(message=><article key={message.id} className={`chat-message chat-message-${message.role}`}><span className="chat-speaker">{t(message.role==='user'?'You':'Search assistant')}</span>{chat.ready&&message.id===chat.messages.at(-1)?.id&&<span className="chat-proposal">{t('Proposed changes · Save below to apply')}</span>}<p>{message.text}</p></article>)}
@@ -115,7 +125,7 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
         <div className="chat-actions"><button type="button" className="button primary" disabled={busy} onClick={()=>void save(true)}>{t(onboarding?'Save and start searching':'Save and search')}<ArrowRight size={16}/></button><button type="button" className="text-button" disabled={busy} onClick={()=>void save(false)}>{t('Save preferences')}</button></div>
       </div>}
     </div>
-    {answers?.cvText&&<details className="chat-cv"><summary><FileText size={14}/>{answers.cvFileName||t('Experience added')} · {t('Review text')}</summary><pre>{answers.cvText}</pre></details>}
+    {!onboarding&&answers?.cvText&&<details className="chat-cv"><summary><FileText size={14}/>{answers.cvFileName||t('Experience added')} · {t('Review text')}</summary><pre>{answers.cvText}</pre></details>}
     <div className="chat-feedback">
       {notice&&<p role="status" className="chat-notice"><Check size={14}/>{notice}</p>}
       {onboarding&&setupSaved&&<a href="/" className="text-button">{t('Go to my opportunities')}<ArrowRight size={14}/></a>}
@@ -130,8 +140,8 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
       <textarea ref={composer} id={onboarding?'setup-chat-message':'search-chat-message'} rows={3} maxLength={32000} value={text} disabled={!chat||busy} onChange={event=>setText(event.target.value)} placeholder={t(onboarding?'Tell me about you and what you want next…':'What would you like to change about your search?')} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void send();}}}/>
       <button type="submit" className="button primary chat-send" disabled={!text.trim()||!chat||busy} aria-label={t('Send message')}><Send size={16}/></button>
       </div>
-      <div className="chat-composer-actions"><label className={`chat-attach${busy||!chat?' disabled':''}`}><Paperclip size={16}/>{t('Add CV')}<input type="file" className="setup-file" accept=".pdf,.docx,.txt" disabled={busy||!chat} onChange={event=>void upload(event)}/></label></div>
-      <small>{t('PDF, DOCX or TXT · You can also paste experience here. Shift + Enter for a new line.')}</small>
+      {!onboarding&&<div className="chat-composer-actions"><label className={`chat-attach${busy||!chat?' disabled':''}`}><Paperclip size={16}/>{t('Add CV')}<input type="file" className="setup-file" accept=".pdf,.docx,.txt" disabled={busy||!chat} onChange={event=>void upload(event)}/></label></div>}
+      <small>{t(onboarding?'Shift + Enter for a new line.':'PDF, DOCX or TXT · You can also paste experience here. Shift + Enter for a new line.')}</small>
     </form>
   </section>;
 }
