@@ -126,8 +126,11 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
     </div>
     <form className="chat-composer" onSubmit={event=>{event.preventDefault();void send();}}>
       <label className="sr-only" htmlFor={onboarding?'setup-chat-message':'search-chat-message'}>{t('Message your search assistant')}</label>
+      <div className="chat-composer-input">
       <textarea ref={composer} id={onboarding?'setup-chat-message':'search-chat-message'} rows={3} maxLength={32000} value={text} disabled={!chat||busy} onChange={event=>setText(event.target.value)} placeholder={t(onboarding?'Tell me about you and what you want next…':'What would you like to change about your search?')} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void send();}}}/>
-      <div className="chat-composer-actions"><label className={`chat-attach${busy||!chat?' disabled':''}`}><Paperclip size={16}/>{t('Add CV')}<input type="file" className="setup-file" accept=".pdf,.docx,.txt" disabled={busy||!chat} onChange={event=>void upload(event)}/></label><button type="submit" className="button primary" disabled={!text.trim()||!chat||busy} aria-label={t('Send message')}><Send size={16}/></button></div>
+      <button type="submit" className="button primary chat-send" disabled={!text.trim()||!chat||busy} aria-label={t('Send message')}><Send size={16}/></button>
+      </div>
+      <div className="chat-composer-actions"><label className={`chat-attach${busy||!chat?' disabled':''}`}><Paperclip size={16}/>{t('Add CV')}<input type="file" className="setup-file" accept=".pdf,.docx,.txt" disabled={busy||!chat} onChange={event=>void upload(event)}/></label></div>
       <small>{t('PDF, DOCX or TXT · You can also paste experience here. Shift + Enter for a new line.')}</small>
     </form>
   </section>;
