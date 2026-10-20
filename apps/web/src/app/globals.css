@@ -1379,9 +1379,31 @@ details.panel:not([open])>summary {
   padding: 36px 24px 70px;
 }
 
-.onboarding-page>.brand {
-  font-size: 24px;
+.onboarding-header {
   margin-bottom: 32px;
+}
+
+.onboarding-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.onboarding-header .brand {
+  font-size: 24px;
+}
+
+.onboarding-header nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.onboarding-header .text-button {
+  min-height: 44px;
 }
 
 .setup-card {

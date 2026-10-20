@@ -1,11 +1,11 @@
 import { redirect } from 'next/navigation';
 import { currentAccount, withUserStore } from '@/lib/auth';
 import SearchChat from '@/components/search-chat';
-import { brand } from '@core/brand';
+import OnboardingHeader from '@/components/onboarding-header';
 export const dynamic='force-dynamic';
 export default async function OnboardingPage() {
   const account=await currentAccount();if(!account)redirect('/login');
   const {profile}=await withUserStore(store=>store.profile());
   if(profile.onboardingCompleted)redirect('/');
-  return <main className="onboarding-page chat-onboarding-page"><a className="brand" href="/">{brand.name}</a><SearchChat onboarding/></main>;
+  return <main className="onboarding-page chat-onboarding-page"><OnboardingHeader/><SearchChat onboarding/></main>;
 }

@@ -2,9 +2,15 @@
 import AccountSettings from './account-settings';
 import {useI18n} from './i18n';
 import WorkspaceSidebar from './workspace-sidebar';
+import OnboardingHeader from './onboarding-header';
 
-export default function Settings({name,matchCount}:{name:string;matchCount:number}) {
+export default function Settings({name,matchCount,onboardingCompleted}:{name:string;matchCount:number;onboardingCompleted:boolean}) {
   const {t}=useI18n();
+  if(!onboardingCompleted)return <main className="onboarding-page chat-onboarding-page">
+    <OnboardingHeader settings/>
+    <header className="page-header"><div><h1>{t('Settings')}</h1><p className="muted">{t('Language and account preferences')}</p></div></header>
+    <AccountSettings/>
+  </main>;
   return <div className="app-shell">
     <WorkspaceSidebar activeView="settings" name={name} matchCount={matchCount}/>
     <main className="main-content">
