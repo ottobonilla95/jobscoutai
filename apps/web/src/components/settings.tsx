@@ -1,22 +1,22 @@
 'use client';
-import AccountSettings from './account-settings';
+import AccountSettings,{type AccountStatus} from './account-settings';
 import {useI18n} from './i18n';
 import WorkspaceSidebar from './workspace-sidebar';
 import OnboardingHeader from './onboarding-header';
 
-export default function Settings({name,matchCount,onboardingCompleted}:{name:string;matchCount:number;onboardingCompleted:boolean}) {
+export default function Settings({name,matchCount,onboardingCompleted,account}:{name:string;matchCount:number;onboardingCompleted:boolean;account:AccountStatus}) {
   const {t}=useI18n();
   if(!onboardingCompleted)return <main className="onboarding-page chat-onboarding-page">
     <OnboardingHeader settings/>
     <header className="page-header"><div><h1>{t('Settings')}</h1><p className="muted">{t('Language and account preferences')}</p></div></header>
-    <AccountSettings/>
+    <AccountSettings account={account}/>
   </main>;
   return <div className="app-shell">
     <WorkspaceSidebar activeView="settings" name={name} matchCount={matchCount}/>
     <main className="main-content">
       <div className="topline"><span>{t('WORKSPACE /')} {t('Settings')}</span><span className="private-badge"><span className="tiny-dot"/>{t('Your private job-search assistant')}</span></div>
       <header className="page-header"><div><h1>{t('Settings')}</h1><p className="muted">{t('Language and account preferences')}</p></div></header>
-      <AccountSettings/>
+      <AccountSettings account={account}/>
     </main>
   </div>;
 }
