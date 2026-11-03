@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "apps/web/src/app/globals.css"
+        ],
+        "createdAt": "2026-11-03T11:55:15.936Z",
+        "reason": "Agent: the existing .criterion grouping border uses the neutral --line token (#262626), not a colored accent. Preserve this intentional structural separator; scope the exception to this rule in this file."
+      }
+    ]
+  }
+}

@@ -1,20 +1,16 @@
 'use client';
 import {useI18n} from './i18n';
-import { useCallback, useEffect, useState } from 'react';
-import { Search, Activity, ArrowUpRight, ArrowRight, Bookmark, X, Clock3, Mail, CircleDot, AlertCircle } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Search, Activity, ArrowRight, X, Clock3, Mail, AlertCircle, SlidersHorizontal } from 'lucide-react';
 import type { DashboardData } from '@/lib/dashboard';
 import type { Job, Profile } from '@core/profile';
-import ResearchDossierView from './research-dossier';
-import ResearchAction from './research-action';
-import {ResearchProgress,ResearchRunReport} from './research-progress';
-import OpportunityFeedback from './opportunity-feedback';
+import {ResearchRunReport} from './research-progress';
 import ReviewedPreferences from './reviewed-preferences';
-import ResearchQueue from './research-queue';
 import SearchDiscoveryReport from './search-discovery-report';
 import SearchProfile from './search-profile';
 import SearchChat from './search-chat';
-import { strongMatch, recommendation, recommendationLabels } from '@core/recommendation';
-import TrackingEditor from './tracking-editor';
+import { strongMatch, recommendation } from '@core/recommendation';
+import OpportunityReview from './opportunity-review';
 import { sourceOptions, sourceLabel } from '@core/source-settings';
 import WorkspaceSidebar, {type DashboardView} from './workspace-sidebar';
 import { activeCountrySources } from '@core/country-sources';
@@ -26,19 +22,25 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
   const [draft,setDraft] = useState<Profile>(initial.profile);
   const [tab,setTab] = useState<DashboardView>(initialView ?? 'matches');
   const [filter,setFilter] = useState('all');
-  const [shown,setShown] = useState(50);
   const [sourceFilter,setSourceFilter] = useState('all');
   const [busy,setBusy] = useState(false);
   const [message,setMessage] = useState('');
   const [isError,setIsError] = useState(false);
   const [dirty,setDirty] = useState(false);
+  const [assistantVisible,setAssistantVisible] = useState(false);
+  const [assistantOpened,setAssistantOpened] = useState(false);
+  const [pendingJob,setPendingJob] = useState<string|null>(null);
+  const pendingJobRef = useRef(false);
+  const [refreshError,setRefreshError] = useState(false);
+  const [undo,setUndo] = useState<{job:Job;status:Job['status']}|null>(null);
   const refresh = useCallback(async () => {
     const response = await fetch('/api/dashboard');
     if (response.status === 401) { window.location.assign('/login'); return; }
     if (!response.ok) throw new Error(t("Could not refresh the dashboard."));
     setData(await response.json());
-  },[]);
-  useEffect(() => { const timer = setInterval(() => { refresh().catch(()=>{}); },10000); return () => clearInterval(timer); },[refresh]);
+    setRefreshError(false);
+  },[locale]);
+  useEffect(() => { const timer = setInterval(() => { refresh().catch(()=>setRefreshError(true)); },10000); return () => clearInterval(timer); },[refresh]);
   useEffect(()=>{if(!dirty)setDraft(data.profile);},[data.profile,dirty]);
   const notify = (text: string, error = false) => { setMessage(text); setIsError(error); };
   function navigateTab(view: DashboardView) {
@@ -49,7 +51,7 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
   }
   async function action(url: string, method = 'POST', body?: unknown) {
     const response = await fetch(url,{method, headers: body ? {'Content-Type':'application/json'} : undefined, body:body ? JSON.stringify(body) : undefined});
-    const result = await response.json();
+    const result = await response.json().catch(()=>({error:t("Something went wrong.")}));
     if (!response.ok) throw new Error(result.error || t("Something went wrong."));
     await refresh(); return result;
   }
@@ -57,7 +59,6 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
   const running = data.runs.some(r=>r.status==='running');
   const workerOnline = data.state.heartbeat && Date.now()-Date.parse(data.state.heartbeat)<180000;
   const strong = data.jobs.filter(j=>strongMatch(j,data.profile,data.version));
-  const saved = data.jobs.filter(j=>j.status==='saved');
   const visible = data.jobs.filter(j=>sourceFilter==='all'||(j.sourceKey||'linkedin')===sourceFilter).filter(j=>filter==='dismissed' ? j.status==='dismissed' : j.status!=='dismissed' &&
     (filter==='saved' ? j.status==='saved' : filter==='strong' ? strong.some(s=>s.id===j.id) : filter==='research'?recommendation(j)==='research':filter==='applications'?['applied','interviewing','offer'].includes(j.tracking?.stage||''):filter==='followups'?Boolean(j.tracking?.followUp&&j.tracking.followUp<=new Date().toISOString().slice(0,10)):true));
   const needsSetup = !data.profile.cvText || !data.integrations.ai;
@@ -70,12 +71,24 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
     } catch(e) { notify(e instanceof Error ? e.message : t("Could not save."),true); } finally { setBusy(false); }
   }
   async function setJobStatus(job: Job, status: Job['status']) {
-    try { await action(`/api/jobs/${encodeURIComponent(job.id)}`,'PATCH',{status}); }
-    catch(e) { notify(e instanceof Error?e.message:t("Could not update job."),true); }
+    if (pendingJobRef.current) return;
+    pendingJobRef.current=true; setPendingJob(job.id);
+    try {
+      const response=await fetch(`/api/jobs/${encodeURIComponent(job.id)}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+      const result=await response.json().catch(()=>({error:t('Could not update job.')}));
+      if(!response.ok)throw new Error(result.error||t('Could not update job.'));
+      setData(current=>({...current,jobs:current.jobs.map(item=>item.id===job.id?{...item,status}:item)}));
+      setUndo(status==='dismissed'?{job,status:job.status}:null);
+      notify(t(status==='dismissed'?'Opportunity archived.':status==='saved'?'Opportunity saved.':job.status==='dismissed'?'Opportunity restored.':'Removed from saved opportunities.'));
+      await refresh().catch(()=>setRefreshError(true));
+    } catch(e) { notify(e instanceof Error?e.message:t('Could not update job.'),true); }
+    finally {pendingJobRef.current=false;setPendingJob(null);}
   }
-  return <div className="app-shell">
+  return <div className={`app-shell${tab==='matches'?' review-shell':''}`}>
+    <a className="review-skip" href="#workspace-main">{t('Skip to content')}</a>
     <WorkspaceSidebar activeView={tab} name={data.profile.name} matchCount={strong.length} dirty={dirty} onNavigate={navigateTab} onSignOutError={text=>notify(text,true)}/>
-    <main className="main-content">
+    <main id="workspace-main" className="main-content">
+      {tab==='matches'?<header className="review-header"><div><h1>{t('Review opportunities')}</h1><p>{data.runs[0]?t('Latest search: {date}',{date:date(data.runs[0].startedAt)}):t('Your next move starts with a good fit.')}</p></div><div className="review-header-actions"><button type="button" className="button secondary" aria-expanded={assistantVisible} aria-controls="search-assistant-panel" onClick={()=>{setAssistantOpened(true);setAssistantVisible(value=>!value);}}><SlidersHorizontal size={17}/>{t('Refine search')}</button><button type="button" className="button primary" disabled={busy||running||data.state.requested} onClick={async()=>{setBusy(true);try{const result=await action('/api/search');notify(result.message);}catch(error){notify(error instanceof Error?error.message:t('Search could not start.'),true);}finally{setBusy(false);}}}><Search size={18}/>{running?t('Searching…'):data.state.requested?t('Search queued'):t('Search now')}</button></div></header>:<>
       <div className="topline"><span>{t("WORKSPACE /")} {tab==='profile'?t("SEARCH PROFILE"):tab==='activity'?t("ACTIVITY"):t("OPPORTUNITIES")}</span><span className="private-badge"><span className="tiny-dot"/>{t("Your private job-search assistant")}</span></div>
       <header className="page-header"><div><span className="eyebrow">{tab==='profile'?t("THE DIRECTION IS YOURS"):tab==='activity'?t("A CLEAR VIEW OF THE WORK"):t("GOOD WORK STARTS WITH A GOOD FIT")}</span>
         <h1>{tab==='profile'?t("Search profile"):tab==='activity'?t("Behind the search."):t("Your next chapter.")}</h1><p className="muted">{tab==='profile'?t("Keep your experience and preferences up to date."):tab==='activity'?t("Search history, delivery status, and a little peace of mind."):t("Meaningful opportunities, selected around your experience and ambition.")}</p></div>
@@ -83,21 +96,14 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
           setBusy(true);try{const result=await action('/api/search');notify(result.message);}catch(e){notify(e instanceof Error?e.message:t("Search could not start."),true);}finally{setBusy(false);}
         }}><Search size={16}/>{running?t("Searching…"):data.state.requested?t("Search queued"):t("Search now")}</button>}
       </header>
-      {message&&<div role={isError?'alert':'status'} className={`toast ${isError?'error':''}`}><span>{localizeMessage(message)}</span><button className="icon-button" aria-label={t("Dismiss message")} onClick={()=>setMessage('')}><X size={16}/></button></div>}
-      <div className="search-workspace" hidden={tab!=='matches'}>
-        <SearchChat profileKey={JSON.stringify({...data.profile,discoveredCompanyBoards:[]})} onSaved={refresh}/>
-        <div className="search-results">
-        <section className="stats" aria-label={t("Search overview")}><Stat label={t("Strong matches")} value={number(strong.length)} note={t("Worth a closer look")} icon={<CircleDot size={18}/>}/><Stat label={t("Saved opportunities")} value={number(saved.length)} note={t("Your personal shortlist")} icon={<Bookmark size={18}/>}/><Stat label={t("Search cadence")} value={t('{count} hours',{count:number(data.profile.intervalHours)})} note={data.profile.enabled?t("Automatic searches enabled"):t("Automatic searches paused")} icon={<Clock3 size={18}/>}/></section>
-        <div className="search-strip"><span className={`status-dot ${data.profile.enabled?'on':''}`}/><div><strong>{running?t("Your search is running"):data.profile.enabled?t("{productName} is on the lookout"):t("{productName} is ready when you are")}</strong><span>{data.profile.enabled?t('Next search: {date}',{date:date(data.state.nextRun)}):t("Set your preferences, then switch on scheduled searches.")}{!workerOnline?t(" · Worker not connected"):''}</span></div><button className="text-button" onClick={()=>navigateTab('profile')}>{t("Manage search")}<ArrowRight size={15}/></button></div>
-        {needsSetup&&<div className="setup-banner"><div><span className="eyebrow">{t("START WITH YOU")}</span><h2>{t("A great match needs a little context.")}</h2><p>{t("Add your CV and preferences to give your search a clear direction.")}</p></div><button className="button secondary" onClick={()=>navigateTab('profile')}>{t("Complete your profile")}<ArrowRight size={16}/></button></div>}
-        <div className="section-heading"><h2>{t("Your opportunities")} <span>{visible.length}</span></h2><span className="source-label">{data.runs[0]?t('Latest search: {date}',{date:date(data.runs[0].startedAt)}):t("Across your job sources")}</span></div>
-        <div className="filter-row" role="group" aria-label={t("Filter opportunities")}>{[['all',t("All opportunities")],['strong',t("Strong matches")],['saved',t("Saved")],['research',t("Research queue")],['applications',t("Applications")],['followups',t("Follow-ups due")],['dismissed',t("Archive")]].map(([key,label])=><button key={key} className={filter===key?'filter active':'filter'} onClick={()=>setFilter(key)}>{label}</button>)}</div>
-        {filter==='research'&&<ResearchQueue leads={data.leads} refresh={refresh}/>}
-        <label className="source-filter">{t("Show source")}<select value={sourceFilter} onChange={e=>setSourceFilter(e.target.value)}><option value="all">{t("All sources")}</option>{[...new Set(data.jobs.map(j=>j.sourceKey||'linkedin'))].map(key=><option value={key} key={key}>{sourceLabel(key)}</option>)}</select></label>
-        <div className="job-list">{visible.length ? visible.slice(0,shown).map(job=><JobCard key={job.id} job={job} currentVersion={data.version} update={status=>setJobStatus(job,status)} refresh={refresh}/>) : <div className="empty-state"><div className="empty-icon"><Search size={27}/></div><h2>{filter==='saved'?t("Keep the promising ones close."):filter==='dismissed'?t("Nothing dismissed."):t("The right opportunity is worth finding.")}</h2><p>{filter==='saved'?t("Save a job to build your shortlist here."):filter==='dismissed'?t("Jobs you dismiss will appear here."):t("Your real search results will appear here, with clear reasons for each match and a direct link to the original listing.")}</p>{needsSetup&&<button className="text-button" onClick={()=>navigateTab('profile')}>{t("Set up your search")}<ArrowRight size={15}/></button>}</div>}</div>
-        {visible.length>shown&&<button className="button secondary" onClick={()=>setShown(n=>n+50)}>{t('Show more opportunities ({count} remaining)',{count:number(visible.length-shown)})}</button>}
-        <p className="footnote">{t("Public listings from your selected sources · Coverage varies by source · Scores guide your review; unstated details remain unknown.")}</p>
-        </div>
+      </>}
+      {message&&<div role={isError?'alert':'status'} className={`toast ${isError?'error':''}`}><span>{localizeMessage(message)}</span>{undo&&!isError&&<button type="button" className="text-button" disabled={pendingJob!==null} onClick={()=>void setJobStatus(undo.job,undo.status)}>{t('Undo')}</button>}<button className="icon-button" aria-label={t("Dismiss message")} onClick={()=>setMessage('')}><X size={16}/></button></div>}
+      {refreshError&&<div className="review-service-notice" role="alert"><AlertCircle size={18}/><div><strong>{t('Results could not be refreshed.')}</strong><p>{t('Your current results are still here. Check your connection and try again.')}</p></div><button type="button" className="text-button" onClick={()=>void refresh().catch(()=>setRefreshError(true))}>{t('Try again')}</button></div>}
+      <div hidden={tab!=='matches'}>
+        <aside id="search-assistant-panel" className="review-assistant" hidden={!assistantVisible}>{assistantOpened&&<><div className="review-assistant-top"><button type="button" className="text-button" onClick={()=>{setAssistantVisible(false);document.querySelector<HTMLButtonElement>('[aria-controls="search-assistant-panel"]')?.focus();}}><X size={16}/>{t('Close assistant')}</button></div><SearchChat profileKey={JSON.stringify({...data.profile,discoveredCompanyBoards:[]})} onSaved={refresh}/></>}</aside>
+        {needsSetup&&<div className="review-service-notice"><AlertCircle size={18}/><div><strong>{t('A great match needs a little context.')}</strong><p>{t('Add your CV and preferences to give your search a clear direction.')}</p></div><button type="button" className="text-button" onClick={()=>navigateTab('profile')}>{t('Complete your profile')}<ArrowRight size={15}/></button></div>}
+        {(data.profile.enabled||data.state.requested)&&!workerOnline&&<div className="review-service-notice" role="status"><AlertCircle size={18}/><div><strong>{t('Search is waiting for a connection.')}</strong><p>{t('Your results are saved. New searches will resume when the search service reconnects.')}{data.state.requested?' '+t('Your manual search is still queued.'):''}</p></div><button type="button" className="text-button" onClick={()=>navigateTab('activity')}>{t('View search status')}<ArrowRight size={15}/></button></div>}
+        <OpportunityReview jobs={visible} allJobs={data.jobs} profile={data.profile} version={data.version} filter={filter} onFilter={setFilter} source={sourceFilter} onSource={setSourceFilter} pendingJob={pendingJob} onUpdate={setJobStatus} refresh={refresh} leads={data.leads} needsSetup={needsSetup} onSetup={()=>navigateTab('profile')}/>
       </div>
       {tab==='profile'&&<>
         <ReviewedPreferences profile={data.profile} version={data.version} refresh={refresh}/>
@@ -127,21 +133,6 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
     </main>
   </div>;
 }
-function Stat({label,value,note,icon}:{label:string;value:string;note:string;icon:React.ReactNode}) { return <div className="stat-card"><div><span>{label}</span>{icon}</div><strong>{value}</strong><small>{note}</small></div>; }
 function Integration({label,ready}:{label:string;ready:boolean}) {
  const {t,locale,date,number,message:localizeMessage}=useI18n();
  return <span className={`integration ${ready?'ready':''}`}><span className="tiny-dot"/>{label}<small>{ready?t("Connected"):t("Needs setup")}</small></span>; }
-function JobCard({job,currentVersion,update,refresh}:{job:Job;currentVersion:number;update:(status:Job['status'])=>void;refresh:()=>Promise<void>}) {
- const {t,locale,date,number,message:localizeMessage}=useI18n();
-
-  const a=job.assessment;const stale=job.evaluatedVersion!==currentVersion;
-  return <article className="job-card"><div className="job-main"><div className="company-avatar">{job.company.slice(0,1)||'L'}</div><div className="job-content"><div className="job-company">{job.company}<span>·</span>{job.location || t("Location unspecified")}</div><a href={job.url} target="_blank" rel="noopener noreferrer" className="job-title">{job.title}<ArrowUpRight size={17}/></a>{a&&(a.language||'en')!==locale&&<p className="footnote">{t('Analysis language: {language}. New evaluations use your current language.',{language:t(a.language==='es'?'Spanish':'English')})}</p>}<p>{a?.summary || t("Waiting for the worker to read the description and evaluate fit.")}</p><div className="job-tags"><span className="pill neutral">{sourceLabel(job.sourceKey)}</span><span className="pill neutral">{t(recommendationLabels[recommendation(job)])}</span>{job.duplicateOf&&<span className="pill neutral">{t("Possible duplicate · excluded from alerts")}</span>}{a?.equityEvidence&&<span className="pill green">{t("Equity stated")}</span>}{a?.eligibility==='uncertain'&&<span className="pill neutral">{t("Eligibility to confirm")}</span>}{stale&&a&&<span className="pill neutral">{t("Profile changed · Review pending")}</span>}<span className="job-date">{t("Found")} {new Date(job.firstSeen).toLocaleDateString(locale==='es'?'es-ES':'en-GB',{timeZone:'UTC',month:'short',day:'numeric'})}</span></div></div><div className="job-score">{a?<><strong>{number(a.score)}<small>/100</small></strong><span>{t("FIT SCORE")}</span></>:<span className="pill neutral">{t("Pending")}</span>}</div></div>
-    {a&&<details className="job-details"><summary>{t("Why this could fit")} <span>+</span></summary><div className="details-grid"><div><h3>{t("The match")}</h3><ul>{a.reasons.map((r,i)=><li key={i}>{r}</li>)}</ul><h3>{t("Questions to explore")}</h3>{a.concerns.length?<ul>{a.concerns.map((r,i)=><li key={i}>{r}</li>)}</ul>:<p>{t("None flagged by the evaluator.")}</p>}</div><div><h3>{t("What the listing actually says")}</h3><dl><dt>{t("Salary")}</dt><dd>{a.salaryEvidence || t("Not specified")}</dd><dt>{t("Equity")}</dt><dd>{a.equityEvidence || t("Not specified")}</dd>{a.founderPathEvidence&&<><dt>{t("Ownership evidence")}</dt><dd>{a.founderPathEvidence}</dd></>}</dl></div></div>{job.description&&<details className="description"><summary>{t("Read the source description")}</summary><p>{job.description}</p></details>}</details>}
-    <ResearchProgress job={job}/>
-    <ResearchDossierView dossier={job.research} currentVersion={currentVersion}/>
-    <ResearchAction job={job} refresh={refresh}/>
-    <OpportunityFeedback key={`${job.id}:${job.feedback?.id}:${job.feedback?.status}`} job={job} refresh={refresh}/>
-    <TrackingEditor job={job} refresh={refresh}/>
-    <div className="job-footer"><a className="text-button" href={job.url} target="_blank" rel="noopener noreferrer">{t("View original listing")}<ArrowUpRight size={15}/></a><div>{job.status==='dismissed'?<button className="text-button muted" onClick={()=>update('new')}>{t("Restore")}</button>:<><button className={`text-button ${job.status==='saved'?'saved':'muted'}`} onClick={()=>update(job.status==='saved'?'new':'saved')}><Bookmark size={15} fill={job.status==='saved'?'currentColor':'none'}/>{job.status==='saved'?t("Saved"):t("Save")}</button><button className="icon-button" aria-label={t('Dismiss {title}',{title:job.title})} onClick={()=>update('dismissed')}><X size={17}/></button></>}</div></div>
-  </article>;
-}

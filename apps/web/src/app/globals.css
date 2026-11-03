@@ -1512,7 +1512,6 @@ details.panel:not([open])>summary {
 .setup-progress progress::-webkit-progress-value {
   background: var(--green);
   border-radius: var(--radius-control);
-  transition: width .2s;
 }
 
 .setup-progress progress::-moz-progress-bar {
