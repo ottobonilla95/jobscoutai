@@ -84,14 +84,13 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
     } catch(e) { notify(e instanceof Error?e.message:t('Could not update job.'),true); }
     finally {pendingJobRef.current=false;setPendingJob(null);}
   }
-  return <div className={`app-shell${tab==='matches'?' review-shell':''}`}>
+  return <div className="app-shell review-shell">
     <a className="review-skip" href="#workspace-main">{t('Skip to content')}</a>
     <WorkspaceSidebar activeView={tab} name={data.profile.name} matchCount={strong.length} dirty={dirty} onNavigate={navigateTab} onSignOutError={text=>notify(text,true)}/>
     <main id="workspace-main" className="main-content">
       {tab==='matches'?<header className="review-header"><div><h1>{t('Review opportunities')}</h1><p>{data.runs[0]?t('Latest search: {date}',{date:date(data.runs[0].startedAt)}):t('Your next move starts with a good fit.')}</p></div><div className="review-header-actions"><button type="button" className="button secondary" aria-expanded={assistantVisible} aria-controls="search-assistant-panel" onClick={()=>{setAssistantOpened(true);setAssistantVisible(value=>!value);}}><SlidersHorizontal size={17}/>{t('Refine search')}</button><button type="button" className="button primary" disabled={busy||running||data.state.requested} onClick={async()=>{setBusy(true);try{const result=await action('/api/search');notify(result.message);}catch(error){notify(error instanceof Error?error.message:t('Search could not start.'),true);}finally{setBusy(false);}}}><Search size={18}/>{running?t('Searching…'):data.state.requested?t('Search queued'):t('Search now')}</button></div></header>:<>
-      <div className="topline"><span>{t("WORKSPACE /")} {tab==='profile'?t("SEARCH PROFILE"):tab==='activity'?t("ACTIVITY"):t("OPPORTUNITIES")}</span><span className="private-badge"><span className="tiny-dot"/>{t("Your private job-search assistant")}</span></div>
-      <header className="page-header"><div><span className="eyebrow">{tab==='profile'?t("THE DIRECTION IS YOURS"):tab==='activity'?t("A CLEAR VIEW OF THE WORK"):t("GOOD WORK STARTS WITH A GOOD FIT")}</span>
-        <h1>{tab==='profile'?t("Search profile"):tab==='activity'?t("Behind the search."):t("Your next chapter.")}</h1><p className="muted">{tab==='profile'?t("Keep your experience and preferences up to date."):tab==='activity'?t("Search history, delivery status, and a little peace of mind."):t("Meaningful opportunities, selected around your experience and ambition.")}</p></div>
+      <header className="review-header"><div>
+        <h1>{tab==='profile'?t("Search profile"):t("Activity")}</h1><p>{tab==='profile'?t("Keep your experience and preferences up to date."):t("Search history, delivery status, and a little peace of mind.")}</p></div>
         {tab!=='profile'&&<button className="button primary" disabled={busy||running||data.state.requested} onClick={async()=>{
           setBusy(true);try{const result=await action('/api/search');notify(result.message);}catch(e){notify(e instanceof Error?e.message:t("Search could not start."),true);}finally{setBusy(false);}
         }}><Search size={16}/>{running?t("Searching…"):data.state.requested?t("Search queued"):t("Search now")}</button>}
@@ -106,7 +105,6 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
         <OpportunityReview jobs={visible} allJobs={data.jobs} profile={data.profile} version={data.version} filter={filter} onFilter={setFilter} source={sourceFilter} onSource={setSourceFilter} pendingJob={pendingJob} onUpdate={setJobStatus} refresh={refresh} leads={data.leads} needsSetup={needsSetup} onSetup={()=>navigateTab('profile')}/>
       </div>
       {tab==='profile'&&<>
-        <ReviewedPreferences profile={data.profile} version={data.version} refresh={refresh}/>
         <SearchProfile profile={data.profile} minimum={data.minimumSearchIntervalHours} onSaved={async()=>{const response=await fetch('/api/dashboard');if(!response.ok)throw new Error(t('Could not refresh the dashboard.'));const next=await response.json();setData(next);setDraft(next.profile);setDirty(false);}}/>
         <details className="panel search-controls"><summary><h2>{t('Search sources and automatic searches')}</h2></summary>
           <form onSubmit={e=>{e.preventDefault();void save();}}>
@@ -122,6 +120,7 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
             <button className="button secondary" disabled={busy}>{t('Save search settings')}</button>
           </form>
         </details>
+        <ReviewedPreferences profile={data.profile} version={data.version} refresh={refresh}/>
       </>}
       {tab==='activity'&&<>
         <div className="integration-row"><Integration label={t("AI matching")} ready={data.integrations.ai}/><Integration label={t("Email delivery")} ready={data.integrations.email}/><Integration label={t("Worker")} ready={Boolean(workerOnline)}/></div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Activity, Compass, FileText, LogOut, Search, SlidersHorizontal } from 'lucide-react';
 import { brand } from '@core/brand';
 import { useI18n } from './i18n';
@@ -23,6 +23,12 @@ export default function WorkspaceSidebar({activeView, name, matchCount, dirty = 
 }) {
   const {t} = useI18n();
   const [error, setError] = useState('');
+  const navigationRef=useRef<HTMLElement>(null);
+  useEffect(()=>{
+    const nav=navigationRef.current;
+    const active=nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if(nav&&active&&nav.scrollWidth>nav.clientWidth)nav.scrollLeft=active.offsetLeft-nav.offsetLeft-(nav.clientWidth-active.offsetWidth)/2;
+  },[activeView]);
   async function signOut() {
     setError('');
     try {
@@ -38,7 +44,7 @@ export default function WorkspaceSidebar({activeView, name, matchCount, dirty = 
   return <aside className="sidebar">
     <a className="brand" href="/"><span className="brand-icon"><Compass size={23}/></span><span>{brand.name}</span></a>
     <div className="workspace-label">{t('YOUR WORKSPACE')}</div>
-    <nav aria-label={t('Workspace')}>
+    <nav ref={navigationRef} aria-label={t('Workspace')}>
       {navigation.map(({view, label, href, Icon}) => <a key={view} href={href} className={`nav-item${activeView === view ? ' active' : ''}`} aria-current={activeView === view ? 'page' : undefined} onClick={event => {
         if (view !== 'settings' && view !== 'cv-builder' && onNavigate && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) {
           event.preventDefault(); onNavigate(view);

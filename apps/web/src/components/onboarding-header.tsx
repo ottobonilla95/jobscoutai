@@ -1,6 +1,6 @@
 'use client';
 import {useState} from 'react';
-import {ArrowLeft,LogOut,Settings} from 'lucide-react';
+import {ArrowLeft,Compass,LogOut,Settings} from 'lucide-react';
 import {brand} from '@core/brand';
 import {useI18n} from './i18n';
 
@@ -22,7 +22,7 @@ export default function OnboardingHeader({settings=false}:{settings?:boolean}){
   }
   return <header className="onboarding-header">
     <div className="onboarding-header-row">
-      <a className="brand" href="/onboarding">{brand.name}</a>
+      <a className="brand" href="/onboarding"><span className="brand-icon"><Compass size={23}/></span><span>{brand.name}</span></a>
       <nav aria-label={t('Your account')}>
         {settings?<a className="text-button" href="/onboarding"><ArrowLeft size={16}/>{t('Continue setup')}</a>
           :<a className="text-button" href="/settings"><Settings size={16}/>{t('Settings')}</a>}

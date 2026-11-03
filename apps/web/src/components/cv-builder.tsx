@@ -53,11 +53,11 @@ export default function CvBuilder({name,matchCount,initialCvs,sourceText}:{name:
     setBusy(true);setError('');setMessage('');
     try{await action();}catch(e){setError(e instanceof Error?e.message:t('Please try again.'));}finally{setBusy(false);}
   }
-  return <div className="app-shell">
+  return <div className="app-shell review-shell">
+    <a className="review-skip" href="#workspace-main">{t('Skip to content')}</a>
     <WorkspaceSidebar activeView="cv-builder" name={name} matchCount={matchCount}/>
-    <main className="main-content cv-builder-main">
-      <div className="topline"><span>{t('WORKSPACE /')} {t('CV builder')}</span><span className="private-badge"><span className="tiny-dot"/>{t('Your account · Private')}</span></div>
-      <header className="page-header"><div><span className="eyebrow">{t('YOUR EXPERIENCE, YOUR STORY')}</span><h1>{t('Build your next chapter.')}</h1><p className="muted">{t('Write once. Choose a template. Make it yours.')}</p></div></header>
+    <main id="workspace-main" className="main-content cv-builder-main">
+      <header className="review-header"><div><h1>{t('CV builder')}</h1><p>{t('Write once. Choose a template. Make it yours.')}</p></div></header>
       <div className="cv-workspace-toolbar">
         <label>{t('Saved CVs')}<select value={selected?.id??''} disabled={busy} onChange={event=>switchCv(cvs.find(cv=>cv.id===event.target.value)??null)}><option value="">{t('New CV')}</option>{cvs.map(cv=><option key={cv.id} value={cv.id}>{cv.title}</option>)}</select></label>
         <div className="cv-actions">

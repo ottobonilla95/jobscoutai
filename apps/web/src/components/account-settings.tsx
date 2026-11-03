@@ -6,7 +6,7 @@ export default function AccountSettings({account}:{account:AccountStatus}){
  const {t}=useI18n();
 
  const [message,setMessage]=useState('');const [busy,setBusy]=useState(false);
- return <><section className="panel"><h2>{t('Language')}</h2><p>{t('Choose your language. Your choice is saved to your account.')}</p><LanguageSelect/></section><section className="panel"><h2>{t("Your account")}</h2><p>{account.email} · {account.verified?t("Email verified"):t("Email not verified")}</p>{!account.verified&&<button type="button" className="button secondary" disabled={busy||!account.emailAvailable} onClick={async()=>{setBusy(true);try{const response=await fetch('/api/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'verify'})});const result=await response.json();setMessage(result.message||result.error);}catch{setMessage(t("Could not request verification."));}finally{setBusy(false);}}}>{t("Send verification email")}</button>}<p className="footnote">{t("Job emails can only go to your verified account address.")} {account.emailAvailable?'':t("Email delivery needs to be connected by the platform owner.")}</p><a href="/account-help" className="text-button">{t("Reset password")}</a>{message&&<p role="status">{message}</p>}</section><DeleteAccount/></>;
+ return <div className="account-preferences"><section className="account-section"><div><h2>{t('Language')}</h2><p>{t('Choose your language. Your choice is saved to your account.')}</p></div><div className="account-section-content"><LanguageSelect/></div></section><section className="account-section"><div><h2>{t("Your account")}</h2><p>{t("Job emails can only go to your verified account address.")}</p></div><div className="account-section-content"><strong className="account-email">{account.email}</strong><span className={`account-verification${account.verified?' verified':''}`}>{account.verified?t("Email verified"):t("Email not verified")}</span>{!account.verified&&<button type="button" className="button secondary" disabled={busy||!account.emailAvailable} onClick={async()=>{setBusy(true);try{const response=await fetch('/api/account',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'verify'})});const result=await response.json();setMessage(result.message||result.error);}catch{setMessage(t("Could not request verification."));}finally{setBusy(false);}}}>{t("Send verification email")}</button>}{!account.emailAvailable&&<p className="footnote">{t("Email delivery needs to be connected by the platform owner.")}</p>}<a href="/account-help" className="text-button">{t("Reset password")}</a>{message&&<p role="status">{message}</p>}</div></section><DeleteAccount/></div>;
 }
 
 function DeleteAccount(){
@@ -16,9 +16,9 @@ function DeleteAccount(){
  const [confirmed,setConfirmed]=useState(false);
  const [busy,setBusy]=useState(false);
  const [error,setError]=useState('');
- return <section className="panel" aria-labelledby="delete-account-heading">
-  <h2 id="delete-account-heading">{t('Delete account')}</h2>
-  <p>{t('Permanently delete your account and all saved data, including your CV, profile, jobs, notes, search history, and queued emails. This cannot be undone.')}</p>
+ return <section className="account-section account-delete" aria-labelledby="delete-account-heading">
+  <div><h2 id="delete-account-heading">{t('Delete account')}</h2>
+  <p>{t('Permanently delete your account and all saved data, including your CV, profile, jobs, notes, search history, and queued emails. This cannot be undone.')}</p></div><div className="account-section-content">
   {expanded?<form onSubmit={async event=>{
    event.preventDefault();if(busy||!confirmed)return;
    setBusy(true);setError('');
@@ -38,5 +38,5 @@ function DeleteAccount(){
     <button type="button" className="button secondary" disabled={busy} onClick={()=>{setExpanded(false);setPassword('');setConfirmed(false);setError('');}}>{t('Cancel')}</button>
    </div>
   </form>:<button type="button" className="button red" onClick={()=>setExpanded(true)}>{t('Delete account')}</button>}
- </section>;
+ </div></section>;
 }

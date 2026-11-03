@@ -6,7 +6,8 @@ import type {SearchChat as Conversation} from '@core/search-chat-schema';
 import {locationLabel} from '@core/locations';
 import {sourceLabel} from '@core/source-settings';
 import {useI18n} from './i18n';
-import OnboardingCV, {OnboardingSteps} from './onboarding-cv';
+import OnboardingCV from './onboarding-cv';
+import SetupWorkspace from './setup-workspace';
 
 export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onboarding?:boolean;onSaved?:()=>Promise<void>;profileKey?:string}){
   const {t,locale,message:localizeMessage}=useI18n();
@@ -19,6 +20,7 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
   const [verifying,setVerifying]=useState(false);
   const [reviewCV,setReviewCV]=useState(false);
   const sending=useRef(false);const transcript=useRef<HTMLDivElement>(null);
+  const reviewPanel=useRef<HTMLDivElement>(null);
   const composer=useRef<HTMLTextAreaElement>(null);
   const load=useCallback(async()=>{
     const response=await fetch('/api/chat');
@@ -28,7 +30,11 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
     setVerificationNeeded(Boolean(result.verificationNeeded));
   },[locale]);
   useEffect(()=>{void load().catch(e=>setError(e.message));},[load,profileKey]);
-  useEffect(()=>{const node=transcript.current;if(node)node.scrollTop=node.scrollHeight;},[chat?.revision,busy,pendingText]);
+  useEffect(()=>{
+    const node=transcript.current;if(!node)return;
+    const proposal=chat?.ready&&!busy&&!pendingText?reviewPanel.current:null;
+    node.scrollTop=proposal?node.scrollTop+proposal.getBoundingClientRect().top-node.getBoundingClientRect().top-24:node.scrollHeight;
+  },[chat?.revision,busy,pendingText]);
 
   async function request(body:Record<string,unknown>){
     const response=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -88,16 +94,16 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
     }
   }
   const answers=chat?.draft.answers;
-  if(onboarding&&(!chat||!chat.cvReviewed||reviewCV))return <OnboardingCV key={chat?.revision??'loading'} cvText={answers?.cvText??''} name={answers?.cvFileName??''} loading={!chat} busy={busy} error={error} notice={notice} onUpload={upload} onContinue={continueFromCV} onRetry={()=>{setError('');void load().catch(e=>setError(e.message));}}/>;
-  return <section className={`search-chat${onboarding?' search-chat-onboarding':''}`} aria-label={t('Your search assistant')}>
-    <header className="chat-header">{onboarding&&<OnboardingSteps step={2}/>}<div className="chat-heading"><span className="chat-avatar"><MessageCircle size={19}/></span><div><h2>{t('Your search assistant')}</h2><p>{t(onboarding?'A conversation to find your next chapter.':'Keep shaping your search.')}</p></div></div><span className="chat-saved"><span className="tiny-dot"/>{t(busy?'Working…':chat?.ready?'Draft saved · Preferences not applied':'Conversation saved')}</span>{onboarding&&<button type="button" className="text-button chat-review-cv" disabled={busy} onClick={()=>{setError('');setNotice('');setReviewCV(true);}}><FileText size={14}/>{t('Back to CV')}</button>}</header>
+  if(onboarding&&(!chat||!chat.cvReviewed||reviewCV))return <SetupWorkspace step={1}><OnboardingCV key={chat?.revision??'loading'} cvText={answers?.cvText??''} name={answers?.cvFileName??''} loading={!chat} busy={busy} error={error} notice={notice} onUpload={upload} onContinue={continueFromCV} onRetry={()=>{setError('');void load().catch(e=>setError(e.message));}}/></SetupWorkspace>;
+  const conversation=<section className={`search-chat conversation-workspace${onboarding?' search-chat-onboarding':''}`} aria-label={t('Your search assistant')}>
+    <header className="chat-header"><div className="chat-heading"><span className="chat-avatar"><MessageCircle size={20}/></span><div>{onboarding?<h1>{t('Shape your search')}</h1>:<h2>{t('Your search assistant')}</h2>}<p>{t(onboarding?'A conversation to find your next chapter.':'Keep shaping your search.')}</p></div></div><div className="chat-header-meta"><span className="chat-saved">{chat&&!busy&&<Check size={14}/>}<span>{t(busy?'Working…':chat?.ready?'Draft saved · Preferences not applied':chat?'Conversation saved':'Loading your conversation…')}</span></span>{onboarding&&<button type="button" className="text-button chat-review-cv" disabled={busy} onClick={()=>{setError('');setNotice('');setReviewCV(true);}}><FileText size={15}/>{t('Back to CV')}</button>}</div></header>
     <div className="chat-transcript" ref={transcript} role="log" aria-live="polite" aria-relevant="additions" aria-label={t('Search conversation')} aria-busy={busy} tabIndex={0}>
       {!chat&&!error&&<p className="muted">{t('Loading your conversation…')}</p>}
       {chat?.messages.map(message=><article key={message.id} className={`chat-message chat-message-${message.role}`}><span className="chat-speaker">{t(message.role==='user'?'You':'Search assistant')}</span>{chat.ready&&message.id===chat.messages.at(-1)?.id&&<span className="chat-proposal">{t('Proposed changes · Save below to apply')}</span>}<p>{message.text}</p></article>)}
       {pendingText&&<article className="chat-message chat-message-user"><span className="chat-speaker">{t('You')}</span><p>{pendingText}</p></article>}
       {busy&&<div role="status" className="chat-working"><LoaderCircle size={16} className="spin"/>{t('Thinking about your search…')}</div>}
-      {chat?.ready&&answers&&<div className="chat-review">
-        <span className="eyebrow">{t('READY WHEN YOU ARE')}</span><h3>{t('Your search, ready to save.')}</h3>
+      {chat?.ready&&answers&&<div ref={reviewPanel} className="chat-review">
+        <h3><Check size={20}/>{t('Your search, ready to save.')}</h3>
         <p>{chat.draft.matching?.summary}</p>
         <dl>
           {answers.name&&<><dt>{t('Name')}</dt><dd>{answers.name}</dd></>}
@@ -137,11 +143,12 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
     <form className="chat-composer" onSubmit={event=>{event.preventDefault();void send();}}>
       <label className="sr-only" htmlFor={onboarding?'setup-chat-message':'search-chat-message'}>{t('Message your search assistant')}</label>
       <div className="chat-composer-input">
-      <textarea ref={composer} id={onboarding?'setup-chat-message':'search-chat-message'} rows={3} maxLength={32000} value={text} disabled={!chat||busy} onChange={event=>setText(event.target.value)} placeholder={t(onboarding?'Tell me about you and what you want next…':'What would you like to change about your search?')} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void send();}}}/>
+      <textarea ref={composer} id={onboarding?'setup-chat-message':'search-chat-message'} rows={2} maxLength={32000} value={text} disabled={!chat||busy} onChange={event=>setText(event.target.value)} placeholder={t(onboarding?'Tell me about you and what you want next…':'What would you like to change about your search?')} onKeyDown={event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.nativeEvent.isComposing){event.preventDefault();void send();}}}/>
       <button type="submit" className="button primary chat-send" disabled={!text.trim()||!chat||busy} aria-label={t('Send message')}><Send size={16}/></button>
       </div>
       {!onboarding&&<div className="chat-composer-actions"><label className={`chat-attach${busy||!chat?' disabled':''}`}><Paperclip size={16}/>{t('Add CV')}<input type="file" className="setup-file" accept=".pdf,.docx,.txt" disabled={busy||!chat} onChange={event=>void upload(event)}/></label></div>}
       <small>{t(onboarding?'Shift + Enter for a new line.':'PDF, DOCX or TXT · You can also paste experience here. Shift + Enter for a new line.')}</small>
     </form>
   </section>;
+  return onboarding?<SetupWorkspace step={2}>{conversation}</SetupWorkspace>:conversation;
 }

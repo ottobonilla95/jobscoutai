@@ -1,0 +1,208 @@
+/* The selected review workspace's visual system, carried through the whole journey. */
+.auth-page { min-height: 100dvh; max-width: 1440px; margin: auto; padding: 0 56px 40px; }
+.auth-header { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 112px; border-bottom: 1px solid var(--line); }
+.auth-header .brand, .onboarding-header .brand { font-size: 24px; letter-spacing: -.035em; }
+.auth-header .language-control { margin: 0; }
+.auth-header .language-control label { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--muted); }
+.auth-header select { width: 116px; min-height: 44px; margin: 0; padding: 8px 12px; font-size: 13px; }
+.auth-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(320px, .9fr); gap: 9%; align-items: center; min-height: calc(100dvh - 152px); padding: 64px 3%; }
+.auth-intro h2 { font-size: clamp(36px, 4.2vw, 58px); letter-spacing: -.035em; line-height: 1.12; max-width: 12ch; text-wrap: balance; font-weight: 650; }
+.auth-intro > p:not(.auth-privacy) { font-size: 17px; line-height: 1.65; color: var(--muted); max-width: 38ch; margin-top: 24px; }
+.auth-journey { list-style: none; display: grid; gap: 24px; padding: 0; margin: 40px 0; }
+.auth-journey li { display: flex; align-items: flex-start; gap: 16px; }
+.auth-journey svg { color: var(--green); flex-shrink: 0; margin-top: 3px; }
+.auth-journey strong { font-size: 15px; font-weight: 600; }
+.auth-journey p { font-size: 14px; color: var(--muted); margin-top: 3px; }
+.auth-privacy { display: flex; align-items: flex-start; gap: 9px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.auth-privacy svg { flex-shrink: 0; margin-top: 2px; }
+.auth-form.login-card { background: transparent; border: 0; padding: 0; max-width: 420px; width: 100%; justify-self: center; }
+.auth-form.login-card h1 { font-size: 32px; letter-spacing: -.03em; margin: 0 0 12px; }
+.auth-form.login-card > .muted { font-size: 15px; line-height: 1.65; }
+.auth-form.login-card form { margin-top: 30px; }
+.auth-form.login-card form > label { font-size: 14px; margin-top: 20px; margin-bottom: 8px; }
+.auth-form input { min-height: 50px; padding: 12px 14px; font-size: 16px; margin: 8px 0 0; }
+.auth-form form > input, .auth-form .password-field input { margin: 0; }
+.auth-form .password-field input { padding-right: 56px; }
+.auth-form .password-field .icon-button { width: 48px; height: 48px; }
+.auth-form .button.full { min-height: 48px; font-size: 15px; margin-top: 26px; justify-content: center; }
+.auth-form .auth-switch { border-top: 1px solid var(--line); padding-top: 24px; margin-top: 28px; font-size: 14px; text-align: left; }
+.auth-recovery { margin-top: 18px; font-size: 14px; }
+.auth-recovery a, .auth-switch a { color: var(--green); display: inline-flex; min-height: 44px; align-items: center; }
+.auth-feedback { font-size: 14px; margin-top: 20px; padding: 16px; border: 1px solid var(--line); border-radius: var(--radius-control); }
+.auth-form .error-text { font-size: 14px; }
+.auth-page ::selection, .chat-onboarding-page ::selection { background: var(--green); color: var(--on-accent); }
+.auth-page input, .chat-onboarding-page textarea { caret-color: var(--green); }
+.chat-onboarding-page { max-width: 1280px; padding: 0 40px 40px; }
+.chat-onboarding-page .onboarding-header { margin-bottom: 38px; min-height: 104px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; justify-content: center; }
+.onboarding-header-row { width: 100%; }
+.onboarding-header nav { gap: 16px; }
+.onboarding-header .text-button { font-size: 13px; padding: 8px 2px; }
+.setup-workspace { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 48px; align-items: start; }
+.setup-guide { padding: 16px 0; }
+.setup-guide h2 { font-size: 27px; line-height: 1.3; letter-spacing: -.03em; max-width: 14ch; }
+.setup-guide > p:not(.setup-guide-note) { font-size: 14px; color: var(--muted); margin-top: 14px; max-width: 30ch; }
+.setup-guide-steps { list-style: none; padding: 0; margin: 34px 0; display: grid; gap: 24px; }
+.setup-guide-steps li { display: flex; gap: 12px; color: var(--muted); }
+.setup-guide-steps li > span { width: 30px; height: 30px; flex: 0 0 30px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; font-size: 13px; }
+.setup-guide-steps strong { font-size: 15px; font-weight: 500; }
+.setup-guide-steps p { font-size: 13px; line-height: 1.6; margin-top: 4px; }
+.setup-guide-steps [aria-current=step] strong { color: var(--ink); font-weight: 600; }
+.setup-guide-steps [aria-current=step] > span { background: var(--green); color: var(--on-accent); border-color: var(--green); }
+.setup-guide-steps .complete > span { color: var(--green); border-color: var(--accent-border); }
+.setup-guide-note { display: flex; gap: 9px; padding-top: 22px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.setup-guide-note svg { flex-shrink: 0; margin-top: 2px; }
+.setup-workspace-main { min-width: 0; }
+.setup-workspace .onboarding-cv { padding: 32px; }
+.setup-workspace .onboarding-cv-heading h1 { font-size: 32px; margin: 0 0 12px; line-height: 1.25; letter-spacing: -.03em; }
+.setup-workspace .onboarding-cv-heading p { font-size: 15px; margin-bottom: 28px; }
+.setup-workspace .onboarding-cv-upload { flex-direction: row; justify-content: flex-start; padding: 22px; gap: 18px; border-color: var(--line-strong); }
+.setup-workspace .onboarding-cv-upload > svg { color: var(--green); flex-shrink: 0; }
+.cv-upload-copy { display: flex; flex-direction: column; gap: 3px; text-align: left; }
+.cv-upload-copy strong { font-size: 15px; color: var(--ink); }
+.cv-upload-copy > span { font-size: 13px; }
+.setup-workspace .onboarding-cv form > .muted { margin-top: 8px; font-size: 13px; }
+.setup-workspace .onboarding-cv textarea { min-height: 240px; font-size: 15px; line-height: 1.65; padding: 14px; margin-top: 16px; }
+.cv-privacy { display: none; }
+.cv-continue { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-top: 24px; border-top: 1px solid var(--line); margin-top: 24px; }
+.cv-continue > span { font-size: 12px; }
+.cv-text-ready { color: var(--green); }
+.cv-continue .button { min-height: 46px; font-size: 14px; }
+.conversation-workspace.search-chat { border-color: var(--line); scrollbar-color: var(--line-strong) var(--paper); }
+.conversation-workspace .chat-header { padding: 22px 28px; }
+.conversation-workspace .chat-heading h1, .conversation-workspace .chat-heading h2 { font-size: 23px; letter-spacing: -.025em; line-height: 1.3; margin: 0; }
+.conversation-workspace .chat-heading p { font-size: 14px; margin-top: 5px; }
+.conversation-workspace .chat-avatar { width: 44px; height: 44px; }
+.chat-header-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+.conversation-workspace .chat-saved { font-size: 12px; margin: 0; }
+.conversation-workspace .chat-saved svg { color: var(--green); flex-shrink: 0; }
+.conversation-workspace .chat-review-cv { margin: 0; min-height: 44px; font-size: 13px; flex-shrink: 0; }
+.conversation-workspace .chat-transcript { padding: 28px; }
+.conversation-workspace .chat-message { max-width: 70ch; margin-bottom: 28px; }
+.conversation-workspace .chat-message p { font-size: 15px; line-height: 1.75; }
+.conversation-workspace .chat-speaker { font-size: 12px; letter-spacing: 0; margin-bottom: 8px; }
+.conversation-workspace .chat-message-user { max-width: min(80%, 65ch); padding: 16px 20px; }
+.conversation-workspace .chat-message-user .chat-speaker { color: var(--ink); }
+.conversation-workspace .chat-working { min-height: 44px; font-size: 13px; }
+.conversation-workspace .chat-review { padding: 24px; background: var(--paper); border-color: var(--line-strong); }
+.conversation-workspace .chat-review h3 { display: flex; align-items: center; gap: 12px; font-size: 23px; line-height: 1.3; }
+.conversation-workspace .chat-review h3 svg { flex-shrink: 0; color: var(--green); }
+.conversation-workspace .chat-review p, .conversation-workspace .chat-review dd { font-size: 14px; }
+.conversation-workspace .chat-review dt { font-size: 13px; margin-top: 16px; }
+.conversation-workspace .chat-review summary { min-height: 44px; padding: 10px 0; font-size: 14px; }
+.conversation-workspace .chat-actions { margin-top: 18px; }
+.conversation-workspace .chat-actions .button { min-height: 46px; font-size: 14px; }
+.conversation-workspace .chat-proposal { font-size: 13px; }
+.conversation-workspace .chat-composer { padding: 18px 26px; background: var(--white); }
+.conversation-workspace .chat-composer-input { padding: 10px; border-color: var(--line-strong); }
+.conversation-workspace .chat-composer-input:focus-within { border-color: var(--green); outline: 2px solid var(--green); outline-offset: 2px; }
+.conversation-workspace .chat-composer textarea { font-size: 16px; height: 64px; min-height: 64px; line-height: 1.6; }
+.conversation-workspace .chat-composer small { font-size: 12px; line-height: 1.6; margin-top: 8px; }
+.conversation-workspace .chat-attach { min-height: 44px; padding: 8px 4px; font-size: 13px; }
+.conversation-workspace .chat-feedback { padding: 0 28px; }
+.conversation-workspace .chat-feedback p { font-size: 13px; }
+.conversation-workspace .chat-cv { padding: 10px 28px; font-size: 13px; }
+.conversation-workspace .chat-cv summary { min-height: 44px; padding: 10px 0; }
+.search-chat-onboarding.conversation-workspace { height: calc(100dvh - 184px); min-height: 570px; max-height: 940px; }
+.review-assistant .conversation-workspace { min-height: 540px; height: min(760px, 82dvh); }
+.account-preferences { max-width: 1100px; }
+.account-section { display: grid; grid-template-columns: minmax(200px, .85fr) minmax(0, 1.15fr); gap: 48px; padding: 32px 0; border-bottom: 1px solid var(--line); }
+.account-section:first-child { padding-top: 8px; }
+.account-section h2 { font-size: 20px; letter-spacing: -.02em; margin-bottom: 10px; }
+.account-section > div > p { color: var(--muted); font-size: 14px; max-width: 44ch; }
+.account-section-content { display: flex; align-items: flex-start; flex-direction: column; gap: 14px; min-width: 0; }
+.account-section-content .language-control { width: 100%; max-width: 320px; margin: 0; }
+.account-section-content .language-control label { font-size: 13px; }
+.account-section-content select { min-height: 46px; font-size: 15px; }
+.account-email { font-size: 15px; font-weight: 500; overflow-wrap: anywhere; }
+.account-verification { color: var(--muted); font-size: 13px; }
+.account-verification.verified { color: var(--green); }
+.account-section-content .text-button { font-size: 14px; }
+.account-delete { margin-top: 16px; border-bottom: 0; }
+.account-delete .check-label { align-items: flex-start; font-size: 14px; margin: 20px 0; }
+.account-delete form { width: 100%; }
+.account-delete input[type=password] { min-height: 46px; font-size: 16px; }
+.settings-onboarding .page-header { margin-bottom: 16px; }
+.settings-onboarding .account-preferences { margin: 0 auto; }
+.review-shell .panel { padding: 28px; }
+.review-shell .panel > h2 { font-size: 21px; margin-bottom: 14px; }
+.review-shell .setup-card { max-width: 100%; }
+.review-shell .setup-fields { max-width: 760px; }
+.review-shell .setup-card h1 { font-size: 28px; }
+.review-shell .cv-builder-grid { gap: 28px; }
+.review-shell .cv-actions .button { min-height: 44px; }
+.review-shell .profile-panel-heading h2 { font-size: 20px; }
+.review-shell .profile-panel-heading p { font-size: 14px; }
+.review-shell .profile-panel label, .review-shell .cv-editor label { font-size: 14px; }
+.review-shell .profile-panel label > small, .review-shell .profile-optional { font-size: 12px; }
+.review-shell .profile-panel input:not([type=checkbox]):not([type=radio]), .review-shell .profile-panel textarea, .review-shell .profile-panel select { font-size: 15px; }
+.review-shell .profile-cv-upload strong { font-size: 14px; }
+.review-shell .profile-cv-upload small, .review-shell .cv-template-option small, .review-shell .cv-preview-heading p, .review-shell .cv-preview-status { font-size: 12px; }
+.review-shell .integration { padding: 14px 18px; font-size: 14px; }
+.review-shell .integration small { font-size: 12px; }
+.review-shell .run-card { padding: 24px; }
+.review-shell .run-card > p, .review-shell .activity-summary p { font-size: 14px; }
+
+@media (max-width: 1100px) {
+  .auth-page { padding: 0 32px 32px; }
+  .auth-layout { gap: 8%; padding: 48px 0; }
+  .setup-workspace { grid-template-columns: 220px minmax(0, 1fr); gap: 28px; }
+  .chat-onboarding-page { padding-left: 28px; padding-right: 28px; }
+  .account-section { gap: 28px; }
+}
+@media (max-width: 760px) {
+  .auth-page { padding: 0 22px 32px; }
+  .auth-header { min-height: 90px; gap: 12px; }
+  .auth-header .brand, .onboarding-header .brand { font-size: 20px; }
+  .auth-header .brand-icon { width: 34px; height: 34px; }
+  .auth-header .language-control label { font-size: 0; gap: 0; }
+  .auth-header select { width: 100px; }
+  .auth-layout { display: flex; flex-direction: column; align-items: stretch; min-height: 0; padding: 40px 0 0; gap: 0; }
+  .auth-form.login-card { order: 0; max-width: 440px; margin: 0 auto; }
+  .auth-intro { order: 1; max-width: 440px; width: 100%; margin: 24px auto 0; padding-top: 26px; border-top: 1px solid var(--line); }
+  .auth-intro h2, .auth-intro > p:not(.auth-privacy), .auth-journey { display: none; }
+  .auth-form.login-card h1 { font-size: 30px; }
+  .auth-form .auth-switch { margin-top: 22px; padding-top: 20px; }
+  .chat-onboarding-page { padding: 0 18px 28px; }
+  .chat-onboarding-page .onboarding-header { margin-bottom: 24px; min-height: 106px; padding: 18px 0; }
+  .onboarding-header-row { gap: 14px; }
+  .onboarding-header nav { width: 100%; justify-content: space-between; gap: 12px; }
+  .setup-workspace { display: block; }
+  .setup-guide { padding: 0; }
+  .setup-guide h2, .setup-guide > p { display: none; }
+  .setup-guide-steps { display: flex; gap: 24px; margin: 0 0 22px; }
+  .setup-guide-steps li { flex: 1; align-items: center; }
+  .setup-guide-steps p { display: none; }
+  .setup-guide-steps strong { font-size: 14px; }
+  .setup-workspace .onboarding-cv { padding: 24px 18px; }
+  .setup-workspace .onboarding-cv-heading h1 { font-size: 28px; }
+  .setup-workspace .onboarding-cv-upload { padding: 20px 16px; }
+  .setup-workspace .onboarding-cv textarea { min-height: 220px; font-size: 16px; }
+  .setup-workspace .cv-privacy { display: block; font-size: 12px; color: var(--muted); margin-top: 12px; }
+  .cv-continue { flex-direction: column; align-items: stretch; gap: 12px; }
+  .cv-continue .button { justify-content: center; }
+  .conversation-workspace .chat-header { padding: 20px 18px; }
+  .conversation-workspace .chat-heading { align-items: flex-start; }
+  .conversation-workspace .chat-heading h1, .conversation-workspace .chat-heading h2 { font-size: 21px; }
+  .conversation-workspace .chat-heading p { font-size: 13px; }
+  .conversation-workspace .chat-avatar { width: 36px; height: 36px; }
+  .conversation-workspace .chat-transcript { padding: 24px 18px; }
+  .conversation-workspace .chat-message { max-width: 100%; }
+  .conversation-workspace .chat-message-user { max-width: 90%; padding: 13px 16px; }
+  .conversation-workspace .chat-message p { font-size: 14px; }
+  .conversation-workspace .chat-composer { padding: 14px; }
+  .conversation-workspace .chat-composer small { font-size: 11px; }
+  .conversation-workspace .chat-feedback, .conversation-workspace .chat-cv { padding-left: 18px; padding-right: 18px; }
+  .conversation-workspace .chat-review { padding: 20px 16px; }
+  .conversation-workspace .chat-review h3 { font-size: 21px; }
+  .conversation-workspace .chat-actions { align-items: stretch; flex-direction: column; gap: 4px; }
+  .conversation-workspace .chat-actions .button { justify-content: center; }
+  .chat-header-meta { flex-wrap: wrap; gap: 2px 12px; }
+  .search-chat-onboarding.conversation-workspace { height: calc(100dvh - 240px); min-height: 560px; }
+  .review-assistant .conversation-workspace { min-height: 560px; height: 82dvh; }
+  .account-section { grid-template-columns: 1fr; gap: 20px; padding: 28px 0; }
+  .account-section-content .language-control { max-width: none; }
+  .review-shell .panel { padding: 22px 18px; }
+  .review-shell .setup-card { padding: 24px 18px; }
+  .review-shell .setup-card h1 { font-size: 25px; }
+  .review-shell input:not([type=checkbox]):not([type=radio]), .review-shell textarea, .review-shell select, .review-shell .profile-panel input:not([type=checkbox]):not([type=radio]), .review-shell .profile-panel textarea, .review-shell .profile-panel select { font-size: 16px; }
+}
