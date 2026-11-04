@@ -53,7 +53,7 @@ test('CV review is required before onboarding chat, persists on refresh, and doe
   assert.equal(reviewed.cvReviewed,true);
   assert.equal(reviewed.draft.answers.cvText,edited);
   assert.equal(reviewed.messages.length,1);
-  assert.equal(reviewed.messages[0].text,`${cvContext.summary} What would make your next role a good move?`);
+  assert.equal(reviewed.messages[0].text,'Tell me, what are you looking for in your next job?');
   assert.doesNotThrow(()=>requireReviewedCV(reviewed,true));
   assert.deepEqual(await loadSearchChat(store,4,'en'),reviewed);
   assert.deepEqual(await store.profile(),before);
@@ -79,7 +79,7 @@ test('legacy chats start at CV review and confirmation rejects incomplete experi
   assert.equal(newSearchChat({...defaultProfile,onboardingCompleted:true},4,'en').cvReviewed,true);
 });
 
-test('the Spanish opening uses the reviewed CV, prefills an evidenced name and leaves future preferences open',async t=>{
+test('the Spanish opening keeps CV analysis internal, prefills a name and leaves future preferences open',async t=>{
   const store=await storeFixture(t);
   const chat=await loadSearchChat(store,4,'es');
   const reviewed=`María Ruiz\n${experience}`;
@@ -95,7 +95,7 @@ test('the Spanish opening uses the reviewed CV, prefills an evidenced name and l
   const resumed=await loadSearchChat(store,4,'es');
   assert.deepEqual(resumed,next);
   assert.equal(resumed.draft.answers.name,'María Ruiz');
-  assert.equal(resumed.messages[0].text,`${summary} ¿Qué haría que tu próximo puesto fuera un buen paso para ti?`);
+  assert.equal(resumed.messages[0].text,'Cuéntame, ¿qué buscas en tu próximo trabajo?');
   assert.equal(resumed.draft.answers.objective,'');
   assert.equal(resumed.draft.answers.titles,'');
   returnedName='Invented Name';
@@ -124,6 +124,27 @@ test('a saved Spanish chat with the old opener reuses its CV and never shows the
   assert.equal(inProgress.cvReviewed,true);
   assert.deepEqual(inProgress.messages.slice(1),[user]);
   assert.doesNotMatch(inProgress.messages[0].text,/cómo te llamas/i);
+});
+
+test('refresh replaces the CV recital in saved chats without losing analysis or ongoing replies',async t=>{
+  const store=await storeFixture(t);
+  const initial=await loadSearchChat(store,4,'es');
+  const context={name:'María Ruiz',summary:'Has liderado arquitectura de software, infraestructura y despliegues.'};
+  const reviewed=confirmChatCV(initial,`María Ruiz\n${experience}`,'cv.txt','es',context);
+  const question=translate('es','What would make your next role a good move?');
+  const opening={...reviewed.messages[0],text:`${context.summary} ${question}`};
+  const user={id:'goal',role:'user' as const,text:'Quiero horarios más previsibles.'};
+  const saved=await saveSearchChat(store,{...reviewed,messages:[opening,user]},initial.revision);
+  const resumed=await loadSearchChat(store,4,'es');
+  assert.equal(resumed.revision,saved.revision+1);
+  assert.equal(resumed.messages[0].text,'Cuéntame, ¿qué buscas en tu próximo trabajo?');
+  assert.deepEqual(resumed.messages.slice(1),[user]);
+  assert.deepEqual(resumed.cvContext,context);
+  assert.equal(resumed.cvReviewed,true);
+  assert.deepEqual(resumed.draft,saved.draft);
+  assert.deepEqual(await loadSearchChat(store,4,'es'),resumed);
+  const replacement=confirmChatCV(resumed,`${experience} I also mentor engineers.`,'new.txt','es',cvContext);
+  assert.equal(replacement.messages.at(-1)?.text,'CV actualizado. Podemos seguir.');
 });
 
 test('saving completes onboarding, installs matching and search settings, and leaves the same chat open',async t=>{
