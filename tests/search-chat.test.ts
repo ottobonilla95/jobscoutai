@@ -6,9 +6,11 @@ import {defaultProfile} from '../packages/core/src/profile';
 import {standardMatching} from '../packages/core/src/search-setup';
 import {matchingBasis} from '../packages/core/src/setup-schema';
 import {chatRequestSchema,searchChatSchema,chatTurnSchema,type ChatTurn,type SearchChat} from '../packages/core/src/search-chat-schema';
-import {applyChatTurn,attachChatCV,updateChatCV,confirmChatCV,requireReviewedCV,ChatConflict,commitSearchChat,generateChatTurn,loadSearchChat,newSearchChat,saveSearchChat} from '../packages/core/src/search-chat';
+import {analyzeChatCV,applyChatTurn,attachChatCV,updateChatCV,confirmChatCV,requireReviewedCV,ChatConflict,commitSearchChat,generateChatTurn,loadSearchChat,newSearchChat,saveSearchChat} from '../packages/core/src/search-chat';
+import {translate} from '../packages/core/src/i18n';
 
 const experience='Product engineer with seven years building accessible web applications, leading delivery, and working closely with customers.';
+const cvContext={name:'',summary:'You’ve spent seven years building accessible web applications and leading delivery.'};
 async function storeFixture(t:test.TestContext){
   const store=await existingStoreFixture(t);
   await store.saveProfile({...((await store.profile()).profile),onboardingCompleted:false});
@@ -21,7 +23,7 @@ function readyTurn(chat:SearchChat):ChatTurn {
     experience:null,settings:chat.settings,ready:true};
 }
 function prepared(chat:SearchChat){
-  const reviewed=confirmChatCV(chat,chat.draft.answers.cvText,chat.draft.answers.cvFileName,'en');
+  const reviewed=confirmChatCV(chat,chat.draft.answers.cvText,chat.draft.answers.cvFileName,'en',cvContext);
   const next=applyChatTurn(reviewed,readyTurn(reviewed),'I want remote climate product work in Ireland.',4,'en');
   next.draft.matching=standardMatching(next.draft.answers,'en');return next;
 }
@@ -47,14 +49,15 @@ test('CV review is required before onboarding chat, persists on refresh, and doe
   assert.deepEqual(uploaded.messages,initial.messages);
   assert.throws(()=>requireReviewedCV(uploaded,true),/Review your CV/);
   const edited=experience+' I also mentor engineers.';
-  const reviewed=await saveSearchChat(store,confirmChatCV(uploaded,edited,'cv.txt','en'),uploaded.revision);
+  const reviewed=await saveSearchChat(store,confirmChatCV(uploaded,edited,'cv.txt','en',cvContext),uploaded.revision);
   assert.equal(reviewed.cvReviewed,true);
   assert.equal(reviewed.draft.answers.cvText,edited);
-  assert.deepEqual(reviewed.messages,initial.messages);
+  assert.equal(reviewed.messages.length,1);
+  assert.equal(reviewed.messages[0].text,`${cvContext.summary} What would make your next role a good move?`);
   assert.doesNotThrow(()=>requireReviewedCV(reviewed,true));
   assert.deepEqual(await loadSearchChat(store,4,'en'),reviewed);
   assert.deepEqual(await store.profile(),before);
-  const again=confirmChatCV(reviewed,edited,'cv.txt','en');
+  const again=confirmChatCV(reviewed,edited,'cv.txt','en',cvContext);
   assert.deepEqual(again.messages,reviewed.messages);
   const replaced=attachChatCV(reviewed,experience,'replacement.txt','en');
   assert.equal(replaced.cvReviewed,false);
@@ -69,11 +72,58 @@ test('legacy chats start at CV review and confirmation rejects incomplete experi
   const chat=newSearchChat({...defaultProfile,onboardingCompleted:false},4,'en');
   const {cvReviewed,...legacy}=chat;
   assert.equal(searchChatSchema.parse(legacy).cvReviewed,false);
-  assert.throws(()=>confirmChatCV(chat,'Too short','', 'en'),/at least 100/);
+  assert.throws(()=>confirmChatCV(chat,'Too short','', 'en',cvContext),/at least 100/);
   assert.equal(chatRequestSchema.safeParse({action:'confirm-cv',revision:0,text:' '.repeat(150),name:''}).success,false);
   assert.equal(chatRequestSchema.safeParse({action:'confirm-cv',revision:0,text:experience,name:''}).success,true);
   assert.doesNotThrow(()=>requireReviewedCV(chat,false));
   assert.equal(newSearchChat({...defaultProfile,onboardingCompleted:true},4,'en').cvReviewed,true);
+});
+
+test('the Spanish opening uses the reviewed CV, prefills an evidenced name and leaves future preferences open',async t=>{
+  const store=await storeFixture(t);
+  const chat=await loadSearchChat(store,4,'es');
+  const reviewed=`María Ruiz\n${experience}`;
+  const summary='Tienes siete años de experiencia desarrollando aplicaciones web accesibles.';
+  let returnedName='María Ruiz';
+  const model=new MockLanguageModelV4({doGenerate:async options=>{
+    assert.ok(JSON.stringify(options.prompt).includes('María Ruiz'));
+    return {content:[{type:'text',text:JSON.stringify({name:returnedName,summary})}],finishReason:{unified:'stop',raw:undefined},
+      usage:{inputTokens:{total:25,noCache:25,cacheRead:undefined,cacheWrite:undefined},outputTokens:{total:50,text:50,reasoning:undefined}},warnings:[]};
+  }});
+  const {context}=await analyzeChatCV(reviewed,'es',model);
+  const next=await saveSearchChat(store,confirmChatCV(chat,reviewed,'cv.txt','es',context),chat.revision);
+  const resumed=await loadSearchChat(store,4,'es');
+  assert.deepEqual(resumed,next);
+  assert.equal(resumed.draft.answers.name,'María Ruiz');
+  assert.equal(resumed.messages[0].text,`${summary} ¿Qué haría que tu próximo puesto fuera un buen paso para ti?`);
+  assert.equal(resumed.draft.answers.objective,'');
+  assert.equal(resumed.draft.answers.titles,'');
+  returnedName='Invented Name';
+  const replacement=`${experience}\nReferences: María Ruiz`;
+  const revisedContext=(await analyzeChatCV(replacement,'es',model)).context;
+  assert.equal(revisedContext.name,'');
+  const revised=confirmChatCV(resumed,replacement,'cv.txt','es',revisedContext);
+  assert.equal(revised.draft.answers.name,'');
+  assert.equal(revised.messages.length,1);
+});
+
+test('a saved Spanish chat with the old opener reuses its CV and never shows the name question again',async t=>{
+  const store=await storeFixture(t);
+  const initial=await loadSearchChat(store,4,'es');
+  const reviewed=confirmChatCV(initial,experience,'cv.txt','es',cvContext);
+  const legacyOpening={...reviewed.messages[0],text:translate('es','Let’s build your search together. What should I call you, and what would you like your next role to look like?')};
+  const legacy=await saveSearchChat(store,{...reviewed,cvContext:undefined,messages:[legacyOpening]},initial.revision);
+  const resumed=await loadSearchChat(store,4,'es');
+  assert.equal(resumed.cvReviewed,false);
+  assert.equal(resumed.draft.answers.cvText,experience);
+  assert.equal(resumed.revision,legacy.revision+1);
+  assert.doesNotMatch(resumed.messages[0].text,/cómo te llamas/i);
+  const user={id:'goal',role:'user' as const,text:'Quiero trabajar en tecnología climática.'};
+  await saveSearchChat(store,{...resumed,cvReviewed:true,messages:[legacyOpening,user]},resumed.revision);
+  const inProgress=await loadSearchChat(store,4,'es');
+  assert.equal(inProgress.cvReviewed,true);
+  assert.deepEqual(inProgress.messages.slice(1),[user]);
+  assert.doesNotMatch(inProgress.messages[0].text,/cómo te llamas/i);
 });
 
 test('saving completes onboarding, installs matching and search settings, and leaves the same chat open',async t=>{
@@ -153,6 +203,19 @@ test('the model cannot bypass readiness validation, inject experience, or make a
   assert.equal((await store.profile()).profile.onboardingCompleted,false);
   const changed=applyChatTurn(next,{...readyTurn(next),answers:{...readyTurn(next).answers,objective:'Work on public transport products.'}},'I want public transport roles instead.',4,'en');
   assert.equal(changed.draft.matching,null);
+});
+
+test('a chat proposal needs a concrete goal, searchable roles, starting locations and work preference',()=>{
+  const chat=confirmChatCV(newSearchChat({...defaultProfile,onboardingCompleted:false},4,'en'),experience,'cv.txt','en',cvContext);
+  const proposal=readyTurn(chat);
+  for(const missing of [{objective:''},{titles:[]},{selectedLocations:[]},{remotePreference:'' as const}]){
+    const incomplete=applyChatTurn(chat,{...proposal,answers:{...proposal.answers,...missing}},'I want to work on climate products.',4,'en');
+    assert.equal(incomplete.ready,false,JSON.stringify(missing));
+  }
+  const complete=applyChatTurn(chat,proposal,'I want remote climate product work in Ireland.',4,'en');
+  assert.equal(complete.ready,true);
+  assert.equal(complete.draft.answers.titles,'Product Engineer');
+  assert.deepEqual(complete.draft.answers.selectedLocations.map(place=>place.countryCode),['IE']);
 });
 
 test('AI conversational extraction handles several answers together and accounts for model usage',async()=>{

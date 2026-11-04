@@ -4,7 +4,7 @@ import {getAccounts} from '@core/accounts';
 import {integrations} from '@core/config';
 import {minimumSearchIntervalHours} from '@core/search-policy';
 import {chatRequestSchema} from '@core/search-chat-schema';
-import {applyChatTurn, attachChatCV, updateChatCV, confirmChatCV, requireReviewedCV, ChatConflict, commitSearchChat, generateChatTurn, loadSearchChat, saveSearchChat} from '@core/search-chat';
+import {analyzeChatCV, applyChatTurn, attachChatCV, updateChatCV, confirmChatCV, requireReviewedCV, ChatConflict, commitSearchChat, generateChatTurn, loadSearchChat, saveSearchChat} from '@core/search-chat';
 import {beginGeneration, finishGeneration, AIBudgetError} from '@core/ai-usage';
 import {suggestProfile} from '@core/profile-suggestions';
 
@@ -30,14 +30,30 @@ export async function POST(request:Request){
       if(chat.revision!==input.revision)throw new ChatConflict();
       const {profile}=await store.profile();
       if(input.action==='upload')return localizedJson({chat:await saveSearchChat(store,profile.onboardingCompleted?attachChatCV(chat,input.text,input.name,locale):updateChatCV(chat,input.text,input.name),input.revision)});
-      if(input.action==='confirm-cv')return localizedJson({chat:await saveSearchChat(store,confirmChatCV(chat,input.text,input.name,locale),input.revision)});
-      requireReviewedCV(chat,!profile.onboardingCompleted);
-      if(!integrations().ai)return localizedJson({error:'Chat is unavailable until AI matching is connected. Your conversation is saved. Please try again later.'},{status:503});
+      const confirmingCV=input.action==='confirm-cv';
+      if(confirmingCV&&profile.onboardingCompleted)throw new ChatConflict();
+      if(confirmingCV&&chat.cvReviewed&&chat.cvContext&&input.text===chat.draft.answers.cvText&&input.name===chat.draft.answers.cvFileName)return localizedJson({chat});
+      if(!confirmingCV)requireReviewedCV(chat,!profile.onboardingCompleted);
+      const cvError='Could not analyze your CV. Please try again to continue.';
+      if(!integrations().ai)return localizedJson({error:confirmingCV?cvError:'Chat is unavailable until AI matching is connected. Your conversation is saved. Please try again later.'},{status:503});
       if(!await getAccounts().allow(`search-chat:${account.id}`,60,3600000))return localizedJson({error:'Please wait a little before sending more messages.'},{status:429});
       async function generated<T extends {inputTokens:number;outputTokens:number}>(run:()=>Promise<T>):Promise<T>{
         const id=await beginGeneration(account.id,'strategy',profile.dailyEvaluationLimit);
         try{const result=await run();await finishGeneration(id,'completed',result.inputTokens,result.outputTokens);return result;}
         catch(error){await finishGeneration(id,'failed');throw error;}
+      }
+      if(confirmingCV){
+        let context=input.text===chat.draft.answers.cvText?chat.cvContext:undefined;
+        if(!context){
+          try{({context}=await generated(()=>analyzeChatCV(input.text,locale)));}
+          catch(error){
+            if(error instanceof AIBudgetError)throw error;
+            // Provider errors may include the CV in their response or request details.
+            console.error('[api/chat] CV analysis failed',error instanceof Error?error.name:'UnknownError');
+            return localizedJson({error:cvError},{status:503});
+          }
+        }
+        return localizedJson({chat:await saveSearchChat(store,confirmChatCV(chat,input.text,input.name,locale,context),input.revision)});
       }
       const {turn}=await generated(()=>generateChatTurn(chat,input.text,minimum,locale,profile));
       let next=applyChatTurn(chat,turn,input.text,minimum,locale);

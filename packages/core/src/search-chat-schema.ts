@@ -13,10 +13,13 @@ export const chatSettingsSchema=z.object({
   maxJobsPerRun:z.number().int().min(1).max(30), dailyEvaluationLimit:z.number().int().min(1).max(300),
 });
 export const chatMessageSchema=z.object({id:z.string(),role:z.enum(['user','assistant']),text:z.string().max(32000)});
+export const cvContextSchema=z.object({name:z.string().trim().max(100),summary:z.string().trim().max(500)});
+export type CVContext=z.infer<typeof cvContextSchema>;
 export const searchChatSchema=z.object({
   revision:z.number().int().nonnegative(), baseFingerprint:z.string(),
   messages:z.array(chatMessageSchema).max(200),
   draft:setupDraftSchema, settings:chatSettingsSchema, ready:z.boolean(), cvReviewed:z.boolean().default(false),
+  cvContext:cvContextSchema.optional(),
 });
 export type SearchChat=z.infer<typeof searchChatSchema>;
 export type ChatSettings=z.infer<typeof chatSettingsSchema>;
