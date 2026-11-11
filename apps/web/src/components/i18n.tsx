@@ -1,4 +1,5 @@
 'use client';
+import {Select} from './ui';
 import {createContext,useContext,useEffect,useMemo,useState} from 'react';
 import {translate,systemMessage} from '@core/i18n';
 import {formatDate,formatNumber,type Locale,type LanguagePreference} from '@core/i18n/locale';
@@ -12,4 +13,4 @@ export function I18nProvider({initial,children}:{initial:Language;children:React
  return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 export function useI18n(){const context=useContext(Context);if(!context)throw new Error('Missing language provider.');return {...context,t:(key:string,params?:Record<string,string|number>)=>translate(context.locale,key,params),message:(text:string)=>systemMessage(context.locale,text),date:(value:string|null,withTime=true)=>formatDate(value,context.locale,withTime)||translate(context.locale,'Not yet'),number:(value:number)=>formatNumber(value,context.locale)};}
-export function LanguageSelect(){const {t,locale,change}=useI18n();const [busy,setBusy]=useState(false);const [error,setError]=useState('');return <div className="language-control"><label>{t('Language')}<select value={locale} disabled={busy} onChange={async e=>{setBusy(true);setError('');try{await change(e.target.value as Locale);}catch(e){setError(e instanceof Error?e.message:t('Please try again.'));}finally{setBusy(false);}}}><option value="en">English</option><option value="es">Español</option></select></label>{error&&<p role="alert">{error}</p>}</div>;}
+export function LanguageSelect(){const {t,locale,change}=useI18n();const [busy,setBusy]=useState(false);const [error,setError]=useState('');return <div className="language-control"><label>{t('Language')}<Select size="compact" value={locale} disabled={busy} onValueChange={async value=>{setBusy(true);setError('');try{await change(value as Locale);}catch(e){setError(e instanceof Error?e.message:t('Please try again.'));}finally{setBusy(false);}}} options={[{value:'en',label:'English'},{value:'es',label:'Español'}]}/></label>{error&&<p role="alert">{error}</p>}</div>;}

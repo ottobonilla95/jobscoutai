@@ -1,3 +1,4 @@
+import {Select} from './ui';
 import type { ChangeEvent, RefObject } from 'react';
 import { Check, FileText, MapPin, SlidersHorizontal, Sparkles, Target, Upload } from 'lucide-react';
 import type { SetupAnswers, SetupDraft } from '@core/setup-schema';
@@ -74,7 +75,7 @@ export default function SearchProfileEditor({
             <div className="profile-panel-heading"><MapPin size={19}/><div><h2 id="profile-location-heading">{t('Location and work')}</h2><p>{t('Where and how your next role should fit your life.')}</p></div></div>
             <div className="profile-field-grid">
               <LocationPicker id="profile-location" value={a.selectedLocations} legacyLocations={a.locations} invalid={fieldError(4)} onChange={onLocations}/>
-              <label htmlFor="profile-work-preference">{t('Work preference')}<select id="profile-work-preference" value={a.remotePreference} aria-invalid={fieldError(5)} onChange={event => update('remotePreference', event.target.value as SetupAnswers['remotePreference'])}><option value="" disabled>{t('Choose your work preference.')}</option><option value="remote">{t('Remote only')}</option><option value="flexible">{t('Also open to office work')}</option></select><small>{t('Remote jobs can still have location and work-authorization restrictions.')}</small></label>
+              <label htmlFor="profile-work-preference">{t('Work preference')}<Select id="profile-work-preference" value={a.remotePreference} aria-invalid={fieldError(5)} onValueChange={value=>update('remotePreference',value as SetupAnswers['remotePreference'])} options={[{value:'',label:t('Choose your work preference.'),disabled:true},{value:'remote',label:t('Remote only')},{value:'flexible',label:t('Also open to office work')}]}/><small>{t('Remote jobs can still have location and work-authorization restrictions.')}</small></label>
             </div>
             <label htmlFor="profile-authorization">{t('Work authorization')} <span className="profile-optional">{t('Optional')}</span><textarea id="profile-authorization" rows={2} value={a.workAuthorization} maxLength={1000} onChange={event => update('workAuthorization', event.target.value)}/></label>
           </section>
@@ -107,7 +108,7 @@ export default function SearchProfileEditor({
           </section>
           <section className="panel profile-panel" aria-labelledby="profile-schedule-heading">
             <div className="profile-panel-heading"><SlidersHorizontal size={19}/><h2 id="profile-schedule-heading">{t('Search preferences')}</h2></div>
-            <label htmlFor="profile-frequency">{t('Search frequency')}<select id="profile-frequency" value={a.intervalHours} aria-invalid={fieldError(10)} onChange={event => update('intervalHours', Number(event.target.value))}>{frequencies.map(hours => <option key={hours} value={hours}>{t('Every {count} hours', {count: hours})}</option>)}</select><small>{t('Searches run at least {count} hours apart. You can pause automatic searches later.', {count: minimum})}</small></label>
+            <label htmlFor="profile-frequency">{t('Search frequency')}<Select id="profile-frequency" value={a.intervalHours} aria-invalid={fieldError(10)} onValueChange={value=>update('intervalHours',Number(value))} options={frequencies.map(hours=>({value:hours,label:t('Every {count} hours',{count:hours})}))}/><small>{t('Searches run at least {count} hours apart. You can pause automatic searches later.', {count: minimum})}</small></label>
             <label className="check-label"><input type="checkbox" checked={a.emailAlerts} onChange={event => update('emailAlerts', event.target.checked)}/><span>{t('Yes, email me strong matches')}<small>{t('We will email new strong matches to your verified account address. You can change this later.')}</small></span></label>
             {verificationNotice}
           </section>

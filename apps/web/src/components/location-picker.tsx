@@ -4,6 +4,7 @@ import {X} from 'lucide-react';
 import {addLocation,countryName,countrySuggestions,normalize,locationKey,locationLabel,maxSearchLocations,type SearchLocation} from '@core/locations';
 import {useI18n} from './i18n';
 import {translate} from '@core/i18n';
+import {Listbox,ListboxOption} from './ui';
 
 type Props={value:SearchLocation[];onChange:(places:SearchLocation[])=>void;id?:string;invalid?:boolean;legacyLocations?:string};
 export default function LocationPicker({value,onChange,id,invalid,legacyLocations}:Props){
@@ -44,12 +45,12 @@ export default function LocationPicker({value,onChange,id,invalid,legacyLocation
     if(event.key==='Escape'){setOpen(false);setActive(-1);}
     if(event.key==='Enter'){event.preventDefault();if(open&&active>=0&&options[active])select(options[active]);}
    }}/>
-  {open&&query&&<ul id={listId} role="listbox" aria-label={t('Location suggestions')} className="location-results">
-   {options.map((place,index)=><li key={locationKey(place)} role="presentation"><button id={`${listId}-${index}`} type="button" role="option" aria-selected={index===active}
+  {open&&query&&<Listbox id={listId} aria-label={t('Location suggestions')}>
+   {options.map((place,index)=><li key={locationKey(place)} role="presentation"><ListboxOption id={`${listId}-${index}`} aria-selected={index===active}
     onMouseDown={event=>event.preventDefault()} onClick={()=>select(place)}>
     <span>{locationLabel(place,locale)}</span><small>{t(place.kind==='country'?'All cities':value.some(p=>p.kind==='country'&&p.countryCode===place.countryCode)?'Search only this city':'City')}</small>
-   </button></li>)}
-  </ul>}
+   </ListboxOption></li>)}
+  </Listbox>}
   {open&&query&&!options.length&&!loading&&!error&&<p role="status" className="footnote">{t(value.length>=maxSearchLocations?'You have selected {count} locations. Remove one to add another, or narrow a country to a city.':'No locations found. Try a country name or another city.',{count:maxSearchLocations})}</p>}
   {loading&&<p role="status" className="footnote">{t('Looking up cities…')}</p>}
   {error&&<p role="status" className="footnote">{error}</p>}

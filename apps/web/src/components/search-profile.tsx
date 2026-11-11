@@ -1,4 +1,5 @@
 'use client';
+import {Select} from './ui';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { ArrowLeft, ArrowRight, Check, FileText, Upload } from 'lucide-react';
 import type { Profile } from '@core/profile';
@@ -192,7 +193,7 @@ export default function SearchProfile({profile,minimum,onboarding=false,onSaved}
       {step===7&&<><p id="question-hint">{t('Include the currency, pay period, and any flexibility. Leave blank if you are open.')}</p>{field('salaryExpectation',1,300,t('For example: €70,000–90,000 per year, flexible'))}</>}
       {step===8&&<><p id="question-hint">{t('Only add this if ownership matters to you. We will not assume an equity requirement.')}</p>{field('equityExpectation',3,500)}</>}
       {step===9&&<><p id="question-hint">{t('List only firm requirements or things you would rule out. Use your goal above for softer preferences.')}</p>{field('constraints',4,3000)}</>}
-      {step===10&&<><p id="question-hint">{t('Searches run at least {count} hours apart. You can pause automatic searches later.',{count:minimum})}</p><label>{t('Search frequency')}<select value={a.intervalHours} onChange={e=>update('intervalHours',Number(e.target.value))}>{frequencies.map(hours=><option key={hours} value={hours}>{t('Every {count} hours',{count:hours})}</option>)}</select></label></>}
+      {step===10&&<><p id="question-hint">{t('Searches run at least {count} hours apart. You can pause automatic searches later.',{count:minimum})}</p><label>{t('Search frequency')}<Select value={a.intervalHours} onValueChange={value=>update('intervalHours',Number(value))} options={frequencies.map(hours=>({value:hours,label:t('Every {count} hours',{count:hours})}))}/></label></>}
       {step===11&&<><p id="question-hint">{t('We will email new strong matches to your verified account address. You can change this later.')}</p><div className="setup-choices">{[true,false].map(value=><label key={String(value)} className={a.emailAlerts===value?'selected':''}><input type="radio" name="email" checked={a.emailAlerts===value} onChange={()=>update('emailAlerts',value)}/>{t(value?'Yes, email me strong matches':'No email alerts')}</label>)}</div></>}
       {step===12&&<>
         <p>{t('Review your answers. You can change any of them now or later in Search profile.')}</p>

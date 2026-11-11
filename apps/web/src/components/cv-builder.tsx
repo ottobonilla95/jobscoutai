@@ -1,4 +1,5 @@
 'use client';
+import {Select} from './ui';
 import {useEffect,useState} from 'react';
 import dynamic from 'next/dynamic';
 import {ArrowDown,ArrowUp,Copy,FilePlus2,Save,Trash2} from 'lucide-react';
@@ -59,7 +60,7 @@ export default function CvBuilder({name,matchCount,initialCvs,sourceText}:{name:
     <main id="workspace-main" className="main-content cv-builder-main">
       <header className="review-header"><div><h1>{t('CV builder')}</h1><p>{t('Write once. Choose a template. Make it yours.')}</p></div></header>
       <div className="cv-workspace-toolbar">
-        <label>{t('Saved CVs')}<select value={selected?.id??''} disabled={busy} onChange={event=>switchCv(cvs.find(cv=>cv.id===event.target.value)??null)}><option value="">{t('New CV')}</option>{cvs.map(cv=><option key={cv.id} value={cv.id}>{cv.title}</option>)}</select></label>
+        <label>{t('Saved CVs')}<Select value={selected?.id??''} disabled={busy} onValueChange={value=>switchCv(cvs.find(cv=>cv.id===value)??null)} options={[{value:'',label:t('New CV')},...cvs.map(cv=>({value:cv.id,label:cv.title}))]}/></label>
         <div className="cv-actions">
           <button type="button" className="button secondary" disabled={busy} onClick={()=>switchCv(null)}><FilePlus2 size={16}/>{t('New CV')}</button>
           <button type="button" className="button secondary" disabled={busy} onClick={()=>void run(async()=>{const result=await request('POST',{...draft,title:`${draft.title.slice(0,85)} ${t('(copy)')}`});setCvs(previous=>[result.cv,...previous]);activate(result.cv);setMessage(t('CV duplicated.'));})}><Copy size={16}/>{t('Duplicate')}</button>
@@ -76,7 +77,7 @@ export default function CvBuilder({name,matchCount,initialCvs,sourceText}:{name:
               <div className="cv-template-options" role="group" aria-label={t('Choose a template')}>
                 {(['accent','minimal'] as const).map(template=><button type="button" key={template} aria-pressed={draft.template===template} className={`cv-template-option ${draft.template===template?'selected':''}`} onClick={()=>update('template',template)}><span className={`cv-template-swatch ${template}`} aria-hidden="true"><span/><span/><span/></span><strong>{template==='accent'?t('Signature'):t('Minimal')}</strong><small>{template==='accent'?t('Dark header · Teal accents'):t('Clean typography · Simple layout')}</small></button>)}
               </div>
-              <label>{t('CV section language')}<select value={draft.language} onChange={e=>update('language',e.target.value as CvDraft['language'])}><option value="en">English</option><option value="es">Español</option></select></label><p className="footnote">{t('Changes section headings. Your writing stays as entered.')}</p>
+              <label>{t('CV section language')}<Select value={draft.language} onValueChange={value=>update('language',value as CvDraft['language'])} options={[{value:'en',label:'English'},{value:'es',label:'Español'}]}/></label><p className="footnote">{t('Changes section headings. Your writing stays as entered.')}</p>
             </section>
             <section className="panel"><h2>{t('Personal details')}</h2><div className="cv-field-grid">
               {([['name','Full name'],['headline','Professional headline'],['email','Email'],['phone','Phone'],['location','Location'],['website','Website']] as const).map(([key,label])=><label key={key}>{t(label)}<input type={key==='email'?'email':'text'} maxLength={key==='website'?500:200} value={draft.content[key]} onChange={e=>content(key,e.target.value)}/></label>)}

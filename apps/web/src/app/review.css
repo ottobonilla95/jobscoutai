@@ -27,7 +27,6 @@
 .review-filter:not(.selected):hover { background: var(--surface-hover); color: var(--ink); }
 .review-filter-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .8fr); gap: 10px; }
 .review-source, .review-views { margin: 0; min-width: 0; }
-.review-source select, .review-views select { font-size: 13px; min-height: 44px; margin: 0; padding: 8px 26px 8px 10px; background-color: var(--paper); border: 1px solid var(--line-strong); border-radius: var(--radius-control); color: var(--ink); width: 100%; cursor: pointer; }
 .review-view-label { font-size: 14px; color: var(--muted); margin: 16px 0; }
 .review-list { list-style: none; padding: 0; margin: 0; }
 .review-list > li { margin: 0; border-bottom: 1px solid var(--line); }

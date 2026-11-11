@@ -1,4 +1,5 @@
 'use client';
+import {Select} from './ui';
 import {useState} from 'react';
 import type {SetupDraft} from '@core/setup-schema';
 import {useI18n} from './i18n';
@@ -20,8 +21,8 @@ export default function StrategyReview({matching,onChange}:{matching:NonNullable
   {strategy.workAccess.length>0&&<div><strong>{t('Review your declared work access')}</strong><p className="footnote">{t('These rules come from your work-authorization answer. Check each country before confirming.')}</p>
    {strategy.workAccess.map((rule,index)=><div className="access-review" key={rule.country}>
     <span>{new Intl.DisplayNames([locale],{type:'region'}).of(rule.country)}</span>
-    <label>{t('Work access')}<select value={rule.access} onChange={event=>onChange({...matching,strategy:{...strategy,workAccess:strategy.workAccess.map((r,i)=>i===index?{...r,access:event.target.value as 'authorized'|'sponsorship'}:r)}})}><option value="authorized">{t('I can work here without sponsorship')}</option><option value="sponsorship">{t('I need sponsorship')}</option></select></label>
-    {rule.access==='sponsorship'&&<label>{t('If sponsorship is not mentioned')}<select value={rule.unknownSponsorship} onChange={event=>onChange({...matching,strategy:{...strategy,workAccess:strategy.workAccess.map((r,i)=>i===index?{...r,unknownSponsorship:event.target.value as 'allow'|'research'|'exclude'}:r)}})}><option value="allow">{t('Keep and verify')}</option><option value="research">{t('Research first')}</option><option value="exclude">{t('Exclude')}</option></select></label>}
+    <label>{t('Work access')}<Select value={rule.access} onValueChange={value=>onChange({...matching,strategy:{...strategy,workAccess:strategy.workAccess.map((r,i)=>i===index?{...r,access:value as 'authorized'|'sponsorship'}:r)}})} options={[{value:'authorized',label:t('I can work here without sponsorship')},{value:'sponsorship',label:t('I need sponsorship')}]}/></label>
+    {rule.access==='sponsorship'&&<label>{t('If sponsorship is not mentioned')}<Select value={rule.unknownSponsorship} onValueChange={value=>onChange({...matching,strategy:{...strategy,workAccess:strategy.workAccess.map((r,i)=>i===index?{...r,unknownSponsorship:value as 'allow'|'research'|'exclude'}:r)}})} options={[{value:'allow',label:t('Keep and verify')},{value:'research',label:t('Research first')},{value:'exclude',label:t('Exclude')}]}/></label>}
    </div>)}
   </div>}
  </div>;

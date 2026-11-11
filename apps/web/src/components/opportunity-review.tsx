@@ -1,4 +1,5 @@
 'use client';
+import {Select} from './ui';
 
 import {useRef, useState} from 'react';
 import {ArrowLeft, ArrowUpRight, Bookmark, Building2, Check, CircleCheck, CircleHelp, Info, MapPin, Search, Sparkles, X} from 'lucide-react';
@@ -55,8 +56,8 @@ export default function OpportunityReview({jobs, allJobs, profile, version, filt
           {[["all", t('All')], ["strong", t('Strong')], ["saved", t('Saved')]].map(([value, label], index) => <button type="button" key={value} aria-pressed={filter === value} className={filter === value ? 'review-filter selected' : 'review-filter'} onClick={() => changeFilter(value)}>{label} <span>({number(counts[index])})</span></button>)}
         </div>
         <div className="review-filter-controls">
-          <label className="review-source"><span className="sr-only">{t('Show source')}</span><select aria-label={t('Show source')} value={source} onChange={event => {onSource(event.target.value); setShown(50);}}><option value="all">{t('Source: All')}</option>{[...new Set(allJobs.map(job => job.sourceKey || 'linkedin'))].map(key => <option key={key} value={key}>{sourceLabel(key)}</option>)}</select></label>
-          <label className="review-views"><span className="sr-only">{t('More views')}</span><select aria-label={t('More views')} value={primaryFilters.includes(filter) ? '' : filter} onChange={event => {if (event.target.value) changeFilter(event.target.value);}}><option value="">{t('More views')}</option><option value="research">{t('Research queue')}</option><option value="applications">{t('Applications')}</option><option value="followups">{t('Follow-ups due')}</option><option value="dismissed">{t('Archive')}</option></select></label>
+          <label className="review-source"><span className="sr-only">{t('Show source')}</span><Select size="compact" aria-label={t('Show source')} value={source} onValueChange={value=>{onSource(value);setShown(50);}} options={[{value:'all',label:t('Source: All')},...[...new Set(allJobs.map(job=>job.sourceKey||'linkedin'))].map(key=>({value:key,label:sourceLabel(key)}))]}/></label>
+          <label className="review-views"><span className="sr-only">{t('More views')}</span><Select size="compact" aria-label={t('More views')} value={primaryFilters.includes(filter)?'':filter} onValueChange={value=>{if(value)changeFilter(value);}} options={[['',t('More views')],['research',t('Research queue')],['applications',t('Applications')],['followups',t('Follow-ups due')],['dismissed',t('Archive')]].map(([value,label])=>({value,label}))}/></label>
         </div>
       </div>
       {!primaryFilters.includes(filter) && <p className="review-view-label">{t(filter === 'research' ? 'Research queue' : filter === 'applications' ? 'Applications' : filter === 'followups' ? 'Follow-ups due' : 'Archive')}</p>}
