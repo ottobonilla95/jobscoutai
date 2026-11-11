@@ -67,6 +67,12 @@ export const assessmentSchema = z.object({
   salaryEvidence: z.string().max(500).nullable(),
   equityEvidence: z.string().max(500).nullable(),
   founderPathEvidence: z.string().max(500).nullable(),
+  compensation: z.object({
+    base: z.string().max(500).nullable(),
+    variable: z.string().max(500).nullable(),
+    equity: z.string().max(500).nullable(),
+    headline: z.string().max(500).nullable(),
+  }).nullish(),
 });
 export type Assessment = z.infer<typeof assessmentSchema> & { language?:'en'|'es'; evaluation?: ReturnType<typeof evaluateStrategy> };
 
@@ -96,4 +102,4 @@ export const trackingSchema=z.object({
   followUp:z.union([z.literal(''),z.iso.date()]).default(''),
 });
 export type Tracking=z.infer<typeof trackingSchema>;
-export type Verification={status:'open'|'closed'|'unknown'; checkedAt:string; applicationUrl:string|null; note:string};
+export type Verification={status:'open'|'closed'|'unknown'; checkedAt:string; applicationUrl:string|null; note:string; recovery?:{originalUrl:string;boardUrl:string;outcome:'recovered'|'not_found'|'ambiguous'|'unavailable';replacementUrl?:string}};

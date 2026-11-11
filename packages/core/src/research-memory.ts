@@ -13,7 +13,11 @@ export function listingDossier(job:Job,assessment:Assessment,version:number,prev
  const now=new Date().toISOString(),retrievedAt=job.descriptionCheckedAt||job.firstSeen;
  const evidence:ResearchEvidence[]=[];
  const add=(topic:string,quote:string|null,claim=topic)=>{if(quote&&supported(quote,job.description||''))evidence.push(evidenceRecord({topic,claim,quote,url:job.url,scope:'job',origin:'listing',stance:'supports',recordedAt:now,retrievedAt}));};
- add('Salary',assessment.salaryEvidence);add('Equity',assessment.equityEvidence);add('Ownership',assessment.founderPathEvidence);
+ const pay=assessment.compensation;
+ if(pay){add('Guaranteed base pay',pay.base);add('Variable pay',pay.variable);add('Advertised package',pay.headline);add('Equity',pay.equity);}
+ if(!pay||![pay.base,pay.variable,pay.headline].some(Boolean))add('Salary',assessment.salaryEvidence);
+ if(!pay?.equity)add('Equity',assessment.equityEvidence);
+ add('Ownership',assessment.founderPathEvidence);
  for(const c of assessment.evaluation?.components||[])add(c.label,c.evidence,c.reason);
  for(const gate of assessment.evaluation?.gates||[])add(gate.label,gate.evidence,gate.reason);
  const questions:ResearchQuestion[]=assessment.concerns.map(question=>({id:researchId(question.toLowerCase()),question,topic:'Unresolved concern',status:'open',answer:'',evidenceIds:[]}));

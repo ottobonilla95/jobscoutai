@@ -8,6 +8,7 @@ import {ResearchMemory,listingDossier,researchId,evidenceRecord,mergeEvidence} f
 import type {Store} from './store';import type {Job,Profile} from './profile';import type {ResearchDossier,ResearchQuestion,ResearchEvidence} from './research-memory-schema';
 import {investigationSchema,type InvestigationOutput} from './research-task-schema';
 import {ResearchTasks} from './research-tasks';
+import {explicitBasePay} from './compensation';
 export {investigationSchema};export type {InvestigationOutput};
 export type InvestigationResult={status:'completed'|'unavailable'|'profile_changed'|'retry'|'deferred';resumed?:boolean;retryAt?:string|null;failed?:boolean;generationId:string|null;inputTokens:number;outputTokens:number;verifiedEvidence:number;answered:number;unresolved:number};
 export type InvestigationOptions={model?:LanguageModel;read?:typeof publicHtml;deadline?:number};
@@ -23,11 +24,12 @@ export function relevantResearchQuote(question:{question:string;topic:string},qu
  const q=normalized(question.question),topic=normalized(question.topic)+' '+q,text=normalized(quote);
  if(/salary|pay|compensation|cash|salario|remuneración/.test(topic)){
   if(!/(?:[$€£]|usd|eur|gbp|cop|salary|salario|sueldo|pay).{0,60}\d|\d.{0,60}(?:[$€£]|usd|eur|gbp|cop)/i.test(text))return false;
-  if(/guaranteed|base|garantizad/.test(q)&&!/guaranteed|base|garantizad|fixed|fijo/.test(text))return false;
+  if(/guaranteed|base|garantizad/.test(q)&&!explicitBasePay(text))return false;
  }
  if(/hours|schedule|horas|horario/.test(topic)&&!/hours?|horas?|week|semana|on.call|turno|schedule|horario/.test(text))return false;
  if(/stress|workload|estrés|carga/.test(topic)&&!/on.call|guardia|hours?|horas?|week|semana|workload|carga|deadline|plazo|overtime|extra/.test(text))return false;
  if(/equity|ownership|accion|participación/.test(topic)&&!/equity|shares?|stock|options?|\d\s*%|ownership|authority|decision|roadmap|budget|acciones|participación|autoridad|decisiones/.test(text))return false;
+ if(/equity|ownership|accion|participación/.test(topic)&&/percent|fully.diluted|porcentaje|%/.test(q)&&(!/\d[\d.,]*\s*%|\d[\d.,]*\s*(?:percent|por ciento)/.test(text)||!/equity|shares?|stock|options?|ownership|acciones|participación/.test(text)))return false;
  return true;
 }
 /** Quotes, not model assertions, become answers. Company facts never establish role conditions. */

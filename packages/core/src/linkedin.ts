@@ -4,6 +4,7 @@ import type { JobListing, Profile } from './profile';
 import {searchQuery,orderedQueries,type SearchSession} from './search-session';
 import {SourceError,responseFailure} from './source-error';
 import {retrySource} from './source-retry';
+import type {SearchScope} from './adaptive-search-schema';
 export {SourceError} from './source-error';
 export function parseListings(html: string): JobListing[] {
   const $ = load(html); const jobs = new Map<string, JobListing>();
@@ -23,6 +24,13 @@ export function parseListings(html: string): JobListing[] {
       url: `https://www.linkedin.com/jobs/view/${id}/`, postedAt: card.find('time').attr('datetime') || null });
   });
   return [...jobs.values()];
+}
+/** A request parameter or a matching result is not a receipt for a search filter. */
+export function observedSearchScope(html:string,requestedLocation:string,jobs:JobListing[]):SearchScope{
+ const $=load(html);
+ const observed=($('input[name="location"]').first().attr('value')||$('select[name="location"] option[selected]').first().text()||'').trim();
+ const normalize=(value:string)=>value.normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim();
+ return {status:observed?(normalize(observed)===normalize(requestedLocation)?'confirmed':'mismatch'):'unconfirmed',observedLocation:observed?observed.slice(0,240):null,evidence:observed?`Returned location filter: ${observed}`.slice(0,500):null,resultLocations:[...new Set(jobs.map(j=>j.location).filter(Boolean))].slice(0,20).map(v=>v.slice(0,240))};
 }
 export function parseDescription(html: string): string {
   const $ = load(html);
@@ -64,7 +72,7 @@ export async function searchLinkedIn(profile: Profile,session?:SearchSession): P
     if (!results.length && !/no results|no matching jobs|no jobs found/i.test(html)) {
       throw new SourceError('LinkedIn returned an unrecognized search page. Coverage is unknown.');
     }
-    return results;
+    return {jobs:results,scope:observedSearchScope(html,location,results)};
     });
     for (const job of results) jobs.set(job.id, job);
     }catch(error){if(!session||(error instanceof SourceError&&error.stop))throw error;}

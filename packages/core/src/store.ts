@@ -114,6 +114,23 @@ export class Store {
   async assess(id:string,assessment:Assessment,version:number){await this.db.prepare('UPDATE jobs SET assessment=?,score=?,evaluated_version=? WHERE user_id=? AND id=?').run(JSON.stringify(assessment),assessment.score,version,this.userId,id);await new ResearchMemory(this).capture(id,assessment,version);}
   async track(id:string,tracking:Tracking){return (await this.db.prepare('UPDATE jobs SET tracking=? WHERE user_id=? AND id=?').run(JSON.stringify(tracking),this.userId,id)).changes;}
   async verify(id:string,verification:Verification){await this.db.prepare('UPDATE jobs SET verification=? WHERE user_id=? AND id=?').run(JSON.stringify(verification),this.userId,id);}
+  async recoverListingRoute(id:string,originalUrl:string,replacement:JobListing,verification:Verification,expectedVersion:number){
+    return this.db.transaction(async db=>{
+      const scoped=new Store(db,this.userId),current=await scoped.profile(true);
+      if(current.version!==expectedVersion)return false;
+      const job=await db.prepare('SELECT * FROM jobs WHERE user_id=? AND id=? FOR UPDATE').get(this.userId,id);
+      if(!job||job.url!==originalUrl||job.status==='dismissed'||job.duplicate_of)return false;
+      // Keep identity, tracking and historical source quotes; old answers and
+      // scores cannot establish the terms of a replacement vacancy.
+      const research=job.research?researchDossierSchema.parse(JSON.parse(String(job.research))):null;
+      if(research){research.questions=research.questions.map(q=>({...q,status:'open',answer:'',evidenceIds:[]}));research.generationIds=[];}
+      await db.prepare(`UPDATE jobs SET url=?,title=?,location=?,description=?,description_checked_at=?,posted_at=?,assessment=NULL,score=NULL,evaluated_version=NULL,notified_at=NULL,verification=?,research=? WHERE user_id=? AND id=?`)
+        .run(replacement.url,replacement.title,replacement.location,replacement.description||null,new Date().toISOString(),replacement.postedAt,JSON.stringify(verification),research?JSON.stringify(research):null,this.userId,id);
+      // An old leased/checkpointed plan must not publish answers for this new URL.
+      await db.prepare('DELETE FROM research_tasks WHERE user_id=? AND job_id=? AND profile_version=?').run(this.userId,id,expectedVersion);
+      return true;
+    });
+  }
   async setStatus(id:string,status:Job['status']){await this.db.prepare('UPDATE jobs SET status=? WHERE user_id=? AND id=?').run(status,this.userId,id);}
   async markDistinct(id:string){await this.db.prepare('UPDATE jobs SET duplicate_of=NULL,duplicate_reviewed=1 WHERE user_id=? AND id=?').run(this.userId,id);}
   async job(id:string){const row=await this.db.prepare('SELECT j.*,t.value AS research_task FROM jobs j LEFT JOIN research_tasks t ON t.user_id=j.user_id AND t.job_id=j.id AND t.profile_version=(SELECT version FROM profile WHERE user_id=?) WHERE j.user_id=? AND j.id=?').get(this.userId,this.userId,id);return row?jobFromRow(row):null;}

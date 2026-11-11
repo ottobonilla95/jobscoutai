@@ -51,5 +51,5 @@ test('a failed Colombian query retries then allows Europe to run and reports inc
  },s);
  assert.equal(reads,4);assert.equal(s.remaining,20);assert.equal(s.attempts[0].retries,2);
  assert.equal(s.blocked.size,0);assert.deepEqual(result.blocked,[]);assert.ok(result.errors.some(e=>e.includes('Colombia')));
- assert.deepEqual(locationCoverage(requested,s.attempts),{checked:[requested[1]],unavailable:[requested[0]],unsearched:[requested[2]]});
+ assert.deepEqual(locationCoverage(requested,s.attempts),{checked:[requested[1]],unavailable:[requested[0]],unsearched:[requested[2]],unconfirmed:[requested[1]],mismatched:[]});
 });

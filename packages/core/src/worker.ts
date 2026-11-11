@@ -18,6 +18,8 @@ import {queryKey,locationCoverage,type SearchSession} from './search-session';
 import {searchTitles} from './discovery';
 import {activeCountrySources} from './country-sources';
 import {parseBoard} from './source-settings';
+import {loadCompanyBoard} from './company-board';
+import {searchQuery} from './search-session';
 
 const defaults = { verify: verifyListing, search: (profile:Profile,session?:SearchSession)=>searchSources(profile,undefined,session), describe: describeJob, rank: rankJob, notify: notifyMatches,plan:planAdaptiveSearch,investigate:investigateOpportunity };
 type Dependencies={investigate?:typeof investigateOpportunity;search:(profile:Profile,session?:SearchSession)=>Promise<SearchReport|JobListing[]>;describe:typeof describeJob;rank:typeof rankJob;notify:typeof notifyMatches;verify?:typeof verifyListing;plan?:(input:PlannerInput)=>Promise<AdaptivePlan>};
@@ -33,13 +35,32 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
   const counts={discovered:0,evaluated:0,matched:0,inputTokens:0,outputTokens:0};
   const research:ResearchStats={attempted:0,completed:0,resumed:0,verifiedEvidence:0,answered:0,unresolved:0,retryScheduled:0,failed:0,stopReason:profile.researchEnabled?'finished':'disabled'};
   const report:SearchDiscovery={profileVersion:version,rounds:[],requests:0,requestLimit:24,stopReason:'round_limit',coverage:locationCoverage(profile.locations,[])};
-  const session:SearchSession={round:0,page:0,remaining:24,deadline:started+8*60000,seen:new Set(),blocked:new Set(),history:new Map(state.attempts.map(a=>[queryKey(a),a.checkedAt])),successful:new Set(state.attempts.filter(a=>a.status==='ok').map(queryKey)),cache:new Map(),perSource:new Map(),perSourceLimit:Math.min(12,Math.max(6,profile.locations.length+2)),attempts:[],items:[]};
+  const session:SearchSession={round:0,page:0,remaining:24,deadline:started+8*60000,seen:new Set(),blocked:new Set(),history:new Map(state.attempts.map(a=>[queryKey(a),a.checkedAt])),successful:new Set(state.attempts.filter(a=>a.status==='ok'&&a.scope?.status!=='mismatch').map(queryKey)),cache:new Map(),perSource:new Map(),perSourceLimit:Math.min(12,Math.max(6,profile.locations.length+2)),attempts:[],items:[]};
   const errors:string[]=[];let failed=false,hadSuccess=false;
   const known=new Set((await store.jobs()).map(j=>j.id)),seen=new Set<string>(),evaluated=new Set<string>(),newCandidates=new Set<string>(),verified=new Set<string>();
   const evaluationLimit=Math.max(0,Math.min(profile.maxJobsPerRun,profile.dailyEvaluationLimit-await store.evaluatedToday()));
   let searchProfile=profile,plan:AdaptivePlan|null=null;
   const heartbeat=setInterval(()=>{void store.heartbeat(id).catch(()=>console.error('Worker heartbeat failed.'));},30000);
   const current=async()=> (await store.profile()).version===version;
+  const verify=async(job:Awaited<ReturnType<Store['jobs']>>[number])=>{
+    if(!dependencies.verify)return;
+    const result=await dependencies.verify(job.url,undefined,{job,deadline:session.deadline,readBoard:board=>{
+      if(!profile.sources.includes('companies'))throw new Error('Company board recovery is disabled.');
+      const query={source:board.key,query:'*',location:'',page:0};
+      return searchQuery(session,query,()=>loadCompanyBoard(board)).then(jobs=>{
+        if(!session.cache.has(queryKey(query)))throw new Error('No source budget remains for board recovery.');
+        return jobs;
+      });
+    }});
+    if(!await current())return;
+    const {replacement,...verification}=result;
+    if(replacement)await store.recoverListingRoute(job.id,job.url,replacement,verification,version);
+    else await store.verify(job.id,verification);
+  };
+  const metrics=(jobs:Awaited<ReturnType<Store['jobs']>>)=>{
+    const strong=jobs.filter(j=>newCandidates.has(j.id)&&strongMatch(j,profile,version));
+    report.metrics={elapsedMs:Math.max(0,Date.now()-started),uniqueDiscovered:seen.size,newCandidates:newCandidates.size,duplicateCandidates:jobs.filter(j=>seen.has(j.id)&&j.duplicateOf).length,evaluated:counts.evaluated,newStrongMatches:strong.length,newStrongWithOpenRoute:strong.filter(j=>j.verification?.status==='open').length,inputTokens:counts.inputTokens,outputTokens:counts.outputTokens};
+  };
   try{
     if(profile.cvText.length<100)throw new Error('Add your CV in Search profile before running a search.');
     if(!integrations().ai)throw new Error('Add OPENAI_API_KEY on the server to enable matching.');
@@ -97,18 +118,19 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       // enough. A closed listing must not stop the loop as a successful match.
       if(dependencies.verify&&await current()){
         const candidates=(await store.jobs()).filter(j=>newCandidates.has(j.id)&&strongMatch(j,profile,version)&&!verified.has(j.id)&&(!j.verification||Date.now()-Date.parse(j.verification.checkedAt)>14*86400000)).slice(0,3-verified.size);
-        for(const job of candidates){if(Date.now()>=session.deadline)break;await store.verify(job.id,await dependencies.verify(job.url));verified.add(job.id);}
+        for(const job of candidates){if(Date.now()>=session.deadline)break;await verify(job);verified.add(job.id);}
       }
       if(Date.now()>=session.deadline)report.stopReason='time_budget';
       if(!await current())report.stopReason='profile_changed';
       const jobs=await store.jobs();counts.matched=jobs.filter(j=>evaluated.has(j.id)&&strongMatch(j,profile,version)).length;
+      metrics(jobs);
       const strong=jobs.filter(j=>newCandidates.has(j.id)&&strongMatch(j,profile,version)).length;
       report.rounds.push({round,reason:plan?.reason||'Search confirmed roles and selected sources.',newCandidates:fresh.size,strongCandidates:strong,attempts:session.attempts,generationId:plan?.generationId||null,queries:searchTitles(searchProfile),boards:plan?.boards.map(b=>b.url)||[]});
       report.coverage=locationCoverage(profile.locations,report.rounds.flatMap(r=>r.attempts));
       report.requests=24-session.remaining;
       const history=new Map(state.attempts.map(a=>[queryKey(a),a]));session.attempts.forEach(a=>history.set(queryKey(a),a));
       state={...state,attempts:[...history.values()].sort((a,b)=>a.checkedAt.localeCompare(b.checkedAt)).slice(-120)};
-      state.attempts.forEach(a=>{const key=queryKey(a);session.history.set(key,a.checkedAt);if(a.status==='ok')session.successful!.add(key);else session.successful!.delete(key);});
+      state.attempts.forEach(a=>{const key=queryKey(a);session.history.set(key,a.checkedAt);if(a.status==='ok'&&a.scope?.status!=='mismatch')session.successful!.add(key);else session.successful!.delete(key);});
       if(!await store.saveDiscoveryState(scope,state,version)){report.stopReason='profile_changed';break;}
       await store.progress(id,counts,report);
       if(report.stopReason==='profile_changed'||report.stopReason==='time_budget'||budgetStopped)break;
@@ -146,7 +168,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     }
     if(dependencies.verify&&await current()){
       const stale=(await store.jobs()).filter(j=>j.status!=='dismissed'&&!j.duplicateOf&&!verified.has(j.id)&&(!j.verification||Date.now()-Date.parse(j.verification.checkedAt)>14*86400000)).slice(0,3-verified.size);
-      for(const job of stale){if(Date.now()>=session.deadline)break;await store.verify(job.id,await dependencies.verify(job.url));}
+      for(const job of stale){if(Date.now()>=session.deadline)break;await verify(job);}
     }
     if(dependencies.investigate&&profile.researchEnabled&&await current()){
       const tasks=new ResearchTasks(store),eligible=(await store.jobs()).filter(j=>!session.blocked.has(j.sourceKey||'linkedin')&&dueForInvestigation(j,profile,version)).sort((a,b)=>Number(Boolean(b.researchRequested))-Number(Boolean(a.researchRequested)));
@@ -161,13 +183,15 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       }
     }
     if(research.retryScheduled||research.failed)errors.push('Some research remains unfinished. Saved sources and retry status are available on each opportunity.');
-    counts.matched=(await store.jobs()).filter(j=>evaluated.has(j.id)&&strongMatch(j,profile,version)).length;
+    const finalJobs=await store.jobs();counts.matched=finalJobs.filter(j=>evaluated.has(j.id)&&strongMatch(j,profile,version)).length;metrics(finalJobs);
     const latest=await store.profile();
     if(latest.version===version&&canNotify){try{await dependencies.notify(store,latest.profile,version);}catch(error){errors.push(error instanceof Error?error.message:'Notification failed.');}}
     failed=!hadSuccess&&errors.length>0;
   }catch(error){failed=true;errors.push(error instanceof Error?error.message:'Search failed.');}
   finally{
-    clearInterval(heartbeat);await store.researchProgress(id,research);report.requests=24-session.remaining;await store.progress(id,counts,report);
+    clearInterval(heartbeat);await store.researchProgress(id,research);report.requests=24-session.remaining;
+    if(!report.metrics)metrics(await store.jobs());
+    report.metrics!.elapsedMs=Math.max(0,Date.now()-started);await store.progress(id,counts,report);
     await store.finish(id,failed?'failed':errors.length?'partial':'completed',counts,[...new Set(errors)].join(' ').slice(0,1500)||null);
   }
   return {id,status:failed?'failed':errors.length?'partial':'completed',...counts};

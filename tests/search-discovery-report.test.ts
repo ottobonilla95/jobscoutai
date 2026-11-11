@@ -20,3 +20,11 @@ test('coverage gaps remain visible outside collapsed details and legacy reports 
  assert.match($('details').text(),/4 of 24 source requests used, including retries/);
  assert.doesNotThrow(()=>render({...report,coverage:undefined}));
 });
+test('changed and unconfirmed location filters remain visible, alongside measured search yield',()=>{
+ const report:SearchDiscovery={profileVersion:1,requests:2,requestLimit:24,stopReason:'round_limit',coverage:{checked:['London'],unavailable:[],unsearched:[],unconfirmed:['London'],mismatched:['Europe']},metrics:{elapsedMs:12500,uniqueDiscovered:12,newCandidates:3,duplicateCandidates:9,evaluated:2,newStrongMatches:1,newStrongWithOpenRoute:0,inputTokens:450,outputTokens:80},rounds:[{round:0,reason:'Initial search',newCandidates:0,strongCandidates:0,generationId:null,queries:['Engineer'],boards:[],attempts:[{source:'linkedin',query:'Engineer',location:'Europe',page:0,status:'ok',found:12,checkedAt:'2026-11-11',scope:{status:'mismatch',observedLocation:'Ireland',evidence:'Returned location filter: Ireland',resultLocations:['Dublin, Ireland']}}]}]};
+ const $=load(renderToStaticMarkup(createElement(I18nProvider,{initial:{locale:'en',preference:'en'}},createElement(Report,{report}))));
+ assert.match($('body').children('div').text(),/Search location not confirmed by the source: London/);
+ assert.match($('body').children('div').text(),/Source changed the location filter: Europe/);
+ assert.match($('td').text(),/Source location: Ireland/);assert.match($('td').text(),/Location filter changed; results not used/);
+ assert.match($('details').text(),/Duplicate results: 9/);assert.match($('details').text(),/450 input, 80 output/);
+});

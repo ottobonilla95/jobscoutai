@@ -6,6 +6,7 @@ import { aiModel } from './ai-model';
 import { integrations } from './config';
 import { assessmentSchema, type Assessment, type Job, type Profile } from './profile';
 import {answeredClarifications} from './goal-clarifications';
+import {explicitBasePay} from './compensation';
 
 export function verifyEvidence(assessment: Assessment, description: string): Assessment {
   const normalized = description.toLowerCase().replace(/\s+/g, ' ');
@@ -13,6 +14,16 @@ export function verifyEvidence(assessment: Assessment, description: string): Ass
   for (const key of ['salaryEvidence','equityEvidence','founderPathEvidence'] as const) {
     const evidence = result[key];
     if (evidence && !normalized.includes(evidence.toLowerCase().replace(/\s+/g, ' '))) result[key] = null;
+  }
+  if(result.compensation){
+    const exact=(quote:string|null)=>quote&&normalized.includes(quote.toLowerCase().replace(/\s+/g,' '))?quote:null;
+    const base=exact(result.compensation.base),variable=exact(result.compensation.variable),equity=exact(result.compensation.equity);
+    result.compensation={
+      base:base&&explicitBasePay(base)?base:null,
+      variable:variable&&/bonus|bonuses|commission|variable|incentive|bonificaci[oó]n|comisi[oó]n/i.test(variable)?variable:null,
+      equity:equity&&/equity|shares?|stock|options?|acciones|participaci[oó]n/i.test(equity)?equity:null,
+      headline:exact(result.compensation.headline),
+    };
   }
   if (result.eligibility === 'ineligible') result.score = Math.min(result.score, 39);
   return result;
@@ -36,6 +47,7 @@ Evaluate skills, responsibilities, compensation, working conditions and the cand
 Use the supplied scoring rubrics: return one component per criterion ID and one assessment per requirement ID. Component evidence must quote the job description; compare it with the CV without inventing skills. Null means insufficient evidence. Identify only actual available work locations as ISO two-letter country codes with exact location quotes. Sponsorship evidence must apply to that country, not a different location. Citizenship is context, not permission to infer legal work rights. Use the user-confirmed work-access rules.
 Score 80-100 only for compelling supported fit, 50-79 for potential fit with meaningful unknowns, below 50 for weak fit.
 Each evidence field must be an exact short excerpt from the description, or null if absent. Never estimate equity, salary or founder progression.
+Also separate compensation into exact quotes: base (explicit guaranteed/base/fixed cash only), variable (bonus/commission), equity (grant/value/terms as stated), and headline (advertised package/range). Return null for unstated components. A total/OTE or base-plus-bonus range is never guaranteed base. An equity currency value does not establish a grant percentage. Preserve contradictory headline/body terms in concerns and evidence; never average or resolve them by guessing.
 Explain the match and concerns concretely. Output only the requested structured result.`,
     prompt: JSON.stringify(jobEvaluationContext(job,profile)),
   });

@@ -1,6 +1,5 @@
 import {searchTitles} from './discovery';
 import { load } from 'cheerio';
-import { z } from 'zod';
 import type { Job, JobListing, Profile } from './profile';
 import { searchLinkedIn, fetchDescription, SourceError } from './linkedin';
 import { parseBoard, sourceLabel } from './source-settings';
@@ -10,6 +9,8 @@ import { publicData } from './source-http';
 import { plainText } from './source-html';
 import {searchQuery,type SearchSession} from './search-session';
 import {retrySource} from './source-retry';
+import {loadCompanyBoard} from './company-board';
+export {parseCompanyJobs} from './company-board';
 export { plainText } from './source-html';
 
 export type SearchReport = { jobs: JobListing[]; errors: string[]; blocked: string[]; succeeded: number };
@@ -48,37 +49,9 @@ export async function searchYc(profile: Profile,session?:SearchSession) {
   return (await searchQuery(session,{source:'yc',query:'*',location:'',page:0},async()=>parseYcListings(await publicData('https://www.ycombinator.com/jobs/role/all','Y Combinator'))))
     .filter(job=>matchesTitle(job.title,profile) && (!profile.remoteOnly || /remote/i.test(job.location)));
 }
-const ashbySchema=z.object({jobs:z.array(z.object({
-  id:z.string().optional(),title:z.string(),location:z.string(),jobUrl:z.url(),isListed:z.boolean().optional(),
-  isRemote:z.boolean().optional(),descriptionPlain:z.string().optional(),descriptionHtml:z.string().optional(),
-  publishedAt:z.string().optional(),compensation:z.object({compensationTierSummary:z.string().nullish()}).nullish(),
-  secondaryLocations:z.array(z.object({location:z.string()})).optional(),
-}))});
-const greenhouseSchema=z.object({jobs:z.array(z.object({
-  id:z.number(),title:z.string(),location:z.object({name:z.string()}),absolute_url:z.url(),content:z.string(),
-}))});
-export function parseCompanyJobs(raw: unknown, board: NonNullable<ReturnType<typeof parseBoard>>): JobListing[] {
-  if(board.provider==='ashby')return ashbySchema.parse(raw).jobs.filter(j=>j.isListed!==false).map(j=>{
-    const url=new URL(j.jobUrl);
-    if(url.protocol!=='https:'||url.hostname!=='jobs.ashbyhq.com')throw new SourceError('Ashby returned an unexpected job URL.',true);
-    const id=j.id||url.pathname.split('/').filter(Boolean).at(-1)!;
-    return {id:`${board.key}:${id}`,sourceKey:board.key,title:j.title,company:board.slug,
-      location:[j.location,...(j.secondaryLocations||[]).map(l=>l.location),...(j.isRemote?['Remote']:[])].join(' · '),
-      url:url.href,postedAt:j.publishedAt||null,description:`${j.descriptionPlain||plainText(j.descriptionHtml||'')}\n${j.compensation?.compensationTierSummary||''}`.trim().slice(0,24000)};
-  });
-  return greenhouseSchema.parse(raw).jobs.map(j=>{
-    const url=new URL(j.absolute_url);if(url.protocol!=='https:')throw new SourceError('Greenhouse returned an invalid job URL.',true);
-    // Greenhouse content can be entity-encoded HTML. Decode once, then strip markup.
-    const decoded=load(j.content).text();
-    return {id:`${board.key}:${j.id}`,sourceKey:board.key,title:j.title,company:board.slug,location:j.location.name,
-      url:url.href,postedAt:null,description:plainText(decoded.includes('<')?decoded:j.content)};
-  });
-}
 export async function searchCompanyBoard(value: string, profile: Profile,session?:SearchSession) {
   const board=parseBoard(value);if(!board)throw new SourceError('Unsupported company board URL.',true);
-  const url=board.provider==='ashby'?`https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(board.slug)}?includeCompensation=true`:
-    `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board.slug)}/jobs?content=true`;
-  return (await searchQuery(session,{source:board.key,query:'*',location:'',page:0},async()=>parseCompanyJobs(JSON.parse(await publicData(url,sourceLabel(board.key))),board)))
+  return (await searchQuery(session,{source:board.key,query:'*',location:'',page:0},()=>loadCompanyBoard(board)))
     .filter(job=>matchesTitle(job.title,profile) && (!profile.remoteOnly || /remote/i.test(job.location)));
 }
 export async function searchSources(profile: Profile, adapters: {
@@ -100,6 +73,7 @@ export async function searchSources(profile: Profile, adapters: {
     catch(error){if(error instanceof SourceError&&error.stop){report.blocked.push(task.key);session?.blocked.add(task.key);}report.errors.push(error instanceof SourceError?error.message:`${sourceLabel(task.key)} could not be read. Coverage is unknown; retry later.`);}
   }
   if(session)for(const attempt of session.attempts){
+    if(attempt.scope?.status==='mismatch')report.errors.push(`${sourceLabel(attempt.source)} returned a different location filter. Results from that query were not used; requested coverage remains unconfirmed.`);
     if(attempt.status==='blocked'&&!report.blocked.includes(attempt.source))report.errors.push(`${attempt.location?attempt.location+': ':''}${attempt.error||'Source request failed. Coverage is unknown.'}`);
   }
   // Preserve successful queries preceding a source failure; filters still apply.
