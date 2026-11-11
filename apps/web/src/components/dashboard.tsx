@@ -14,6 +14,7 @@ import OpportunityReview from './opportunity-review';
 import { sourceOptions, sourceLabel } from '@core/source-settings';
 import WorkspaceSidebar, {type DashboardView} from './workspace-sidebar';
 import { activeCountrySources } from '@core/country-sources';
+import { workerCheckedRecently } from '@core/worker-status';
 
 export default function Dashboard({ initial, initialView }: { initial: DashboardData; initialView?: DashboardView }) {
  const {t,locale,date,number,message:localizeMessage}=useI18n();
@@ -57,7 +58,7 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
   }
   function change<K extends keyof Profile>(key: K, value: Profile[K]) { setDraft(p=>({...p,[key]:value})); setDirty(true); }
   const running = data.runs.some(r=>r.status==='running');
-  const workerOnline = data.state.heartbeat && Date.now()-Date.parse(data.state.heartbeat)<180000;
+  const workerOnline = workerCheckedRecently(data.state.heartbeat);
   const strong = data.jobs.filter(j=>strongMatch(j,data.profile,data.version));
   const visible = data.jobs.filter(j=>sourceFilter==='all'||(j.sourceKey||'linkedin')===sourceFilter).filter(j=>filter==='dismissed' ? j.status==='dismissed' : j.status!=='dismissed' &&
     (filter==='saved' ? j.status==='saved' : filter==='strong' ? strong.some(s=>s.id===j.id) : filter==='research'?recommendation(j)==='research':filter==='applications'?['applied','interviewing','offer'].includes(j.tracking?.stage||''):filter==='followups'?Boolean(j.tracking?.followUp&&j.tracking.followUp<=new Date().toISOString().slice(0,10)):true));
@@ -123,7 +124,7 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
         <ReviewedPreferences profile={data.profile} version={data.version} refresh={refresh}/>
       </>}
       {tab==='activity'&&<>
-        <div className="integration-row"><Integration label={t("AI matching")} ready={data.integrations.ai}/><Integration label={t("Email delivery")} ready={data.integrations.email}/><Integration label={t("Worker")} ready={Boolean(workerOnline)}/></div>
+        <div className="integration-row"><Integration label={t("AI matching")} ready={data.integrations.ai}/><Integration label={t("Email delivery")} ready={data.integrations.email}/><Integration label={t("Worker")} ready={workerOnline} status={t(workerOnline?'Checked recently':'No recent check')}/></div>
         <div className="panel activity-summary"><Clock3 size={20}/><div><strong>{t("Last worker check:")} {date(data.state.heartbeat)}</strong><p>{data.profile.enabled?t('Next scheduled search: {date}',{date:date(data.state.nextRun)}):t("Scheduled searches are paused.")} {data.state.requested?t("A manual search is queued."):''}</p></div></div>
         <div className="section-heading"><h2>{t("Search history")}</h2><span className="source-label">{t("Last 30 runs")}</span></div>
         {!data.runs.length?<div className="empty-state"><Activity size={27}/><h2>{t("A fresh start.")}</h2><p>{t("Every search will leave a record here, including errors and partial results.")}</p></div>:<div className="run-list">{data.runs.map(run=><article className="run-card" key={run.id}><div className="run-top"><strong>{date(run.startedAt)}</strong><span className={`pill ${run.status==='completed'?'green':run.status==='failed'?'red':'neutral'}`}>{t(run.status)}</span></div><p>{run.discovered} {t("found")} <span>·</span> {run.evaluated} {t("evaluated")} <span>·</span> {run.matched} {t("strong matches")} <span>·</span> {(run.inputTokens+run.outputTokens).toLocaleString(locale==='es'?'es-ES':'en-GB')} {t("tokens")}</p>{run.discovery&&<SearchDiscoveryReport report={run.discovery}/>}{run.research&&<ResearchRunReport stats={run.research}/>} {run.error&&<div className="run-error"><AlertCircle size={15}/>{localizeMessage(run.error)}</div>}</article>)}</div>}
@@ -132,6 +133,6 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
     </main>
   </div>;
 }
-function Integration({label,ready}:{label:string;ready:boolean}) {
+function Integration({label,ready,status}:{label:string;ready:boolean;status?:string}) {
  const {t,locale,date,number,message:localizeMessage}=useI18n();
- return <span className={`integration ${ready?'ready':''}`}><span className="tiny-dot"/>{label}<small>{ready?t("Connected"):t("Needs setup")}</small></span>; }
+ return <span className={`integration ${ready?'ready':''}`}><span className="tiny-dot"/>{label}<small>{status??(ready?t("Connected"):t("Needs setup"))}</small></span>; }
