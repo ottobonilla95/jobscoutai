@@ -33,7 +33,7 @@ export default function LocationPicker({value,onChange,id,invalid,legacyLocation
  function chooseCities(countryCode:string){setCityCountry(countryCode);setQuery('');setCities([]);setOpen(true);setActive(-1);input.current?.focus();}
  return <div className="location-picker" onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget))setOpen(false);}}>
   <label htmlFor={inputId}>{cityCountry?t('Search for cities in {country}',{country:countryName(cityCountry,locale)}):t('Search for a country or city')}</label>
-  <p id={hintId} className="footnote">{t('Choose up to {count} countries or cities. A country searches all its cities; a city narrows the search to that location.',{count:maxSearchLocations})}</p>
+  <p id={hintId} className="footnote">{t('Choose countries to search nationwide, or cities to narrow your search. Up to {count} locations; cities are optional.',{count:maxSearchLocations})}</p>
   {cityCountry&&<div className="location-city-scope"><p className="footnote">{t(value.some(p=>p.kind==='country'&&p.countryCode===cityCountry)?'Selecting a city replaces the whole-country search for {country}. You can add more cities.':'Add more cities in {country} to include them in your search.',{country:countryName(cityCountry,locale)})}</p><button type="button" className="text-button" onClick={()=>{setCityCountry('');setQuery('');setCities([]);input.current?.focus();}}>{t('Search other countries or cities')}</button></div>}
   {legacyLocations&&!value.length&&<p className="footnote">{t('Your previous locations: {locations}. Select them below to confirm your search area.',{locations:legacyLocations})}</p>}
   <input ref={input} id={inputId} role="combobox" aria-autocomplete="list" aria-expanded={open&&options.length>0} aria-controls={open&&options.length?listId:undefined}
@@ -48,15 +48,15 @@ export default function LocationPicker({value,onChange,id,invalid,legacyLocation
   {open&&query&&<Listbox id={listId} aria-label={t('Location suggestions')}>
    {options.map((place,index)=><li key={locationKey(place)} role="presentation"><ListboxOption id={`${listId}-${index}`} aria-selected={index===active}
     onMouseDown={event=>event.preventDefault()} onClick={()=>select(place)}>
-    <span>{locationLabel(place,locale)}</span><small>{t(place.kind==='country'?'All cities':value.some(p=>p.kind==='country'&&p.countryCode===place.countryCode)?'Search only this city':'City')}</small>
+    <span>{locationLabel(place,locale)}</span><small>{t(place.kind==='country'?'Whole country':value.some(p=>p.kind==='country'&&p.countryCode===place.countryCode)?'Search only this city':'City')}</small>
    </ListboxOption></li>)}
   </Listbox>}
   {open&&query&&!options.length&&!loading&&!error&&<p role="status" className="footnote">{t(value.length>=maxSearchLocations?'You have selected {count} locations. Remove one to add another, or narrow a country to a city.':'No locations found. Try a country name or another city.',{count:maxSearchLocations})}</p>}
   {loading&&<p role="status" className="footnote">{t('Looking up cities…')}</p>}
   {error&&<p role="status" className="footnote">{error}</p>}
   <div className="selection-chips" aria-label={t('Selected search locations')}>
-   {value.map(place=><span className="selection-chip location-chip" key={locationKey(place)}><span>{locationLabel(place,locale)}{place.kind==='country'&&<small> · {t('All cities')}</small>}</span>
-    {place.kind==='country'&&<button type="button" className="text-button location-refine" aria-label={t('Choose cities in {country}',{country:countryName(place.countryCode,locale)})} onClick={()=>chooseCities(place.countryCode)}>{t('Choose cities')}</button>}
+   {value.map(place=><span className="selection-chip location-chip" key={locationKey(place)}><span>{locationLabel(place,locale)}{place.kind==='country'&&<small> · {t('Whole country')}</small>}</span>
+    {place.kind==='country'&&<button type="button" className="text-button location-refine" aria-label={t('Optionally narrow {country} to specific cities',{country:countryName(place.countryCode,locale)})} onClick={()=>chooseCities(place.countryCode)}>{t('Narrow to cities')}</button>}
     <button type="button" className="icon-button" aria-label={t('Remove {location}',{location:locationLabel(place,locale)})} onClick={()=>onChange(value.filter(p=>locationKey(p)!==locationKey(place)))}><X size={16}/></button>
    </span>)}
   </div>

@@ -16,7 +16,7 @@ const {default:Editor}=await web.import('../apps/web/src/components/search-profi
 const {I18nProvider}=await web.import('../apps/web/src/components/i18n.tsx',import.meta.url);
 for(const locale of ['en','es'] as const){
  test(`${locale} profile keeps one goal, one work preference and one save action while retaining optional fields`,()=>{
-  const a=draftFromProfile({...defaultProfile,onboardingCompleted:true,cvText:'An experienced product engineer. '.repeat(5),objective:'Build useful products with a small team.',titles:['Product Engineer']},4).answers;
+  const a=draftFromProfile({...defaultProfile,onboardingCompleted:true,cvText:'An experienced product engineer. '.repeat(5),objective:'Build useful products with a small team.',titles:['Product Engineer'],searchLocations:[{kind:'country',countryCode:'CO',city:'',region:''}]},4).answers;
   a.clarificationBasis=clarificationBasis(a);
   a.goalClarifications=[{id:'remote',question:'Do you prefer remote, hybrid or onsite?',why:'This determines which opportunities fit.',options:['Remote','Hybrid'],answer:'Hybrid',importance:'requirement'}];
   const matching=standardMatching(a,locale)!;
@@ -29,6 +29,8 @@ for(const locale of ['en','es'] as const){
   const $=load(html);
   assert.equal($('#profile-objective').length,1);
   assert.equal($('#profile-work-preference').length,1);
+  assert.ok($('.location-chip').text().includes(translate(locale,'Whole country')));
+  assert.equal($('.location-refine').text(),translate(locale,'Narrow to cities'));
   assert.equal($('button').filter((_,el)=>$(el).text().includes(translate(locale,'Save search profile'))).length,1);
   for(const id of ['profile-cv','profile-salary','profile-equity','profile-authorization','profile-frequency','profile-constraints'])assert.equal($('#'+id).length,1);
   assert.equal($('textarea').filter((_,el)=>$(el).text()===a.objective).length,1);

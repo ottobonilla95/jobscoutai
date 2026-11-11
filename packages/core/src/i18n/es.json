@@ -1,4 +1,8 @@
 {
+  "Whole country": "Todo el país",
+  "Narrow to cities": "Limitar a ciudades",
+  "Optionally narrow {country} to specific cities": "Opcional: limitar {country} a ciudades concretas",
+  "Choose countries to search nationwide, or cities to narrow your search. Up to {count} locations; cities are optional.": "Elige países para buscar en todo su territorio, o ciudades para limitar la búsqueda. Hasta {count} ubicaciones; elegir ciudades es opcional.",
   "Optional questions about priorities and trade-offs.": "Preguntas opcionales sobre tus prioridades y lo que aceptarías cambiar.",
   "How opportunities are assessed against your profile.": "Cómo evaluamos las oportunidades según tu perfil.",
   "Advanced search details": "Detalles avanzados de búsqueda",

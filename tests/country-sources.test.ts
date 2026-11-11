@@ -23,6 +23,21 @@ function elempleoCard(href = '/co/ofertas-trabajo/ingeniero-de-software-123',mod
 const michaelpageCard = '<div class="search-job-tile"><div class="job-title"><h3><a href="/job-detail/software-engineer/ref/jn-092026-12345">Software Engineer</a></h3></div><div class="job-location">Bogotá</div></div>';
 const coProfile = {...defaultProfile,locations:['Colombia']};
 
+test('a country selection searches Colombia nationwide without requiring a city',async()=>{
+ const profile={...coProfile,remoteOnly:false,titles:['Software Engineer'],searchLocations:[{kind:'country' as const,countryCode:'CO',city:'',region:''}]};
+ const urls:string[]=[];
+ for(const source of countrySources){
+  const jobs=await searchCountrySource(source,profile,async url=>{
+   urls.push(url);
+   return source.key==='getonbrd-co'?JSON.stringify({data:[apiJob()]}):source.key==='elempleo-co'?elempleoCard():michaelpageCard;
+  });
+  assert.equal(jobs.length,1);
+ }
+ assert.equal(new URL(urls[0]).searchParams.get('country_code'),'co');
+ assert.equal(urls[1],'https://www.elempleo.com/co/ofertas-empleo/trabajo-software-engineer');
+ assert.equal(new URL(urls[2]).searchParams.get('location'),'Colombia');
+});
+
 test('country sources activate from explicit search geography, not authorization or broad remote searches', () => {
   for (const location of ['Colombia','colombia','CO','Remote, Colombia','Bogotá','Bogotá, D.C.','Medellín','Bogotá, CO']) {
     assert.equal(activeCountrySources({locations:[location]}).length,3,location);
