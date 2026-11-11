@@ -35,6 +35,18 @@ test('question output rejects repeated IDs and excessive questions, and permits 
  await assert.rejects(suggestProfile(answers(),'clarifications','en',model({questions:Array.from({length:4},(_,i)=>({...question,id:`hours_${i}`}))})));
  const result=await suggestProfile(answers(),'clarifications','en',model({questions:[]}));assert.ok('questions' in result);if('questions' in result)assert.deepEqual(result.questions,[]);
 });
+test('work arrangement has one source for saved answers and generated follow-ups in both languages',async()=>{
+ for(const text of ['Do you prefer remote, hybrid or onsite work?','¿Quieres buscar remoto, híbrido o te da igual?']){
+  const duplicate={...question,id:'work_mode',question:text,options:['Remote','Hybrid','Onsite'],answer:'Hybrid',importance:'requirement' as const};
+  const a={...clarified(),goalClarifications:[duplicate,{...question,answer:'20 hours'}]};
+  assert.deepEqual(currentClarifications(a).map(q=>q.id),['hours']);
+  assert.deepEqual(mergeClarificationQuestions(a,[duplicate]).map(q=>q.id),['hours']);
+  assert.deepEqual(standardMatching(a,'en')!.strategy.requirements,[]);
+  const result=await suggestProfile(a,'clarifications','en',model({questions:[duplicate,question]}));
+  assert.ok('questions' in result);
+  if('questions' in result)assert.deepEqual(result.questions.map(q=>q.id),['hours']);
+ }
+});
 test('answered preferences reach role suggestions, matching and job evaluation without becoming exclusions',async()=>{
  const a=clarified();let prompt='';
  await suggestProfile(a,'roles','en',model({titles:['Product Engineer']},value=>{prompt=value;}));assert.ok(prompt.includes('20 hours'));assert.ok(prompt.includes('preference'));

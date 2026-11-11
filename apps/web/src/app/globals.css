@@ -2287,6 +2287,7 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
 /* The dashboard profile is an inline editor, separate from guided onboarding. */
 .profile-editor {
   width: 100%;
+  max-width: 1120px;
   margin-bottom: 28px;
 }
 
@@ -2300,6 +2301,7 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
 .profile-editor-toolbar {
   margin-bottom: 24px;
 }
+.profile-editor-toolbar > div { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px 24px; width:100%; }
 
 .profile-editor-toolbar p {
   font-size: 14px;
@@ -2319,7 +2321,7 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
 
 .profile-editor-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
   align-items: start;
 }
@@ -2401,6 +2403,25 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
 .profile-role-field > .text-button {
   margin-top: 12px;
 }
+.profile-direction-fields { display:grid; gap:20px; }
+.profile-direction-fields > label { margin-bottom:0; }
+.profile-field-label { font-size:14px; font-weight:600; margin-bottom:8px; }
+.profile-role-field .role-picker { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 24px; }
+.profile-role-field .role-picker-row { margin:0; min-width:0; }
+.profile-role-field .role-picker > .footnote, .profile-role-field .role-picker > .text-button { grid-column:1/-1; }
+.profile-role-field .role-picker > .text-button { justify-self:start; }
+.profile-disclosure > summary { display:flex; align-items:center; gap:16px; list-style:none; cursor:pointer; font-weight:600; font-size:17px; }
+.profile-disclosure > summary::-webkit-details-marker, .strategy-details > summary::-webkit-details-marker { display:none; }
+.profile-disclosure > summary > span:first-child { flex:1; min-width:0; }
+.profile-disclosure > summary small { display:block; font-size:13px; font-weight:400; color:var(--muted); margin-top:4px; overflow-wrap:anywhere; }
+.profile-disclosure > summary::after { content:'+'; color:var(--muted); font-size:22px; font-weight:400; }
+.profile-disclosure[open] > summary::after { content:'−'; }
+.profile-disclosure[open] > summary { margin-bottom:24px; }
+.profile-disclosure .goal-clarifications { margin:0; }
+.profile-disclosure .pill { flex-shrink:0; }
+.profile-strategy-summary { max-width:75ch; white-space:pre-wrap; }
+.strategy-details { margin:20px 0; border-top:1px solid var(--line); padding-top:16px; }
+.strategy-details > summary { cursor:pointer; color:var(--green); font-weight:600; }
 
 .profile-panel [aria-invalid=true] {
   border-color: var(--red);
@@ -2478,9 +2499,13 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
 }
 
 .profile-editor-save {
+  position:sticky;
+  bottom:0;
+  z-index:5;
+  background:var(--paper);
   border-top: 1px solid var(--line);
   margin-top: 24px;
-  padding-top: 24px;
+  padding:16px 0;
 }
 
 .main-content > .search-controls {
@@ -2513,6 +2538,9 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
   .profile-panel {
     padding: 20px;
   }
+  .profile-role-field .role-picker { grid-template-columns:minmax(0,1fr); }
+  .profile-disclosure > summary { flex-wrap:wrap; gap:8px; }
+  .profile-editor-save > button { width:100%; }
   .profile-field-grid {
     gap: 20px;
     margin-bottom: 20px;

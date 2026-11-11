@@ -21,12 +21,19 @@ export const clarificationProposalSchema=z.object({questions:z.array(clarificati
 export type GoalClarification=z.infer<typeof goalClarificationSchema>;
 type Context={cvText:string;objective:string;goalClarifications?:GoalClarification[];clarificationBasis?:string};
 export function clarificationBasis(a:Pick<Context,'cvText'|'objective'>){return JSON.stringify([a.cvText.trim(),a.objective.trim()]);}
-export function currentClarifications(a:Context){return a.clarificationBasis===clarificationBasis(a)?a.goalClarifications||[]:[];}
+// Work arrangement already has a dedicated field. Filter older saved questions
+// as well as new proposals so it cannot become a second, conflicting preference.
+export function additionalClarifications<T extends Pick<GoalClarification,'question'|'options'>>(questions:T[]):T[]{
+ return questions.filter(q=>!/\b(?:remot(?:e(?:ly)?|[oa]s?)|hybrid|hibrid[oa]s?|on[ -]?site|presencial(?:es)?|work (?:arrangement|mode)|modalidad (?:de trabajo|laboral))\b/i.test(
+  [q.question,...q.options].join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g,''),
+ ));
+}
+export function currentClarifications(a:Context){return a.clarificationBasis===clarificationBasis(a)?additionalClarifications(a.goalClarifications||[]):[];}
 export function answeredClarifications(a:Context){return currentClarifications(a).filter(q=>q.answer.trim());}
-export function staleClarifications(a:Context){return Boolean(a.goalClarifications?.some(q=>q.answer.trim())&&a.clarificationBasis!==clarificationBasis(a));}
+export function staleClarifications(a:Context){return Boolean(additionalClarifications(a.goalClarifications||[]).some(q=>q.answer.trim())&&a.clarificationBasis!==clarificationBasis(a));}
 export function mergeClarificationQuestions(a:Context,questions:GoalClarification[]){
  const preserved=answeredClarifications(a);
- return [...preserved,...questions.filter(q=>!preserved.some(old=>old.id===q.id||old.question===q.question))].slice(0,3);
+ return [...preserved,...additionalClarifications(questions).filter(q=>!preserved.some(old=>old.id===q.id||old.question===q.question))].slice(0,3);
 }
 export function standardClarifications(locale:Locale):GoalClarification[]{
   return [

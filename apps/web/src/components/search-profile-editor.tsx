@@ -8,7 +8,6 @@ import StrategyReview from './strategy-review';
 import type {SearchLocation} from '@core/locations';
 import { useI18n } from './i18n';
 import GoalClarifications from './goal-clarifications';
-import GoalAnswerSummary from './goal-answer-summary';
 import type {GoalClarification} from '@core/goal-clarifications';
 
 export const profileFieldIds: Record<number, string> = {
@@ -53,7 +52,6 @@ export default function SearchProfileEditor({
   }}>
     <div className="profile-editor-toolbar">
       <div><p>{t('These values guide every search.')}</p><span role="status">{t(saveState === 'Progress saved' ? 'Draft saved' : saveState)}</span></div>
-      <button className="button primary" disabled={busy}><Check size={16}/>{t('Save search profile')}</button>
     </div>
     {error && <p role="alert" id="profile-error" className="toast error">{error}</p>}
     {notice && <p role="status" className="toast">{notice}</p>}
@@ -62,14 +60,11 @@ export default function SearchProfileEditor({
         <div className="profile-editor-main">
           <section className="panel profile-panel" aria-labelledby="profile-direction-heading">
             <div className="profile-panel-heading"><Target size={19}/><div><h2 id="profile-direction-heading">{t('Your direction')}</h2><p>{t('The roles and goals you want to move toward.')}</p></div></div>
-            <label htmlFor="profile-name">{t('Your name')} <span className="profile-optional">{t('Optional')}</span><input id="profile-name" value={a.name} maxLength={100} autoComplete="given-name" onChange={event => update('name', event.target.value)}/></label>
-            <div className="profile-field-grid">
+            <div className="profile-direction-fields">
               <label htmlFor="profile-objective">{t('Career goal')}<textarea id="profile-objective" rows={4} value={a.objective} maxLength={3000} aria-invalid={fieldError(2)} aria-describedby={fieldError(2) ? 'profile-error' : undefined} onChange={event => update('objective', event.target.value)}/></label>
-              <div className="profile-role-field"><RolePicker id="profile-titles" value={a.titles} invalid={fieldError(3)} onChange={value=>update('titles',value)}/><button type="button" className="text-button" onClick={() => void onSuggest('roles')}><Sparkles size={14}/>{t('Regenerate from my CV and goal')}</button></div>
+              <div className="profile-role-field"><p className="profile-field-label">{t('Target roles')}</p><RolePicker id="profile-titles" value={a.titles} invalid={fieldError(3)} onChange={value=>update('titles',value)}/><button type="button" className="text-button" onClick={() => void onSuggest('roles')}><Sparkles size={14}/>{t('Regenerate from my CV and goal')}</button></div>
             </div>
           </section>
-
-          <section className="panel profile-panel"><GoalClarifications answers={a} onChange={onClarifications} onGenerate={()=>void onSuggest('clarifications')} onClear={onClearClarifications}/></section>
 
           <section className="panel profile-panel" aria-labelledby="profile-location-heading">
             <div className="profile-panel-heading"><MapPin size={19}/><div><h2 id="profile-location-heading">{t('Location and work')}</h2><p>{t('Where and how your next role should fit your life.')}</p></div></div>
@@ -89,30 +84,32 @@ export default function SearchProfileEditor({
             <label htmlFor="profile-constraints">{t('Must-haves and dealbreakers')} <span className="profile-optional">{t('Optional')}</span><textarea id="profile-constraints" rows={3} value={a.constraints} maxLength={3000} onChange={event => update('constraints', event.target.value)}/><small>{t('List only firm requirements or things you would rule out. Use your goal above for softer preferences.')}</small></label>
           </section>
 
-          <section className="panel profile-panel" aria-labelledby="profile-experience-heading">
-            <div className="profile-panel-heading"><FileText size={19}/><div><h2 id="profile-experience-heading">{t('Your experience')}</h2><p>{t('Your CV gives matching the context behind your goals.')}</p></div></div>
+          <details className="panel profile-panel profile-disclosure" open={invalidStep===2||undefined}>
+            <summary><span>{t('Clarify what matters to you')}<small>{t('Optional questions about priorities and trade-offs.')}</small></span></summary>
+            <GoalClarifications answers={a} onChange={onClarifications} onGenerate={()=>void onSuggest('clarifications')} onClear={onClearClarifications} showHeading={false}/>
+          </details>
+
+          <details className="panel profile-panel profile-disclosure" open={!a.cvText||invalidStep===1||undefined}>
+            <summary><span>{t('Your experience')}<small>{a.cvFileName||t(a.cvText?'Experience added':'Bring your experience along')}</small></span></summary>
+            <label htmlFor="profile-name">{t('Your name')} <span className="profile-optional">{t('Optional')}</span><input id="profile-name" value={a.name} maxLength={100} autoComplete="given-name" onChange={event => update('name', event.target.value)}/></label>
             <div className="profile-cv-upload"><div><FileText size={22}/><span><strong>{a.cvFileName || t('Bring your experience along')}</strong><small>{t('PDF, DOCX, or TXT · Up to 5 MB')}</small></span></div><label className="button secondary"><Upload size={16}/>{t('Upload CV')}<input className="setup-file" type="file" accept=".pdf,.docx,.txt" aria-label={t('Upload CV')} onChange={event => void onUpload(event)}/></label></div>
             <label htmlFor="profile-cv">{t('CV text')}<textarea id="profile-cv" rows={7} value={a.cvText} maxLength={30000} aria-invalid={fieldError(1)} aria-describedby={fieldError(1) ? 'profile-error' : undefined} placeholder={t('Your experience, skills, and achievements…')} onChange={event => update('cvText', event.target.value)}/></label>
-          </section>
-        </div>
+          </details>
 
-        <aside className="profile-editor-aside" aria-label={t('Search preferences')}>
-          <section className="panel profile-panel" aria-labelledby="profile-matching-heading">
-            <div className="profile-panel-heading"><Sparkles size={19}/><h2 id="profile-matching-heading">{t('Matching preferences')}</h2></div>
-            <span className={`pill ${matchingCurrent ? 'green' : 'neutral'}`}>{t(matchingCurrent ? 'Up to date' : 'Update needed')}</span>
-            <p className="profile-matching-copy">{matchingCurrent ? matching!.summary : t(matching ? 'Your answers changed. Update your matching preferences before saving.' : 'Generate your matching preferences from your CV and answers, or start with standard matching.')}</p>
-            <GoalAnswerSummary answers={a}/>
+          <details className="panel profile-panel profile-disclosure" open={!matchingCurrent||undefined}>
+            <summary><span>{t('Matching preferences')}<small>{t('How opportunities are assessed against your profile.')}</small></span><span className={`pill ${matchingCurrent ? 'green' : 'neutral'}`}>{t(matchingCurrent ? 'Up to date' : 'Update needed')}</span></summary>
+            {!matchingCurrent&&<p className="profile-matching-copy">{t(matching ? 'Your answers changed. Update your matching preferences before saving.' : 'Generate your matching preferences from your CV and answers, or start with standard matching.')}</p>}
             {matchingCurrent&&matching&&<StrategyReview matching={matching} onChange={onMatching}/>}
             <div className="profile-matching-actions"><button type="button" className="button secondary full" onClick={() => void onSuggest('matching')}>{t(matchingCurrent ? 'Regenerate matching preferences' : 'Generate matching preferences')}</button><button type="button" className="text-button" onClick={onStandardMatching}>{t('Use standard matching')}</button></div>
             <p className="footnote">{t('Your explicit dealbreakers remain requirements. Missing information stays unknown.')}</p>
-          </section>
+          </details>
           <section className="panel profile-panel" aria-labelledby="profile-schedule-heading">
             <div className="profile-panel-heading"><SlidersHorizontal size={19}/><h2 id="profile-schedule-heading">{t('Search preferences')}</h2></div>
-            <label htmlFor="profile-frequency">{t('Search frequency')}<Select id="profile-frequency" value={a.intervalHours} aria-invalid={fieldError(10)} onValueChange={value=>update('intervalHours',Number(value))} options={frequencies.map(hours=>({value:hours,label:t('Every {count} hours',{count:hours})}))}/><small>{t('Searches run at least {count} hours apart. You can pause automatic searches later.', {count: minimum})}</small></label>
+            <div className="profile-field-grid"><label htmlFor="profile-frequency">{t('Search frequency')}<Select id="profile-frequency" value={a.intervalHours} aria-invalid={fieldError(10)} onValueChange={value=>update('intervalHours',Number(value))} options={frequencies.map(hours=>({value:hours,label:t('Every {count} hours',{count:hours})}))}/><small>{t('Searches run at least {count} hours apart. You can pause automatic searches later.', {count: minimum})}</small></label>
             <label className="check-label"><input type="checkbox" checked={a.emailAlerts} onChange={event => update('emailAlerts', event.target.checked)}/><span>{t('Yes, email me strong matches')}<small>{t('We will email new strong matches to your verified account address. You can change this later.')}</small></span></label>
-            {verificationNotice}
+            </div>{verificationNotice}
           </section>
-        </aside>
+        </div>
       </div>
     </fieldset>
     <div className="profile-editor-save"><span>{t('Drafts are saved automatically. Save your profile to apply changes to searches.')}</span><button className="button primary" disabled={busy}><Check size={16}/>{t(busy ? 'Working on it…' : 'Save search profile')}</button></div>
