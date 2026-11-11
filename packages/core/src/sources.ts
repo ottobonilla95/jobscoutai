@@ -9,6 +9,7 @@ import { searchCountrySource, describeCountryJob } from './country-adapters';
 import { publicData } from './source-http';
 import { plainText } from './source-html';
 import {searchQuery,type SearchSession} from './search-session';
+import {retrySource} from './source-retry';
 export { plainText } from './source-html';
 
 export type SearchReport = { jobs: JobListing[]; errors: string[]; blocked: string[]; succeeded: number };
@@ -30,7 +31,7 @@ export function parseYcListings(html: string): JobListing[] {
     const id=`yc:${path[1]}:${path[2]}`;
     jobs.set(id,{id,sourceKey:'yc',title,company,location,url:`${url.origin}${url.pathname}`,postedAt:null});
   });
-  if(!jobs.size)throw new SourceError('Y Combinator returned no recognizable job cards; coverage is unknown.',true);
+  if(!jobs.size)throw new SourceError('Y Combinator returned no recognizable job cards; coverage is unknown.');
   return [...jobs.values()];
 }
 export function parseYcDescription(html: string) {
@@ -94,8 +95,12 @@ export async function searchSources(profile: Profile, adapters: {
   for(const source of activeCountrySources(profile))tasks.push({key:source.key,run:()=>(adapters.country || ((s,p,c)=>searchCountrySource(s,p,undefined,c)))(source,profile,session)});
   for(const task of tasks){
     if(session&&(session.blocked.has(task.key)||session.remaining<=0||Date.now()>=session.deadline))continue;
-    try{report.jobs.push(...await task.run());report.succeeded++;}
-    catch(error){report.blocked.push(task.key);session?.blocked.add(task.key);report.errors.push(error instanceof SourceError?error.message:`${sourceLabel(task.key)} could not be read. Coverage is unknown; retry later.`);}
+    const before=session?.attempts.length||0;
+    try{report.jobs.push(...await task.run());const attempts=session?.attempts.slice(before)||[];if(!attempts.length||attempts.some(a=>a.status==='ok'))report.succeeded++;}
+    catch(error){if(error instanceof SourceError&&error.stop){report.blocked.push(task.key);session?.blocked.add(task.key);}report.errors.push(error instanceof SourceError?error.message:`${sourceLabel(task.key)} could not be read. Coverage is unknown; retry later.`);}
+  }
+  if(session)for(const attempt of session.attempts){
+    if(attempt.status==='blocked'&&!report.blocked.includes(attempt.source))report.errors.push(`${attempt.location?attempt.location+': ':''}${attempt.error||'Source request failed. Coverage is unknown.'}`);
   }
   // Preserve successful queries preceding a source failure; filters still apply.
   if(session)report.jobs.push(...session.items.filter(job=>matchesTitle(job.title,profile)&&(!profile.remoteOnly||/\b(remote|remoto|teletrabajo)\b/i.test(job.location))));
@@ -108,10 +113,10 @@ export async function searchSources(profile: Profile, adapters: {
 }
 export async function describeJob(id: string, job: Job) {
   if(!job.sourceKey||job.sourceKey==='linkedin')return fetchDescription(id);
-  if(countrySources.some(source=>source.key===job.sourceKey))return describeCountryJob(id,job);
+  if(countrySources.some(source=>source.key===job.sourceKey))return retrySource(()=>describeCountryJob(id,job));
   if(job.sourceKey==='yc'){
     const parts=id.match(/^yc:([a-z0-9-]+):([a-zA-Z0-9_-]+)$/);if(!parts)throw new SourceError('Invalid Y Combinator job ID.');
-    return parseYcDescription(await publicData(`https://www.ycombinator.com/companies/${parts[1]}/jobs/${parts[2]}`,'Y Combinator'));
+    return retrySource(async()=>parseYcDescription(await publicData(`https://www.ycombinator.com/companies/${parts[1]}/jobs/${parts[2]}`,'Y Combinator')));
   }
   throw new SourceError(`${sourceLabel(job.sourceKey)} did not provide a description in its feed.`);
 }

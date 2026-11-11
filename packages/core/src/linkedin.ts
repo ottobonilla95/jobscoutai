@@ -2,10 +2,9 @@ import {searchTitles} from './discovery';
 import { load } from 'cheerio';
 import type { JobListing, Profile } from './profile';
 import {searchQuery,orderedQueries,type SearchSession} from './search-session';
-
-export class SourceError extends Error {
-  constructor(message: string, public readonly stop = false) { super(message); }
-}
+import {SourceError,responseFailure} from './source-error';
+import {retrySource} from './source-retry';
+export {SourceError} from './source-error';
 export function parseListings(html: string): JobListing[] {
   const $ = load(html); const jobs = new Map<string, JobListing>();
   $('.base-card, .job-search-card').each((_, element) => {
@@ -37,14 +36,13 @@ export function parseDescription(html: string): string {
 }
 let lastRequest = 0;
 async function publicPage(url: string): Promise<string> {
-  // Low request volume; stop on throttling instead of rotating identities or retrying aggressively.
+  // Pace every physical request, including bounded retries.
   const wait = 1800 - (Date.now() - lastRequest);
   if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
   lastRequest = Date.now();
   const response = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': 'text/html' },
     redirect: 'manual', signal: AbortSignal.timeout(25000) });
-  if ([401,403,429,999].includes(response.status)) throw new SourceError(`LinkedIn access limited (HTTP ${response.status}). Search stopped; try again later.`, true);
-  if (!response.ok) throw new SourceError(`LinkedIn request failed (HTTP ${response.status}).`, true);
+  if (!response.ok) {await response.body?.cancel();throw responseFailure('LinkedIn',response);}
   const html = await response.text();
   if (/authwall|\/checkpoint\/challenge/i.test(html) && !/base-search-card__title|show-more-less-html__markup/.test(html)) {
     throw new SourceError('LinkedIn returned an access challenge. Search stopped.', true);
@@ -56,22 +54,24 @@ export async function searchLinkedIn(profile: Profile,session?:SearchSession): P
   const queries=searchTitles(profile).flatMap(query=>profile.locations.map(location=>({source:'linkedin',query,location,page:session?.page||0})));
   for (const attempt of orderedQueries(queries,session)) {
     const {query:title,location,page}=attempt;
+    try{
     const results=await searchQuery(session,attempt,async()=>{
     const query = new URLSearchParams({ keywords: title, start: String(page*25), f_TPR: `r${profile.postedWithinDays*86400}`, sortBy: 'DD' });
     if (location) query.set('location', location);
     if (profile.remoteOnly) query.set('f_WT', '2');
     const html = await publicPage(`https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?${query}`);
     const results = parseListings(html);
-    if (html.trim() && !results.length && !/no results|no matching jobs|no jobs found/i.test(html)) {
-      throw new SourceError('LinkedIn returned an unrecognized search page. Coverage is unknown.', true);
+    if (!results.length && !/no results|no matching jobs|no jobs found/i.test(html)) {
+      throw new SourceError('LinkedIn returned an unrecognized search page. Coverage is unknown.');
     }
     return results;
     });
     for (const job of results) jobs.set(job.id, job);
+    }catch(error){if(!session||(error instanceof SourceError&&error.stop))throw error;}
   }
   return [...jobs.values()];
 }
 export async function fetchDescription(id: string): Promise<string> {
   if (!/^\d+$/.test(id)) throw new Error('Invalid LinkedIn job ID.');
-  return parseDescription(await publicPage(`https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${id}`));
+  return retrySource(async()=>parseDescription(await publicPage(`https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${id}`)));
 }

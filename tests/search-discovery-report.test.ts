@@ -1,0 +1,22 @@
+import test,{after} from 'node:test';
+import assert from 'node:assert/strict';
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {fileURLToPath} from 'node:url';
+import {register} from 'tsx/esm/api';
+import {load} from 'cheerio';
+import type {SearchDiscovery} from '../packages/core/src/adaptive-search-schema';
+const web=register({namespace:'discovery-report-tests',tsconfig:fileURLToPath(new URL('../apps/web/tsconfig.json',import.meta.url))});
+after(()=>web.unregister());
+const {default:Report}=await web.import('../apps/web/src/components/search-discovery-report.tsx',import.meta.url);
+const {I18nProvider}=await web.import('../apps/web/src/components/i18n.tsx',import.meta.url);
+test('coverage gaps remain visible outside collapsed details and legacy reports still render',()=>{
+ const report:SearchDiscovery={profileVersion:1,requests:4,requestLimit:24,stopReason:'request_budget',coverage:{checked:['London'],unavailable:['Colombia'],unsearched:['Berlin']},rounds:[{round:0,reason:'Initial search',newCandidates:0,strongCandidates:0,generationId:null,queries:['Engineer'],boards:[],attempts:[{source:'linkedin',query:'Engineer',location:'Colombia',page:0,status:'blocked',found:0,checkedAt:'2026-11-11',retries:2}]}]};
+ const render=(r:SearchDiscovery)=>renderToStaticMarkup(createElement(I18nProvider,{initial:{locale:'en',preference:'en'}},createElement(Report,{report:r})));
+ const $=load(render(report));
+ assert.match($('body').children('div').text(),/Could not check: Colombia/);
+ assert.match($('body').children('div').text(),/Not searched in this run: Berlin/);
+ assert.match($('td').last().text(),/UnavailableRetried 2 times/);
+ assert.match($('details').text(),/4 of 24 source requests used, including retries/);
+ assert.doesNotThrow(()=>render({...report,coverage:undefined}));
+});

@@ -1072,5 +1072,10 @@
   "Shape your search": "Define tu búsqueda",
   "Confirm your email to enable account email features.": "Confirma tu correo para activar las funciones de correo de tu cuenta.",
   "Use a memorable phrase with at least 12 characters.": "Usa una frase fácil de recordar de al menos 12 caracteres.",
-  "Enter your account email to request a password reset link.": "Introduce el correo de tu cuenta para solicitar un enlace de restablecimiento de contraseña."
+  "Enter your account email to request a password reset link.": "Introduce el correo de tu cuenta para solicitar un enlace de restablecimiento de contraseña.",
+  "Locations with successful queries: {locations}": "Ubicaciones con consultas completadas: {locations}",
+  "Could not check: {locations}": "No se pudo consultar: {locations}",
+  "Not searched in this run: {locations}": "Sin buscar en esta ejecución: {locations}",
+  "{count} of {limit} source requests used, including retries.": "{count} de {limit} solicitudes a fuentes utilizadas, incluidos los reintentos.",
+  "Retried {count} times": "Se reintentó {count} veces"
 }

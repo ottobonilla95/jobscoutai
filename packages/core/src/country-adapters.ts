@@ -25,7 +25,7 @@ function jobUrl(key: CountrySourceKey, value: string): URL | null {
   } catch { return null; }
 }
 function unavailable(label: string): never {
-  throw new SourceError(`${label} returned an unrecognized search page. Coverage is unknown.`, true);
+  throw new SourceError(`${label} returned an unrecognized search page. Coverage is unknown.`);
 }
 export function listingDate(value: string, now = Date.now()): string | null {
   const iso = value.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
@@ -59,7 +59,7 @@ const getOnBoardSchema = z.object({
 });
 export function parseGetOnBoardJobs(raw: unknown): JobListing[] {
   const parsed = getOnBoardSchema.safeParse(raw);
-  if (!parsed.success) throw new SourceError('Get on Board returned an unrecognized search response. Coverage is unknown.', true);
+  if (!parsed.success) throw new SourceError('Get on Board returned an unrecognized search response. Coverage is unknown.');
   return parsed.data.data.map(({id,attributes:a}) => {
     const names = [a.location_cities,a.location_tenants,a.location_regions].flatMap(group =>
       group?.data.flatMap(place => place.attributes?.name ? [place.attributes.name] : []) || []);
@@ -161,6 +161,7 @@ export async function searchCountrySource(source: CountrySource, profile: Profil
       url = `${origins[source.key]}/jobs?${new URLSearchParams({search:title,location:city || 'Colombia'})}`;
     }
     if (queries.has(url)) continue; queries.add(url);
+    try{
     const listings=await searchQuery(session,attempt,async()=>{
     const body = await read(url,source.label,true);
     const listings = source.key === 'getonbrd-co' ? parseGetOnBoardJobs(JSON.parse(body)) :
@@ -171,6 +172,7 @@ export async function searchCountrySource(source: CountrySource, profile: Profil
       if (profile.remoteOnly && !/\b(remote|remoto|teletrabajo)\b/i.test(listing.location)) continue;
       jobs.set(listing.id,listing);
     }
+    }catch(error){if(!session||(error instanceof SourceError&&error.stop))throw error;}
   }
   return [...jobs.values()];
 }

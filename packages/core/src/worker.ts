@@ -14,7 +14,7 @@ import { type Store } from './store';
 import {planAdaptiveSearch,fallbackPage,type AdaptivePlan,type PlannerInput} from './adaptive-planner';
 import {discoveryScope,freshDiscoveryState} from './discovery-state';
 import type {SearchDiscovery} from './adaptive-search-schema';
-import {queryKey,type SearchSession} from './search-session';
+import {queryKey,locationCoverage,type SearchSession} from './search-session';
 import {searchTitles} from './discovery';
 import {activeCountrySources} from './country-sources';
 import {parseBoard} from './source-settings';
@@ -32,8 +32,8 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
   let state=freshDiscoveryState(await store.discoveryState(scope));
   const counts={discovered:0,evaluated:0,matched:0,inputTokens:0,outputTokens:0};
   const research:ResearchStats={attempted:0,completed:0,resumed:0,verifiedEvidence:0,answered:0,unresolved:0,retryScheduled:0,failed:0,stopReason:profile.researchEnabled?'finished':'disabled'};
-  const report:SearchDiscovery={profileVersion:version,rounds:[],requests:0,requestLimit:24,stopReason:'round_limit'};
-  const session:SearchSession={round:0,page:0,remaining:24,deadline:started+8*60000,seen:new Set(),blocked:new Set(),history:new Map(state.attempts.map(a=>[queryKey(a),a.checkedAt])),cache:new Map(),perSource:new Map(),attempts:[],items:[]};
+  const report:SearchDiscovery={profileVersion:version,rounds:[],requests:0,requestLimit:24,stopReason:'round_limit',coverage:locationCoverage(profile.locations,[])};
+  const session:SearchSession={round:0,page:0,remaining:24,deadline:started+8*60000,seen:new Set(),blocked:new Set(),history:new Map(state.attempts.map(a=>[queryKey(a),a.checkedAt])),successful:new Set(state.attempts.filter(a=>a.status==='ok').map(queryKey)),cache:new Map(),perSource:new Map(),perSourceLimit:Math.min(12,Math.max(6,profile.locations.length+2)),attempts:[],items:[]};
   const errors:string[]=[];let failed=false,hadSuccess=false;
   const known=new Set((await store.jobs()).map(j=>j.id)),seen=new Set<string>(),evaluated=new Set<string>(),newCandidates=new Set<string>(),verified=new Set<string>();
   const evaluationLimit=Math.max(0,Math.min(profile.maxJobsPerRun,profile.dailyEvaluationLimit-await store.evaluatedToday()));
@@ -104,10 +104,11 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       const jobs=await store.jobs();counts.matched=jobs.filter(j=>evaluated.has(j.id)&&strongMatch(j,profile,version)).length;
       const strong=jobs.filter(j=>newCandidates.has(j.id)&&strongMatch(j,profile,version)).length;
       report.rounds.push({round,reason:plan?.reason||'Search confirmed roles and selected sources.',newCandidates:fresh.size,strongCandidates:strong,attempts:session.attempts,generationId:plan?.generationId||null,queries:searchTitles(searchProfile),boards:plan?.boards.map(b=>b.url)||[]});
+      report.coverage=locationCoverage(profile.locations,report.rounds.flatMap(r=>r.attempts));
       report.requests=24-session.remaining;
       const history=new Map(state.attempts.map(a=>[queryKey(a),a]));session.attempts.forEach(a=>history.set(queryKey(a),a));
       state={...state,attempts:[...history.values()].sort((a,b)=>a.checkedAt.localeCompare(b.checkedAt)).slice(-120)};
-      state.attempts.forEach(a=>session.history.set(queryKey(a),a.checkedAt));
+      state.attempts.forEach(a=>{const key=queryKey(a);session.history.set(key,a.checkedAt);if(a.status==='ok')session.successful!.add(key);else session.successful!.delete(key);});
       if(!await store.saveDiscoveryState(scope,state,version)){report.stopReason='profile_changed';break;}
       await store.progress(id,counts,report);
       if(report.stopReason==='profile_changed'||report.stopReason==='time_budget'||budgetStopped)break;

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {MockLanguageModelV4} from 'ai/test';
+import {APICallError} from 'ai';
 import {storeFixture,accountsFixture} from './database-fixture';
 import {defaultProfile,type Assessment,type JobListing,type Profile} from '../packages/core/src/profile';
 import {runSearch} from '../packages/core/src/worker';
@@ -121,6 +122,18 @@ test('real structured planner persists generation results, usage and observed fe
 test('invalid planner output is marked failed and does not mutate the profile',async t=>{
  const store=await ready(t);const before=await store.profile();await assert.rejects(planAdaptiveSearch({store,profile:before.profile,state:empty(),report:report()},model({reason:'Too short',queries:[{roleIndex:4,query:'wrong'}],boards:[]})));
  assert.equal((await store.db.prepare('SELECT status FROM ai_generations WHERE user_id=?').get(store.userId)).status,'failed');assert.deepEqual(await store.profile(),before);
+});
+test('temporary AI planner errors retry before recording failure, within one bounded generation',async t=>{
+ const store=await ready(t);let calls=0;
+ const healthy=model({reason:'Retry an equivalent advertised role.',queries:[{roleIndex:0,query:'Software Developer'}],boards:[]});
+ const flaky=new MockLanguageModelV4({doGenerate:async options=>{
+  if(++calls<3)throw new APICallError({message:'Temporarily unavailable',url:'https://provider.example.test',requestBodyValues:{},statusCode:503,isRetryable:true});
+  return healthy.doGenerate(options);
+ }});
+ const result=await planAdaptiveSearch({store,profile:(await store.profile()).profile,state:empty(),report:report()},flaky);
+ assert.equal(calls,3);assert.deepEqual(result.queries,['Software Developer']);
+ const generations=await store.db.prepare('SELECT status FROM ai_generations WHERE user_id=?').all(store.userId);
+ assert.equal(generations.length,1);assert.equal(generations[0].status,'completed');
 });
 test('discovery memory is account-owned, guarded against stale profiles and resets on meaningful edits',async t=>{
  const accounts=await accountsFixture(t);const a=await accounts.signup({email:'adaptive-a@example.test',password:'A private test password 2026'});const b=await accounts.signup({email:'adaptive-b@example.test',password:'A private test password 2026'});const store=await accounts.store(a.id),other=await accounts.store(b.id);

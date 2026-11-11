@@ -1,5 +1,12 @@
 # Verification log
 
+## 11 November 2026 — bounded retries and explicit coverage
+
+- Source queries now retry temporary failures up to three total attempts with backoff, honoring `Retry-After`, the run deadline, and physical-request budgets. Unreadable query responses no longer disable later locations; authorization challenges still stop the affected source.
+- Query history prioritizes previously unsearched queries without treating failed historical queries as completed. Activity shows retries and distinguishes successful location queries, unavailable locations, and locations not searched. Older reports remain compatible.
+- AI planning, ranking, and research enable two provider retries within existing operation timeouts. Persisted jobs and research checkpoints retain their existing recovery behavior.
+- All 172 automated tests passed with concurrency limited to two, including retry exhaustion/recovery, rate-limit delays, deadlines, request accounting, Colombia-to-London continuation, historical failure rotation, coverage rendering, legacy reports, and AI planner recovery after two temporary errors. TypeScript checks and the production web build passed.
+
 ## 11 November 2026 — LinkedIn regional-domain parser repair
 
 - Live probes from the droplet returned HTTP 200 and ten job cards for both Colombia and London. Their job links used `co.linkedin.com` and `uk.linkedin.com`; the old parser rejected both hosts, parsed zero jobs, and incorrectly stopped LinkedIn for the rest of the scan.

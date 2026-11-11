@@ -6,14 +6,20 @@ const stops:Record<SearchDiscovery['stopReason'],string>={
 };
 export default function SearchDiscoveryReport({report}:{report:SearchDiscovery}){
  const {t}=useI18n();
- return <details className="search-discovery-report"><summary>{t('How this search adapted')}</summary>
-  <p>{t(stops[report.stopReason])} {t('{count} of {limit} source queries checked.',{count:report.requests,limit:report.requestLimit})}</p>
+ return <>
+  {report.coverage&&<div className="footnote">
+   {report.coverage.checked.length>0&&<p>{t('Locations with successful queries: {locations}',{locations:report.coverage.checked.join(' · ')})}</p>}
+   {report.coverage.unavailable.length>0&&<p>{t('Could not check: {locations}',{locations:report.coverage.unavailable.join(' · ')})}</p>}
+   {report.coverage.unsearched.length>0&&<p>{t('Not searched in this run: {locations}',{locations:report.coverage.unsearched.join(' · ')})}</p>}
+  </div>}
+ <details className="search-discovery-report"><summary>{t('How this search adapted')}</summary>
+  <p>{t(stops[report.stopReason])} {t('{count} of {limit} source requests used, including retries.',{count:report.requests,limit:report.requestLimit})}</p>
   {report.rounds.map(round=><section key={round.round} className="discovery-round">
    <h3>{t(round.round===0?'Initial search':'Follow-up {count}',{count:round.round})}</h3>
    <p>{t(round.reason)}</p><p className="footnote">{t('New opportunities: {count}. New strong matches so far: {strong}.',{count:round.newCandidates,strong:round.strongCandidates})}</p>
    {round.boards.length>0&&<ul>{round.boards.map(url=><li key={url}><a href={url} target="_blank" rel="noopener noreferrer">{url}</a></li>)}</ul>}
-   {round.attempts.length>0&&<div className="discovery-table"><table><caption className="sr-only">{t('Checked search attempts')}</caption><thead><tr><th>{t('Source')}</th><th>{t('Query and location')}</th><th>{t('Page')}</th><th>{t('Results')}</th></tr></thead><tbody>{round.attempts.map((a,i)=><tr key={i}><td>{sourceLabel(a.source)}</td><td>{a.query==='*'?t('Employer job feed'):a.query}{a.location&&<small>{a.location}</small>}</td><td>{a.page+1}</td><td>{a.status==='blocked'?t('Unavailable'):a.found}</td></tr>)}</tbody></table></div>}
+   {round.attempts.length>0&&<div className="discovery-table"><table><caption className="sr-only">{t('Checked search attempts')}</caption><thead><tr><th>{t('Source')}</th><th>{t('Query and location')}</th><th>{t('Page')}</th><th>{t('Results')}</th></tr></thead><tbody>{round.attempts.map((a,i)=><tr key={i}><td>{sourceLabel(a.source)}</td><td>{a.query==='*'?t('Employer job feed'):a.query}{a.location&&<small>{a.location}</small>}</td><td>{a.page+1}</td><td>{a.status==='blocked'?t('Unavailable'):a.found}{Boolean(a.retries)&&<small>{t('Retried {count} times',{count:a.retries!})}</small>}</td></tr>)}</tbody></table></div>}
   </section>)}
   <p className="footnote">{t('Only the attempts listed here were checked. This is not exhaustive coverage.')}</p>
- </details>;
+ </details></>;
 }

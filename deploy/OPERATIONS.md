@@ -32,3 +32,11 @@ systemctl list-timers scout-worker.timer --no-pager
 ```
 
 Check the saved profile against the deployed schema and verify `integrations().ai` without logging credentials. Validation can fail before the worker claims a run, leaving the request queued and the run history empty. An unconfigured email provider does not prevent searching; it only affects email delivery.
+
+## Retry and coverage behavior
+
+Source queries make up to three attempts for temporary network, server, throttling, or unreadable-response failures, with two- and four-second backoff and any longer `Retry-After` delay. Retries consume the shared 24-request run budget and per-source allowance, and stop at the run deadline. An excessive retry delay is deferred to a later run. Access challenges and explicit authorization blocks stop that source immediately.
+
+Exhausting one query's retries leaves the remaining queries and locations eligible. History rotates unsearched queries ahead of previously attempted ones, while failed queries remain eligible for future scans. Successful results survive later failures. Activity records retries and distinguishes successful location queries, unavailable locations, and locations not searched before the run stopped; a successful query does not imply exhaustive coverage.
+
+AI planning, evaluation, and research allow two provider retries for retryable errors within their existing timeouts. Persisted jobs and research checkpoints remain available when recovery cannot complete. Normal account cooldowns and AI generation budgets still apply; deployment validation must not force an extra scan.

@@ -1,5 +1,5 @@
 import { brand } from './brand';
-import { SourceError } from './linkedin';
+import { SourceError,responseFailure } from './source-error';
 
 let lastRequest = 0;
 export async function publicData(url: string, label: string, sameOriginRedirects = false): Promise<string> {
@@ -21,7 +21,7 @@ export async function publicData(url: string, label: string, sameOriginRedirects
     }
     if (!response.ok) {
       await response.body?.cancel();
-      throw new SourceError(`${label}: HTTP ${response.status}. This source was skipped.`, true);
+      throw responseFailure(label,response);
     }
     const reader = response.body?.getReader();
     if (!reader) throw new SourceError(`${label}: empty response.`, true);
