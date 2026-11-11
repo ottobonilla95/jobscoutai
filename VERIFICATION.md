@@ -1,5 +1,12 @@
 # Verification log
 
+## 11 November 2026 — LinkedIn regional-domain parser repair
+
+- Live probes from the droplet returned HTTP 200 and ten job cards for both Colombia and London. Their job links used `co.linkedin.com` and `uk.linkedin.com`; the old parser rejected both hosts, parsed zero jobs, and incorrectly stopped LinkedIn for the rest of the scan.
+- Revision `d19ca4d` accepts bare, www, and two-letter regional LinkedIn hosts, canonicalizes accepted job links to `www.linkedin.com`, and rejects lookalike hosts, non-HTTPS links, credentials, and custom ports.
+- All 165 tests passed with test concurrency limited to two, including a Colombia-to-Europe continuation regression. The unrestricted run encountered a native V8/WebAssembly crash in a database fixture; the bounded rerun and TypeScript checks passed.
+- Deployed the revision as a new DigitalOcean release with the unchanged production dependency lock. Verified the patched live London query parsed ten jobs, then activated the release and restored the enabled timer. The probe did not create a paid scan or bypass the account cooldown.
+
 ## 11 November 2026 — live DigitalOcean worker recovery
 
 - Confirmed the enabled systemd timer was invoking an outdated worker. Its profile schema rejected the completed account's ten search locations against an old maximum of three, before claiming a run. The worker also had no AI credential configured.
