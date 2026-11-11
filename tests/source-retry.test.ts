@@ -26,6 +26,7 @@ test('rate limits honor Retry-After and the run deadline; access challenges are 
  calls=0;
  await assert.rejects(retrySource(async()=>{calls++;throw responseFailure('Test',new Response(null,{status:403}));},{sleep:async()=>{assert.fail('must not retry an access block');}}));
  assert.equal(calls,1);
+ assert.equal(responseFailure('LinkedIn',{status:999,headers:new Headers()} as Response).retryable,false);
 });
 const session=():SearchSession=>({round:0,page:0,remaining:24,deadline:Date.now()+60000,seen:new Set(),blocked:new Set(),history:new Map(),cache:new Map(),perSource:new Map(),attempts:[],items:[]});
 const q={source:'linkedin',query:'Engineer',location:'Colombia',page:0};

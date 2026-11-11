@@ -12,7 +12,7 @@ export class SourceError extends Error {
 export function responseFailure(label:string,response:Response) {
   const status=response.status;
   const limited=[401,403,429,999].includes(status);
-  const transient=[408,425,429].includes(status)||status>=500;
+  const transient=[408,425,429].includes(status)||(status>=500&&status<=599);
   const header=response.headers.get('retry-after');
   const seconds=header!==null&&header.trim()!==''?Number(header):NaN;
   const retryAfterMs=header===null?undefined:Number.isFinite(seconds)?Math.max(0,seconds*1000):Math.max(0,Date.parse(header)-Date.now());
