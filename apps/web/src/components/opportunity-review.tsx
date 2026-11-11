@@ -1,7 +1,7 @@
 'use client';
 
 import {useRef, useState} from 'react';
-import {ArrowLeft, ArrowUpRight, Bookmark, Building2, Check, CircleCheck, CircleHelp, Info, MapPin, MoreHorizontal, Search, Sparkles, X} from 'lucide-react';
+import {ArrowLeft, ArrowUpRight, Bookmark, Building2, Check, CircleCheck, CircleHelp, Info, MapPin, Search, Sparkles, X} from 'lucide-react';
 import type {Job, Profile} from '@core/profile';
 import {recommendation, recommendationLabels, strongMatch} from '@core/recommendation';
 import {sourceLabel} from '@core/source-settings';
@@ -54,8 +54,10 @@ export default function OpportunityReview({jobs, allJobs, profile, version, filt
         <div className="review-filters" role="group" aria-label={t('Filter opportunities')}>
           {[["all", t('All')], ["strong", t('Strong')], ["saved", t('Saved')]].map(([value, label], index) => <button type="button" key={value} aria-pressed={filter === value} className={filter === value ? 'review-filter selected' : 'review-filter'} onClick={() => changeFilter(value)}>{label} <span>({number(counts[index])})</span></button>)}
         </div>
-        <label className="review-source"><span className="sr-only">{t('Show source')}</span><select aria-label={t('Show source')} value={source} onChange={event => {onSource(event.target.value); setShown(50);}}><option value="all">{t('Source: All')}</option>{[...new Set(allJobs.map(job => job.sourceKey || 'linkedin'))].map(key => <option key={key} value={key}>{sourceLabel(key)}</option>)}</select></label>
-        <label className="review-views" title={t('More views')}><MoreHorizontal size={20} aria-hidden="true"/><span className="sr-only">{t('More views')}</span><select aria-label={t('More views')} value={primaryFilters.includes(filter) ? '' : filter} onChange={event => {if (event.target.value) changeFilter(event.target.value);}}><option value="">{t('More views')}</option><option value="research">{t('Research queue')}</option><option value="applications">{t('Applications')}</option><option value="followups">{t('Follow-ups due')}</option><option value="dismissed">{t('Archive')}</option></select></label>
+        <div className="review-filter-controls">
+          <label className="review-source"><span className="sr-only">{t('Show source')}</span><select aria-label={t('Show source')} value={source} onChange={event => {onSource(event.target.value); setShown(50);}}><option value="all">{t('Source: All')}</option>{[...new Set(allJobs.map(job => job.sourceKey || 'linkedin'))].map(key => <option key={key} value={key}>{sourceLabel(key)}</option>)}</select></label>
+          <label className="review-views"><span className="sr-only">{t('More views')}</span><select aria-label={t('More views')} value={primaryFilters.includes(filter) ? '' : filter} onChange={event => {if (event.target.value) changeFilter(event.target.value);}}><option value="">{t('More views')}</option><option value="research">{t('Research queue')}</option><option value="applications">{t('Applications')}</option><option value="followups">{t('Follow-ups due')}</option><option value="dismissed">{t('Archive')}</option></select></label>
+        </div>
       </div>
       {!primaryFilters.includes(filter) && <p className="review-view-label">{t(filter === 'research' ? 'Research queue' : filter === 'applications' ? 'Applications' : filter === 'followups' ? 'Follow-ups due' : 'Archive')}</p>}
       <p className="sr-only" role="status">{t('{count} opportunities shown', {count: number(jobs.length)})}</p>
