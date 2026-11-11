@@ -78,7 +78,7 @@
 .conversation-workspace .chat-review-cv { margin: 0; min-height: 44px; font-size: 13px; flex-shrink: 0; }
 .conversation-workspace .chat-transcript { padding: 28px; }
 .conversation-workspace .chat-message { max-width: 70ch; margin-bottom: 28px; }
-.conversation-workspace .chat-message p { font-size: 15px; line-height: 1.75; }
+.conversation-workspace .chat-message :is(p,.chat-markdown) { font-size: 15px; line-height: 1.75; }
 .conversation-workspace .chat-speaker { font-size: 12px; letter-spacing: 0; margin-bottom: 8px; }
 .conversation-workspace .chat-message-user { max-width: min(80%, 65ch); padding: 16px 20px; }
 .conversation-workspace .chat-message-user .chat-speaker { color: var(--ink); }
@@ -188,7 +188,7 @@
   .conversation-workspace .chat-transcript { padding: 24px 18px; }
   .conversation-workspace .chat-message { max-width: 100%; }
   .conversation-workspace .chat-message-user { max-width: 90%; padding: 13px 16px; }
-  .conversation-workspace .chat-message p { font-size: 14px; }
+  .conversation-workspace .chat-message :is(p,.chat-markdown) { font-size: 14px; }
   .conversation-workspace .chat-composer { padding: 14px; }
   .conversation-workspace .chat-composer small { font-size: 11px; }
   .conversation-workspace .chat-feedback, .conversation-workspace .chat-cv { padding-left: 18px; padding-right: 18px; }

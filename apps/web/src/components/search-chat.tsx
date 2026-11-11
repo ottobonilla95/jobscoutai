@@ -8,6 +8,7 @@ import {sourceLabel} from '@core/source-settings';
 import {useI18n} from './i18n';
 import OnboardingCV from './onboarding-cv';
 import SetupWorkspace from './setup-workspace';
+import ChatMessageBody from './chat-message-body';
 
 export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onboarding?:boolean;onSaved?:()=>Promise<void>;profileKey?:string}){
   const {t,locale,message:localizeMessage}=useI18n();
@@ -100,8 +101,8 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
     <header className="chat-header"><div className="chat-heading"><span className="chat-avatar"><MessageCircle size={20}/></span><div>{onboarding?<h1>{t('Shape your search')}</h1>:<h2>{t('Your search assistant')}</h2>}<p>{t(onboarding?'A conversation to find your next chapter.':'Keep shaping your search.')}</p></div></div><div className="chat-header-meta"><span className="chat-saved">{chat&&!busy&&<Check size={14}/>}<span>{t(busy?'Working…':chat?.ready?'Draft saved · Preferences not applied':chat?'Conversation saved':'Loading your conversation…')}</span></span>{onboarding&&<button type="button" className="text-button chat-review-cv" disabled={busy} onClick={()=>{setError('');setNotice('');setReviewCV(true);}}><FileText size={15}/>{t('Back to CV')}</button>}</div></header>
     <div className="chat-transcript" ref={transcript} role="log" aria-live="polite" aria-relevant="additions" aria-label={t('Search conversation')} aria-busy={busy} tabIndex={0}>
       {!chat&&!error&&<p className="muted">{t('Loading your conversation…')}</p>}
-      {chat?.messages.map(message=><article key={message.id} className={`chat-message chat-message-${message.role}`}><span className="chat-speaker">{t(message.role==='user'?'You':'Search assistant')}</span>{chat.ready&&message.id===chat.messages.at(-1)?.id&&<span className="chat-proposal">{t('Proposed changes · Save below to apply')}</span>}<p>{message.text}</p></article>)}
-      {pendingText&&<article className="chat-message chat-message-user"><span className="chat-speaker">{t('You')}</span><p>{pendingText}</p></article>}
+      {chat?.messages.map(message=><article key={message.id} className={`chat-message chat-message-${message.role}`}><span className="chat-speaker">{t(message.role==='user'?'You':'Search assistant')}</span>{chat.ready&&message.id===chat.messages.at(-1)?.id&&<span className="chat-proposal">{t('Proposed changes · Save below to apply')}</span>}<ChatMessageBody role={message.role} text={message.text}/></article>)}
+      {pendingText&&<article className="chat-message chat-message-user"><span className="chat-speaker">{t('You')}</span><ChatMessageBody role="user" text={pendingText}/></article>}
       {busy&&<div role="status" className="chat-working"><LoaderCircle size={16} className="spin"/>{t('Thinking about your search…')}</div>}
       {chat?.ready&&answers&&<div ref={reviewPanel} className="chat-review">
         <h3><Check size={20}/>{t('Your search, ready to save.')}</h3>
