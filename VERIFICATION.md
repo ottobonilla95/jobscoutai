@@ -1,4 +1,16 @@
-# Verification — 24 September 2026
+# Verification log
+
+## 11 November 2026 — live DigitalOcean worker recovery
+
+- Confirmed the enabled systemd timer was invoking an outdated worker. Its profile schema rejected the completed account's ten search locations against an old maximum of three, before claiming a run. The worker also had no AI credential configured.
+- Installed source revision `9163668` with production dependencies in `/opt/job-searcher/releases/9163668`, configured the shared private AI connection, and verified migrations were current. The systemd service uses the `current` release symlink through a working-directory override; the previous installation is retained.
+- Verified both stored profiles parse successfully with the deployed code. Restarted the normal service without forcing or bypassing cooldowns.
+- The first queued search ran from 13:38:06 to 13:42:10 UTC: 14 jobs discovered, 5 evaluated, 0 strong matches. The queue cleared and systemd exited successfully.
+- The run is recorded as **partial**: LinkedIn and ElEmpleo returned unreadable search pages, Michael Page returned HTTP 403, and some planning, ranking, and research steps failed. Five completed ranking generations confirm the live AI connection; this does not verify every AI workflow or guarantee complete source coverage.
+- Confirmed the timer remains active and enabled, with the next account search window at 17:38 UTC. Email delivery was not tested or configured by this recovery.
+- Worker deployment and rollback considerations are documented in [worker operations](deploy/OPERATIONS.md). Vercel deployments do not update the worker.
+
+## 24 September 2026 — historical local verification
 
 Completed locally:
 

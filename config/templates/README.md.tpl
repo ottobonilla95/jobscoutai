@@ -85,7 +85,7 @@ sudo systemctl start {{servicePrefix}}-worker.service
 npm run check:database # temporary synthetic accounts; verifies then removes them
 ```
 
-For updates, stop the timer, wait for any active worker, copy the new code, install dependencies, apply any migration, then restart the timer. Secrets are never part of the Git repository.
+For updates, stop the timer, wait for any active worker, copy the new code, install dependencies, apply any migration, then restart the timer. Secrets are never part of the Git repository. The web and worker deploy separately: pushing a Vercel update does not update DigitalOcean. See [worker operations](deploy/OPERATIONS.md) for the installed release layout, update procedure, and queued-search diagnostics.
 
 The Docker Compose deployment remains an alternative for hosting both processes yourself. Set the same PostgreSQL URL, run the migration on the host first, then `docker compose up -d web caddy`. Invoke the worker with `docker compose --profile worker run --rm worker`; the supplied systemd service is for the native Node deployment.
 
