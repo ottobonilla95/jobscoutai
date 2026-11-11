@@ -13,7 +13,9 @@ export function parseListings(html: string): JobListing[] {
     const href = card.find('a.base-card__full-link').attr('href');
     if (!href) return;
     let url: URL; try { url = new URL(href); } catch { return; }
-    if (!['www.linkedin.com', 'linkedin.com'].includes(url.hostname)) return;
+    // Guest search returns regional hosts (co.linkedin.com, uk.linkedin.com, ...).
+    // Keep output canonical while rejecting lookalike hosts and non-HTTPS links.
+    if (url.protocol!=='https:'||url.username||url.password||url.port||!/^(?:(?:www|[a-z]{2})\.)?linkedin\.com$/.test(url.hostname)) return;
     const id = url.pathname.match(/\/jobs\/view\/(?:.*-)?(\d+)\/?$/)?.[1];
     const title = card.find('.base-search-card__title').text().trim();
     if (!id || !title) return;

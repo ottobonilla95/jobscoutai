@@ -46,6 +46,19 @@ test('LinkedIn follow-ups page the confirmed location and preserve remote/date r
  const s=session();s.page=2;await searchLinkedIn({...defaultProfile,titles:[q.query],locations:[q.location],remoteOnly:true},s);
  const u=new URL(url);assert.equal(u.searchParams.get('start'),'50');assert.equal(u.searchParams.get('location'),q.location);assert.equal(u.searchParams.get('f_WT'),'2');assert.equal(s.attempts[0].page,2);
 });
+test('regional links do not stop LinkedIn before reaching European search locations',async t=>{
+ const original=globalThis.fetch,locations:string[]=[];
+ globalThis.fetch=async input=>{
+  const location=new URL(String(input)).searchParams.get('location')!;locations.push(location);
+  const index=locations.length,host=['co','uk','de'][index-1];
+  return new Response(`<div class="base-card"><a class="base-card__full-link" href="https://${host}.linkedin.com/jobs/view/engineer-${4487835130+index}"></a><h3 class="base-search-card__title">Software Engineer</h3><span class="job-search-card__location">${location}</span></div>`);
+ };
+ t.after(()=>{globalThis.fetch=original;});
+ const s=session(),expected=['Colombia','London, United Kingdom','Berlin, Germany'];
+ const jobs=await searchLinkedIn({...defaultProfile,titles:['Software Engineer'],locations:expected},s);
+ assert.deepEqual(locations,expected);assert.equal(jobs.length,3);assert.equal(s.blocked.size,0);
+ assert.deepEqual(s.attempts.map(attempt=>attempt.status),['ok','ok','ok']);
+});
 test('Get on Board follow-ups use its supported pagination',async()=>{
  const source=countrySources.find(s=>s.key==='getonbrd-co')!;const s=session();s.page=1;let url='';
  await searchCountrySource(source,{...defaultProfile,titles:['Software Engineer'],locations:['Colombia']},async input=>{url=input;return JSON.stringify({data:[]});},s);

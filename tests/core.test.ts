@@ -26,6 +26,17 @@ test('LinkedIn parser canonicalizes and deduplicates jobs, rejecting other hosts
   const jobs=parseListings(card('https://www.linkedin.com/jobs/view/role-12345?trackingId=x')+card('https://www.linkedin.com/jobs/view/12345/')+card('https://evil.example/jobs/view/67890/'));
   assert.equal(jobs.length,1); assert.equal(jobs[0].id,'12345'); assert.equal(jobs[0].url,listing.url); assert.equal(jobs[0].postedAt,'2026-09-23');
 });
+test('LinkedIn regional links parse and deduplicate without allowing lookalike domains',()=>{
+ const card=(host:string)=>`<div class="base-card"><a class="base-card__full-link" href="https://${host}/jobs/view/product-engineer-4487835135?tracking=x"></a><h3 class="base-search-card__title">Product Engineer</h3><h4 class="base-search-card__subtitle">Example</h4><span class="job-search-card__location">London, United Kingdom</span></div>`;
+ for(const host of ['co.linkedin.com','uk.linkedin.com','de.linkedin.com','nl.linkedin.com','se.linkedin.com','ie.linkedin.com','es.linkedin.com','linkedin.com','www.linkedin.com']){
+  const jobs=parseListings(card(host)+card('www.linkedin.com'));
+  assert.equal(jobs.length,1,host);
+  assert.equal(jobs[0].url,'https://www.linkedin.com/jobs/view/4487835135/');
+  assert.equal(jobs[0].location,'London, United Kingdom');
+ }
+ for(const host of ['co.linkedin.com.evil.test','evil-linkedin.com','linkedin.com@evil.test','co.linkedin.com:8443'])assert.deepEqual(parseListings(card(host)),[],host);
+ assert.deepEqual(parseListings(card('co.linkedin.com').replace('https://','http://')),[]);
+});
 test('description extraction excludes executable content and rejects missing descriptions',()=>{
   const text=parseDescription('<div class="show-more-less-html__markup"><p>Build useful products with our founding team and take ownership of technical delivery.</p><p>1% equity</p><script>stealCredentials()</script></div>');
   assert.match(text,/1% equity/); assert.doesNotMatch(text,/stealCredentials/);
