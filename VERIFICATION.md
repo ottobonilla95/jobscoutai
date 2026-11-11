@@ -6,6 +6,8 @@
 - Query history prioritizes previously unsearched queries without treating failed historical queries as completed. Activity shows retries and distinguishes successful location queries, unavailable locations, and locations not searched. Older reports remain compatible.
 - AI planning, ranking, and research enable two provider retries within existing operation timeouts. Persisted jobs and research checkpoints retain their existing recovery behavior.
 - All 172 automated tests passed with concurrency limited to two, including retry exhaustion/recovery, rate-limit delays, deadlines, request accounting, Colombia-to-London continuation, historical failure rotation, coverage rendering, legacy reports, and AI planner recovery after two temporary errors. TypeScript checks and the production web build passed.
+- Deployed worker release `1e7e717` on DigitalOcean using the unchanged production dependencies. A simulated upstream check on the staged worker recovered Colombia after two HTTP 503 responses, exhausted an unreadable Berlin query, and continued to Stockholm; eight physical requests were recorded with accurate coverage. A separate live London probe returned HTTP 200 and ten parsed jobs. The release also verified that explicit LinkedIn HTTP 999 access blocks are not retried as server errors. No paid scan or cooldown bypass was used for these checks.
+- After activation, the normal service tick exited successfully as idle at 18:44:27 UTC, respecting cooldowns. The timer remains active and enabled, with its next tick at 18:59:27 UTC.
 
 ## 11 November 2026 — LinkedIn regional-domain parser repair
 
