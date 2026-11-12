@@ -2,7 +2,7 @@
 
 The web app and worker are separate deployments. A Vercel deployment does not update the DigitalOcean worker. Deploy compatible worker code whenever profile formats, database access, model settings, or search behavior change.
 
-The active worker release is `6dcc2c6`, deployed on 12 November 2026 with qualified-shortlist and model-output fixes. Earlier repairs on 11 November used `9163668` for the outdated profile/credential setup, `d19ca4d` for regional LinkedIn links, and `1e7e717` for bounded retries and coverage reporting. Prior releases remain available for rollback.
+The active worker release is `b0cc64b`, deployed on 12 November 2026 with cleanup after search completion and bounded pending retention. The same day's `6dcc2c6` installed qualified-shortlist and model-output fixes. Earlier repairs on 11 November used `9163668` for the outdated profile/credential setup, `d19ca4d` for regional LinkedIn links, and `1e7e717` for bounded retries and coverage reporting. Prior releases remain available for rollback.
 
 ## Shortlist update — 12 November 2026
 
