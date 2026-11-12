@@ -10,6 +10,14 @@ Deploy web and worker together for the shortlist update. Collected listings rema
 
 Strict ranking output now requires nullable compensation instead of an optional property. Research generates plain URL strings and validates them before storing or following sources, avoiding the provider's unsupported `uri` format. Ranking allows up to 10,000 output tokens including reasoning; research allows 8,000. Account call/evaluation limits and run deadlines still apply.
 
+## Search completion cleanup
+
+Apply migration 010 before deploying the retention update to web and worker. `Store.upsert` consults account/profile-scoped identity hashes to avoid rebuilding discarded listings; `runSearch` calls `Store.cleanupJobs(version)` in its completion path, including partial/failed runs. Cleanup is transactional and skips obsolete profile versions. Failure is recorded on the run and still releases its lease. There is no separate cleanup service or timer.
+
+Untouched current rejections, duplicates and closed listings lose their full job records and dependent job research/checkpoints. Qualified matches and promising research remain. Explicit saves/archives, tracking, feedback, research requests, duplicate reviews and delivery history are protected. Unprotected pending/reassessment records are capped at twice `maxJobsPerRun` and expire after 48 hours from first discovery. Overflow and expiry are retryable after 24 hours, not labelled failed fit. Compact IDs/hashes expire after 90 days; changed matching preferences permit reconsideration immediately.
+
+Before applying this policy to an existing backlog, take a private snapshot of the account's jobs and dependent `research_tasks`, `opportunity_feedback` and `delivery_jobs` rows. Use a transaction rollback to preview `cleanupJobs` counts first. Preserve user history and do not force a paid search merely to run cleanup. A rollback to an earlier release may leave migration 010 installed harmlessly, but restores the earlier unbounded retention behavior.
+
 ## Installed layout
 
 - `/opt/job-searcher/releases/<revision>` contains the source and production dependencies for a release.

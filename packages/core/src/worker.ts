@@ -189,10 +189,17 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     failed=!hadSuccess&&errors.length>0;
   }catch(error){failed=true;errors.push(error instanceof Error?error.message:'Search failed.');}
   finally{
-    clearInterval(heartbeat);await store.researchProgress(id,research);report.requests=24-session.remaining;
-    if(!report.metrics)metrics(await store.jobs());
-    report.metrics!.elapsedMs=Math.max(0,Date.now()-started);await store.progress(id,counts,report);
-    await store.finish(id,failed?'failed':errors.length?'partial':'completed',counts,[...new Set(errors)].join(' ').slice(0,1500)||null);
+    try{
+      await store.researchProgress(id,research);report.requests=24-session.remaining;
+      if(!report.metrics)metrics(await store.jobs());
+      report.metrics!.elapsedMs=Math.max(0,Date.now()-started);await store.progress(id,counts,report);
+    }catch{failed=true;errors.push('Final search progress could not be recorded.');}
+    try{await store.cleanupJobs(version);}
+    catch{failed=true;errors.push('Search cleanup could not finish. Existing records were preserved; the next search will retry.');}
+    finally{
+      clearInterval(heartbeat);
+      await store.finish(id,failed?'failed':errors.length?'partial':'completed',counts,[...new Set(errors)].join(' ').slice(0,1500)||null);
+    }
   }
   return {id,status:failed?'failed':errors.length?'partial':'completed',...counts};
 }

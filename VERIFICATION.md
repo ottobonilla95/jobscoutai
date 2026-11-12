@@ -1,5 +1,12 @@
 # Verification log
 
+## 12 November 2026 — cleanup after every search
+
+- Search completion now transactionally removes untouched rejected, closed and duplicate listings and their dependent job research/checkpoints. It also bounds unassessed/reassessment records to twice the per-search evaluation allowance with a 48-hour first-discovery expiry. Overflow/expiry remains retryable rather than being labelled a fit rejection.
+- Account/profile-scoped compact identity hashes suppress immediate recollection; changed matching preferences allow reconsideration. Score-threshold edits now invalidate prior assessments too. Saved/archived jobs, tracking, feedback, explicit research requests, duplicate reviews and delivery history are protected; stale-profile cleanup skips deletion.
+- All 199 automated tests passed with concurrency limited to two. Coverage includes cleanup on successful/partial/failed runs, provider failure backlog limits, identity deduplication, anonymous-employer handling, expiry, profile changes, account isolation, protected history, transactional rollback and cleanup-error lease release. TypeScript checks and the production build passed.
+- Production rollout and initial backlog cleanup are pending.
+
 ## 12 November 2026 — qualified shortlist and model-output repairs
 
 - The main view now shows only current assessed matches meeting the account's minimum score and active sources. Promising assessed research is separate; raw, weak, excluded, closed, duplicate and stale results do not inflate either count. Manual saves and application history remain accessible after profile changes.

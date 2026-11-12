@@ -11,6 +11,7 @@ import { sourceEnabled } from './source-settings';
 import {discoveryStateSchema,searchDiscoverySchema,type DiscoveryState,type SearchDiscovery} from './adaptive-search-schema';
 import {discoveryScope} from './discovery-state';
 import {qualifiedOpportunity,promisingResearch} from './opportunity-selection';
+import {previouslyDiscarded,pruneJobs,type CleanupResult} from './job-retention';
 
 /** Every query is scoped to the authenticated account, including joins and writes. */
 export class Store {
@@ -36,7 +37,7 @@ export class Store {
     profile=profileSchema.parse({...profile,intervalHours:Math.max(profile.intervalHours,minimumSearchIntervalHours())});
     await this.db.transaction(async db=>{
       const old=await new Store(db,this.userId).profile(true);
-      const fields=(p:Profile)=>JSON.stringify([p.reviewedPreferences,p.researchEnabled,p.workAuthorization,p.objective,p.cvText,p.titles,p.constraints,p.salaryExpectation,p.equityExpectation,p.goalClarifications,p.remoteOnly,p.locations,p.searchLocations,p.sources,p.companyBoards,p.strategy,p.postedWithinDays,p.includeUnknownDates,p.outputLanguage]);
+      const fields=(p:Profile)=>JSON.stringify([p.minimumScore,p.reviewedPreferences,p.researchEnabled,p.workAuthorization,p.objective,p.cvText,p.titles,p.constraints,p.salaryExpectation,p.equityExpectation,p.goalClarifications,p.remoteOnly,p.locations,p.searchLocations,p.sources,p.companyBoards,p.strategy,p.postedWithinDays,p.includeUnknownDates,p.outputLanguage]);
       await db.prepare('UPDATE profile SET value=?,version=version+? WHERE user_id=?').run(JSON.stringify(profile),fields(profile)!==fields(old.profile)?1:0,this.userId);
       if(profile.enabled&&!old.profile.enabled)await db.prepare('UPDATE state SET next_run=? WHERE user_id=?').run(new Date().toISOString(),this.userId);
       else if(profile.intervalHours!==old.profile.intervalHours)await db.prepare('UPDATE state SET next_run=? WHERE user_id=?').run(new Date(Date.now()+profile.intervalHours*3600000).toISOString(),this.userId);
@@ -102,14 +103,27 @@ export class Store {
     });
   }
   async upsert(listing:JobListing){
+    return this.db.transaction(async db=>{
+    const store=new Store(db,this.userId),{version}=await store.profile(true);
     const now=new Date().toISOString();
-    await this.db.prepare(`INSERT INTO jobs(user_id,id,title,company,location,url,posted_at,first_seen,last_seen,source_key,description) VALUES(?,?,?,?,?,?,?,?,?,?,?)
+    const existing=await db.prepare('SELECT 1 FROM jobs WHERE user_id=? AND id=?').get(this.userId,listing.id);
+    if(!existing&&await previouslyDiscarded(db,this.userId,listing,version,now))return false;
+    await db.prepare(`INSERT INTO jobs(user_id,id,title,company,location,url,posted_at,first_seen,last_seen,source_key,description) VALUES(?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(user_id,id) DO UPDATE SET title=excluded.title,company=excluded.company,location=excluded.location,last_seen=excluded.last_seen`)
       .run(this.userId,listing.id,listing.title,listing.company,listing.location,listing.url,listing.postedAt,now,now,listing.sourceKey||'linkedin',listing.description||null);
     // Anonymous employers on local portals cannot establish a company/title duplicate.
     const namedEmployer=Boolean(listing.company.trim())&&!/^(employer not disclosed|confidential employer|empresa confidencial|confidencial)$/i.test(listing.company.trim());
-    const duplicate=await this.db.prepare('SELECT id FROM jobs WHERE user_id=? AND id!=? AND (url=? OR (? AND lower(trim(company))=lower(trim(?)) AND lower(trim(title))=lower(trim(?)) AND lower(trim(location))=lower(trim(?)))) AND duplicate_of IS NULL ORDER BY first_seen LIMIT 1').get(this.userId,listing.id,listing.url,namedEmployer,listing.company,listing.title,listing.location);
-    if(duplicate)await this.db.prepare('UPDATE jobs SET duplicate_of=? WHERE user_id=? AND id=? AND duplicate_reviewed=0').run(duplicate.id,this.userId,listing.id);
+    const duplicate=await db.prepare('SELECT id FROM jobs WHERE user_id=? AND id!=? AND (url=? OR (? AND lower(trim(company))=lower(trim(?)) AND lower(trim(title))=lower(trim(?)) AND lower(trim(location))=lower(trim(?)))) AND duplicate_of IS NULL ORDER BY first_seen LIMIT 1').get(this.userId,listing.id,listing.url,namedEmployer,listing.company,listing.title,listing.location);
+    if(duplicate)await db.prepare('UPDATE jobs SET duplicate_of=? WHERE user_id=? AND id=? AND duplicate_reviewed=0').run(duplicate.id,this.userId,listing.id);
+    return true;
+    });
+  }
+  async cleanupJobs(expectedVersion:number,now=new Date()):Promise<CleanupResult>{
+    return this.db.transaction(async db=>{
+      const store=new Store(db,this.userId),{profile,version}=await store.profile(true);
+      if(version!==expectedVersion)return {removed:0,rejected:0,pendingRemoved:0,pendingKept:0,skipped:true};
+      return pruneJobs(store,profile,version,now);
+    });
   }
   async description(id:string,text:string){await this.db.prepare('UPDATE jobs SET description=?,description_checked_at=? WHERE user_id=? AND id=?').run(text,new Date().toISOString(),this.userId,id);}
   async assess(id:string,assessment:Assessment,version:number){await this.db.prepare('UPDATE jobs SET assessment=?,score=?,evaluated_version=? WHERE user_id=? AND id=?').run(JSON.stringify(assessment),assessment.score,version,this.userId,id);await new ResearchMemory(this).capture(id,assessment,version);}

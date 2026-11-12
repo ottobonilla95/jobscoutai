@@ -83,7 +83,7 @@ test('weak and repeated results trigger new queries, stop at strong matches and 
 test('canonical duplicates and ineligible jobs cannot satisfy the adaptive stopping condition',async t=>{
  const store=await ready(t);await store.upsert(job('20'));let rounds=0;
  await runSearch({store,force:true,dependencies:{search:async(p,s)=>searchQuery(s!,{...q,query:p.titles[0],page:s!.page},async()=>{rounds++;return [job('21',{url:job('20').url}),job('22')];}),describe:async()=>description,rank:async()=>({assessment:{...assessment,eligibility:'ineligible'},inputTokens:1,outputTokens:1}),plan:async()=>plan([]),notify:async()=>0}});
- const r=(await store.runs())[0].discovery!;assert.equal(rounds,3);assert.equal(r.stopReason,'round_limit');assert.ok(r.rounds.every(a=>a.strongCandidates===0));assert.equal((await store.job('21'))?.duplicateOf,'20');
+ const r=(await store.runs())[0].discovery!;assert.equal(rounds,3);assert.equal(r.stopReason,'round_limit');assert.ok(r.rounds.every(a=>a.strongCandidates===0));assert.equal(await store.job('21'),null);assert.equal((await store.db.prepare('SELECT reason FROM job_dedup WHERE user_id=? AND job_id=?').get(store.userId,'21')).reason,'duplicate');
 });
 test('evaluation allowance and source budget are shared across all attempts',async t=>{
  const store=await ready(t,{maxJobsPerRun:3});let ranked=0;
