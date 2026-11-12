@@ -1,5 +1,13 @@
 # Verification log
 
+## 12 November 2026 — qualified shortlist and model-output repairs
+
+- The main view now shows only current assessed matches meeting the account's minimum score and active sources. Promising assessed research is separate; raw, weak, excluded, closed, duplicate and stale results do not inflate either count. Manual saves and application history remain accessible after profile changes.
+- Server-side saves reject unassessed, weak and stale jobs. Regression tests cover a 377-record discovery backlog yielding one qualified match, English/Spanish rendered counts, research eligibility, and save validation.
+- Reproduced provider rejection of optional compensation in ranking output and unsupported `uri` format in research output. Ranking now requires nullable compensation; research validates URL strings after generation. Expanded output limits accommodate reasoning and structured results.
+- A live ranking request completed successfully after the schema repair, returning a 56/100 research decision rather than promoting the role. A separate synthetic live research request passed the corrected schema. Neither probe changed job assessments or bypassed search cooldowns.
+- All 189 tests passed before adding two provider-contract regressions; those additional tests also passed. TypeScript checks and the production web build passed.
+
 ## 11 November 2026 — bounded retries and explicit coverage
 
 - Source queries now retry temporary failures up to three total attempts with backoff, honoring `Retry-After`, the run deadline, and physical-request budgets. Unreadable query responses no longer disable later locations; authorization challenges still stop the affected source.

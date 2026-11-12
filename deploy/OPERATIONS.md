@@ -4,6 +4,12 @@ The web app and worker are separate deployments. A Vercel deployment does not up
 
 The worker was repaired on 11 November 2026 using source revision `9163668`. Release `d19ca4d` corrected regional LinkedIn link parsing. The active release, `1e7e717`, adds bounded source and AI retries plus explicit coverage reporting, and was verified against ten live London listings and simulated upstream failures. The previous installation rejected profiles with more than three locations, before creating a run, and had no AI credential configured.
 
+## Shortlist update — 12 November 2026
+
+Deploy web and worker together for the shortlist update. Collected listings remain an internal evaluation queue; the main view and its count require a current qualifying assessment. Saving also checks qualification on the server. Existing manual saves and application history remain accessible separately. Profile corrections invalidate older assessments, so an empty shortlist is valid until jobs pass the current criteria.
+
+Strict ranking output now requires nullable compensation instead of an optional property. Research generates plain URL strings and validates them before storing or following sources, avoiding the provider's unsupported `uri` format. Ranking allows up to 10,000 output tokens including reasoning; research allows 8,000. Account call/evaluation limits and run deadlines still apply.
+
 ## Installed layout
 
 - `/opt/job-searcher/releases/<revision>` contains the source and production dependencies for a release.

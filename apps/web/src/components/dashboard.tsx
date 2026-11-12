@@ -9,7 +9,7 @@ import ReviewedPreferences from './reviewed-preferences';
 import SearchDiscoveryReport from './search-discovery-report';
 import SearchProfile from './search-profile';
 import SearchChat from './search-chat';
-import { strongMatch, recommendation } from '@core/recommendation';
+import {opportunitiesForView} from '@core/opportunity-selection';
 import OpportunityReview from './opportunity-review';
 import { sourceOptions, sourceLabel } from '@core/source-settings';
 import WorkspaceSidebar, {type DashboardView} from './workspace-sidebar';
@@ -59,9 +59,9 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
   function change<K extends keyof Profile>(key: K, value: Profile[K]) { setDraft(p=>({...p,[key]:value})); setDirty(true); }
   const running = data.runs.some(r=>r.status==='running');
   const workerOnline = workerCheckedRecently(data.state.heartbeat);
-  const strong = data.jobs.filter(j=>strongMatch(j,data.profile,data.version));
-  const visible = data.jobs.filter(j=>sourceFilter==='all'||(j.sourceKey||'linkedin')===sourceFilter).filter(j=>filter==='dismissed' ? j.status==='dismissed' : j.status!=='dismissed' &&
-    (filter==='saved' ? j.status==='saved' : filter==='strong' ? strong.some(s=>s.id===j.id) : filter==='research'?recommendation(j)==='research':filter==='applications'?['applied','interviewing','offer'].includes(j.tracking?.stage||''):filter==='followups'?Boolean(j.tracking?.followUp&&j.tracking.followUp<=new Date().toISOString().slice(0,10)):true));
+  const strong = opportunitiesForView(data.jobs,data.profile,data.version,'all');
+  const visible = opportunitiesForView(data.jobs,data.profile,data.version,filter,sourceFilter);
+  const matchingFailed = Boolean(data.runs[0]?.error?.includes('AI evaluation failed'));
   const needsSetup = !data.profile.cvText || !data.integrations.ai;
   async function save() {
     setBusy(true);
@@ -103,6 +103,7 @@ export default function Dashboard({ initial, initialView }: { initial: Dashboard
         <aside id="search-assistant-panel" className="review-assistant" hidden={!assistantVisible}>{assistantOpened&&<><div className="review-assistant-top"><button type="button" className="text-button" onClick={()=>{setAssistantVisible(false);document.querySelector<HTMLButtonElement>('[aria-controls="search-assistant-panel"]')?.focus();}}><X size={16}/>{t('Close assistant')}</button></div><SearchChat profileKey={JSON.stringify({...data.profile,discoveredCompanyBoards:[]})} onSaved={refresh}/></>}</aside>
         {needsSetup&&<div className="review-service-notice"><AlertCircle size={18}/><div><strong>{t('A great match needs a little context.')}</strong><p>{t('Add your CV and preferences to give your search a clear direction.')}</p></div><button type="button" className="text-button" onClick={()=>navigateTab('profile')}>{t('Complete your profile')}<ArrowRight size={15}/></button></div>}
         {(data.profile.enabled||data.state.requested)&&!workerOnline&&<div className="review-service-notice" role="status"><AlertCircle size={18}/><div><strong>{t('Search is waiting for a connection.')}</strong><p>{t('Your results are saved. New searches will resume when the search service reconnects.')}{data.state.requested?' '+t('Your manual search is still queued.'):''}</p></div><button type="button" className="text-button" onClick={()=>navigateTab('activity')}>{t('View search status')}<ArrowRight size={15}/></button></div>}
+        {matchingFailed&&<div className="review-service-notice" role="status"><AlertCircle size={18}/><div><strong>{t('Matching could not finish.')}</strong><p>{t('Unchecked listings stay out of your shortlist. See Activity for the search status.')}</p></div><button type="button" className="text-button" onClick={()=>navigateTab('activity')}>{t('View search status')}<ArrowRight size={15}/></button></div>}
         <OpportunityReview jobs={visible} allJobs={data.jobs} profile={data.profile} version={data.version} filter={filter} onFilter={setFilter} source={sourceFilter} onSource={setSourceFilter} pendingJob={pendingJob} onUpdate={setJobStatus} refresh={refresh} leads={data.leads} needsSetup={needsSetup} onSetup={()=>navigateTab('profile')}/>
       </div>
       {tab==='profile'&&<>

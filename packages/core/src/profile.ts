@@ -58,6 +58,12 @@ export const defaultProfile: Profile = {
   enabled: false, emailEnabled: false,
 };
 
+export const compensationSchema = z.object({
+  base: z.string().max(500).nullable(),
+  variable: z.string().max(500).nullable(),
+  equity: z.string().max(500).nullable(),
+  headline: z.string().max(500).nullable(),
+});
 export const assessmentSchema = z.object({
   score: z.number().int().min(0).max(100),
   eligibility: z.enum(['eligible', 'ineligible', 'uncertain']),
@@ -67,12 +73,7 @@ export const assessmentSchema = z.object({
   salaryEvidence: z.string().max(500).nullable(),
   equityEvidence: z.string().max(500).nullable(),
   founderPathEvidence: z.string().max(500).nullable(),
-  compensation: z.object({
-    base: z.string().max(500).nullable(),
-    variable: z.string().max(500).nullable(),
-    equity: z.string().max(500).nullable(),
-    headline: z.string().max(500).nullable(),
-  }).nullish(),
+  compensation: compensationSchema.nullish(),
 });
 export type Assessment = z.infer<typeof assessmentSchema> & { language?:'en'|'es'; evaluation?: ReturnType<typeof evaluateStrategy> };
 

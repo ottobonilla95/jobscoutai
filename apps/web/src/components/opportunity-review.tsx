@@ -5,6 +5,7 @@ import {useRef, useState} from 'react';
 import {ArrowLeft, ArrowUpRight, Bookmark, Building2, Check, CircleCheck, CircleHelp, Info, MapPin, Search, Sparkles, X} from 'lucide-react';
 import type {Job, Profile} from '@core/profile';
 import {recommendation, recommendationLabels, strongMatch} from '@core/recommendation';
+import {opportunitiesForView} from '@core/opportunity-selection';
 import {sourceLabel} from '@core/source-settings';
 import {useI18n} from './i18n';
 import TrackingEditor from './tracking-editor';
@@ -32,13 +33,9 @@ export default function OpportunityReview({jobs, allJobs, profile, version, filt
   const [shown, setShown] = useState(50);
   const detailHeading = useRef<HTMLHeadingElement>(null);
   const selected = jobs.find(job => job.id === selectedId) ?? jobs[0];
-  const primaryFilters = ['all', 'strong', 'saved'];
-  const countJobs = allJobs.filter(job => source === 'all' || (job.sourceKey || 'linkedin') === source);
-  const counts = [
-    countJobs.filter(job => job.status !== 'dismissed').length,
-    countJobs.filter(job => strongMatch(job, profile, version)).length,
-    countJobs.filter(job => job.status === 'saved').length,
-  ];
+  const primaryFilters = ['all', 'research', 'saved'];
+  const counts = primaryFilters.map(view=>opportunitiesForView(allJobs,profile,version,view,source).length);
+  const reviewedJobs = allJobs.filter(job=>primaryFilters.some(view=>opportunitiesForView([job],profile,version,view).length));
 
   function changeFilter(value: string) {
     onFilter(value); setDetailOpen(false); setShown(50);
@@ -53,15 +50,17 @@ export default function OpportunityReview({jobs, allJobs, profile, version, filt
     <div className="review-shortlist">
       <div className="review-toolbar">
         <div className="review-filters" role="group" aria-label={t('Filter opportunities')}>
-          {[["all", t('All')], ["strong", t('Strong')], ["saved", t('Saved')]].map(([value, label], index) => <button type="button" key={value} aria-pressed={filter === value} className={filter === value ? 'review-filter selected' : 'review-filter'} onClick={() => changeFilter(value)}>{label} <span>({number(counts[index])})</span></button>)}
+          {[["all", t('For you')], ["research", t('Worth checking')], ["saved", t('Saved')]].map(([value, label], index) => <button type="button" key={value} aria-pressed={filter === value} className={filter === value ? 'review-filter selected' : 'review-filter'} onClick={() => changeFilter(value)}>{label} <span>({number(counts[index])})</span></button>)}
         </div>
         <div className="review-filter-controls">
-          <label className="review-source"><span className="sr-only">{t('Show source')}</span><Select size="compact" aria-label={t('Show source')} value={source} onValueChange={value=>{onSource(value);setShown(50);}} options={[{value:'all',label:t('Source: All')},...[...new Set(allJobs.map(job=>job.sourceKey||'linkedin'))].map(key=>({value:key,label:sourceLabel(key)}))]}/></label>
-          <label className="review-views"><span className="sr-only">{t('More views')}</span><Select size="compact" aria-label={t('More views')} value={primaryFilters.includes(filter)?'':filter} onValueChange={value=>{if(value)changeFilter(value);}} options={[['',t('More views')],['research',t('Research queue')],['applications',t('Applications')],['followups',t('Follow-ups due')],['dismissed',t('Archive')]].map(([value,label])=>({value,label}))}/></label>
+          <label className="review-source"><span className="sr-only">{t('Show source')}</span><Select size="compact" aria-label={t('Show source')} value={source} onValueChange={value=>{onSource(value);setShown(50);}} options={[{value:'all',label:t('Source: All')},...[...new Set((primaryFilters.includes(filter)?reviewedJobs:allJobs).map(job=>job.sourceKey||'linkedin'))].map(key=>({value:key,label:sourceLabel(key)}))]}/></label>
+          <label className="review-views"><span className="sr-only">{t('More views')}</span><Select size="compact" aria-label={t('More views')} value={primaryFilters.includes(filter)?'':filter} onValueChange={value=>{if(value)changeFilter(value);}} options={[['',t('More views')],['applications',t('Applications')],['followups',t('Follow-ups due')],['dismissed',t('Archive')]].map(([value,label])=>({value,label}))}/></label>
         </div>
       </div>
       {!primaryFilters.includes(filter) && <p className="review-view-label">{t(filter === 'research' ? 'Research queue' : filter === 'applications' ? 'Applications' : filter === 'followups' ? 'Follow-ups due' : 'Archive')}</p>}
       <p className="sr-only" role="status">{t('{count} opportunities shown', {count: number(jobs.length)})}</p>
+      {filter==='all' && <p className="footnote">{t('Only evaluated matches that meet your current search criteria appear here.')}</p>}
+      {filter==='research' && <p className="footnote">{t('Promising assessed roles with important questions to resolve. These are not confirmed matches.')}</p>}
       {filter === 'research' && <ResearchQueue leads={leads} refresh={refresh}/>}
       {jobs.length ? <>
         <ul className="review-list" aria-label={t('Your opportunities')}>
@@ -76,7 +75,7 @@ export default function OpportunityReview({jobs, allJobs, profile, version, filt
           })}
         </ul>
         {jobs.length > shown && <button type="button" className="button secondary review-load-more" onClick={() => setShown(value => value + 50)}>{t('Show more opportunities ({count} remaining)', {count: number(jobs.length - shown)})}</button>}
-      </> : <div className="review-empty"><Search size={26}/><h2>{t(filter === 'saved' ? 'Keep the promising ones close.' : 'No opportunities in this view.')}</h2><p>{t(filter === 'saved' ? 'Save a job to build your shortlist here.' : 'Try another filter or source, or start a new search.')}</p>{needsSetup ? <button className="button secondary" onClick={onSetup}>{t('Complete your profile')}</button> : <button className="button secondary" onClick={() => {changeFilter('all'); onSource('all');}}>{t('Show all opportunities')}</button>}</div>}
+      </> : <div className="review-empty"><Search size={26}/><h2>{t(filter === 'saved' ? 'Keep the promising ones close.' : filter==='all' ? 'No qualified matches yet.' : 'No opportunities in this view.')}</h2><p>{t(filter === 'saved' ? 'Save a job to build your shortlist here.' : filter==='all' ? 'A search can return no suitable opportunities. Unchecked and weak listings stay out of your shortlist.' : 'Try another filter or source, or start a new search.')}</p>{needsSetup ? <button className="button secondary" onClick={onSetup}>{t('Complete your profile')}</button> : (filter!=='all'||source!=='all') && <button className="button secondary" onClick={() => {changeFilter('all'); onSource('all');}}>{t('Show matches for you')}</button>}</div>}
     </div>
     <div id="opportunity-detail" className="review-detail">
       {selected ? <>

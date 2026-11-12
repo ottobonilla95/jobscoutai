@@ -9,7 +9,10 @@ export async function PATCH(request:Request,context:{params:Promise<{id:string}>
    const job=(await store.job(id));if(!job)return localizedJson({error:'Job not found.'},{status:404});
    if(input.distinct===true)(await store.markDistinct(id));
    else if(input.tracking){(await store.track(id,trackingSchema.parse(input.tracking)));}
-   else if(['new','saved','dismissed'].includes(input.status))(await store.setStatus(id,input.status));
+   else if(input.status==='saved'){
+    if(!await store.saveOpportunity(id))return localizedJson({error:'This job has not qualified for your shortlist.'},{status:409});
+   }
+   else if(['new','dismissed'].includes(input.status))(await store.setStatus(id,input.status));
    else return localizedJson({error:'Invalid update.'},{status:400});
    return localizedJson({ok:true});
   });

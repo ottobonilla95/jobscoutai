@@ -1,6 +1,9 @@
 import {z} from 'zod';
 const claimSchema=z.object({url:z.url().max(2000),quote:z.string().min(8).max(1000),scope:z.enum(['job','company']),stance:z.enum(['supports','contradicts'])});
 export const investigationSchema=z.object({questions:z.array(z.object({question:z.string().min(8).max(600),topic:z.string().min(2).max(120),scope:z.enum(['job','company']),claims:z.array(claimSchema).max(3)})).max(4)});
+// The provider rejects JSON Schema's uri format. Validate URLs after generation
+// with investigationSchema before storing excerpts or following any source.
+export const investigationOutputSchema=investigationSchema.extend({questions:z.array(investigationSchema.shape.questions.element.extend({claims:z.array(claimSchema.extend({url:z.string().max(2000)})).max(3)})).max(4)});
 export type InvestigationOutput=z.infer<typeof investigationSchema>;
 export const sourceReceiptSchema=z.object({url:z.url(),retrievedAt:z.iso.datetime(),status:z.enum(['checked','unavailable']),employerNamed:z.boolean().default(false),quotes:z.array(z.string().max(1000)).max(12)});
 export const researchTaskSchema=z.object({

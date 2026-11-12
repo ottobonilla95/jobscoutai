@@ -1095,5 +1095,15 @@
   "A possible replacement job URL could not be confirmed. Check the employer board manually.": "No se pudo confirmar un posible enlace nuevo. Revisa el portal de la empresa.",
   "Recovered a matching title and location from the same employer board. Previous fit and job terms must be reassessed against the current listing. No application was submitted.": "Se recuperó un puesto con el mismo título y ubicación en el portal de la misma empresa. Hay que volver a evaluar su afinidad y condiciones con el anuncio actual. No se envió ninguna solicitud.",
   "The old job URL is unavailable and its employer board could not be checked. This does not establish that the vacancy is closed.": "El enlace anterior no está disponible y no se pudo comprobar el portal de la empresa. Esto no confirma que la vacante esté cerrada.",
-  "{source} returned a different location filter. Results from that query were not used; requested coverage remains unconfirmed.": "{source} devolvió un filtro de ubicación distinto. No se usaron los resultados de esa consulta; la cobertura solicitada sigue sin confirmar."
+  "{source} returned a different location filter. Results from that query were not used; requested coverage remains unconfirmed.": "{source} devolvió un filtro de ubicación distinto. No se usaron los resultados de esa consulta; la cobertura solicitada sigue sin confirmar.",
+  "For you": "Para ti",
+  "Worth checking": "Por verificar",
+  "Only evaluated matches that meet your current search criteria appear here.": "Aquí solo aparecen oportunidades evaluadas que cumplen tus criterios de búsqueda actuales.",
+  "Promising assessed roles with important questions to resolve. These are not confirmed matches.": "Puestos prometedores ya evaluados con preguntas importantes por resolver. Aún no son coincidencias confirmadas.",
+  "No qualified matches yet.": "Aún no hay oportunidades que cumplan tus criterios.",
+  "A search can return no suitable opportunities. Unchecked and weak listings stay out of your shortlist.": "Una búsqueda puede no encontrar oportunidades adecuadas. Los anuncios sin evaluar y los de poco encaje no aparecen en tu selección.",
+  "Show matches for you": "Ver oportunidades para ti",
+  "This job has not qualified for your shortlist.": "Este puesto aún no cumple los criterios para tu selección.",
+  "Matching could not finish.": "No se pudo completar la evaluación.",
+  "Unchecked listings stay out of your shortlist. See Activity for the search status.": "Los anuncios sin evaluar no aparecen en tu selección. Consulta Actividad para ver el estado de la búsqueda."
 }

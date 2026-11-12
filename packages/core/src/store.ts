@@ -10,6 +10,7 @@ import { profileSchema, type Profile, type Job, type JobListing, type Assessment
 import { sourceEnabled } from './source-settings';
 import {discoveryStateSchema,searchDiscoverySchema,type DiscoveryState,type SearchDiscovery} from './adaptive-search-schema';
 import {discoveryScope} from './discovery-state';
+import {qualifiedOpportunity,promisingResearch} from './opportunity-selection';
 
 /** Every query is scoped to the authenticated account, including joins and writes. */
 export class Store {
@@ -132,6 +133,15 @@ export class Store {
     });
   }
   async setStatus(id:string,status:Job['status']){await this.db.prepare('UPDATE jobs SET status=? WHERE user_id=? AND id=?').run(status,this.userId,id);}
+  async saveOpportunity(id:string) {
+    return this.db.transaction(async db=>{
+      const store=new Store(db,this.userId),{profile,version}=await store.profile(true);
+      const job=await store.job(id);
+      if(!job)return false;
+      if(job.status!=='saved'&&!qualifiedOpportunity(job,profile,version)&&!promisingResearch(job,profile,version))return false;
+      await store.setStatus(id,'saved');return true;
+    });
+  }
   async markDistinct(id:string){await this.db.prepare('UPDATE jobs SET duplicate_of=NULL,duplicate_reviewed=1 WHERE user_id=? AND id=?').run(this.userId,id);}
   async job(id:string){const row=await this.db.prepare('SELECT j.*,t.value AS research_task FROM jobs j LEFT JOIN research_tasks t ON t.user_id=j.user_id AND t.job_id=j.id AND t.profile_version=(SELECT version FROM profile WHERE user_id=?) WHERE j.user_id=? AND j.id=?').get(this.userId,this.userId,id);return row?jobFromRow(row):null;}
   async leads(){return (await this.db.prepare('SELECT * FROM leads WHERE user_id=? ORDER BY created_at DESC').all(this.userId)).map(r=>({id:String(r.id),...JSON.parse(r.value),createdAt:String(r.created_at)}));}
