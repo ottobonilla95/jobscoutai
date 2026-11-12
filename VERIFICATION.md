@@ -7,6 +7,7 @@
 - Reproduced provider rejection of optional compensation in ranking output and unsupported `uri` format in research output. Ranking now requires nullable compensation; research validates URL strings after generation. Expanded output limits accommodate reasoning and structured results.
 - A live ranking request completed successfully after the schema repair, returning a 56/100 research decision rather than promoting the role. A separate synthetic live research request passed the corrected schema. Neither probe changed job assessments or bypassed search cooldowns.
 - All 189 tests passed before adding two provider-contract regressions; those additional tests also passed. TypeScript checks and the production web build passed.
+- Deployed source `6dcc2c6` to Vercel production and DigitalOcean. Verified the authenticated production UI shows **Para ti**, **Por verificar**, and **Guardadas**, with zero current qualified results instead of displaying 377 discovery records. The corrected account profile invalidates prior scores for reassessment; its next eligible search remains scheduled for 14:00 UTC on 12 November. Worker activation checked both output schemas without paid requests, retained the previous release, and restored the timer.
 
 ## 11 November 2026 — bounded retries and explicit coverage
 

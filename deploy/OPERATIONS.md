@@ -2,7 +2,7 @@
 
 The web app and worker are separate deployments. A Vercel deployment does not update the DigitalOcean worker. Deploy compatible worker code whenever profile formats, database access, model settings, or search behavior change.
 
-The worker was repaired on 11 November 2026 using source revision `9163668`. Release `d19ca4d` corrected regional LinkedIn link parsing. The active release, `1e7e717`, adds bounded source and AI retries plus explicit coverage reporting, and was verified against ten live London listings and simulated upstream failures. The previous installation rejected profiles with more than three locations, before creating a run, and had no AI credential configured.
+The active worker release is `6dcc2c6`, deployed on 12 November 2026 with qualified-shortlist and model-output fixes. Earlier repairs on 11 November used `9163668` for the outdated profile/credential setup, `d19ca4d` for regional LinkedIn links, and `1e7e717` for bounded retries and coverage reporting. Prior releases remain available for rollback.
 
 ## Shortlist update — 12 November 2026
 
