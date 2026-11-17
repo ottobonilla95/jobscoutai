@@ -8,11 +8,6 @@ import {recommendation, recommendationLabels, strongMatch} from '@core/recommend
 import {opportunitiesForView} from '@core/opportunity-selection';
 import {sourceLabel} from '@core/source-settings';
 import {useI18n} from './i18n';
-import TrackingEditor from './tracking-editor';
-import ResearchAction from './research-action';
-import ResearchDossierView from './research-dossier';
-import {ResearchProgress} from './research-progress';
-import OpportunityFeedback from './opportunity-feedback';
 import ResearchQueue from './research-queue';
 import type {DashboardData} from '@/lib/dashboard';
 
@@ -80,15 +75,15 @@ export default function OpportunityReview({jobs, allJobs, profile, version, filt
     <div id="opportunity-detail" className="review-detail">
       {selected ? <>
         <button type="button" className="text-button review-back" onClick={() => {setDetailOpen(false); requestAnimationFrame(() => document.querySelector<HTMLButtonElement>('.review-row.selected')?.focus());}}><ArrowLeft size={17}/>{t('Back to opportunities')}</button>
-        <OpportunityDetail key={selected.id} job={selected} version={version} pending={pendingJob === selected.id} onUpdate={status => onUpdate(selected, status)} refresh={refresh} headingRef={detailHeading}/>
+        <OpportunityDetail key={selected.id} job={selected} version={version} pending={pendingJob === selected.id} onUpdate={status => onUpdate(selected, status)} headingRef={detailHeading}/>
       </> : <div className="review-detail-placeholder"><CircleHelp size={27}/><h2>{t('A little clarity for your next move.')}</h2><p>{t('Match reasons, open questions, and the original listing will appear here.')}</p></div>}
     </div>
   </section>;
 }
 
-function OpportunityDetail({job, version, pending, onUpdate, refresh, headingRef}: {
+function OpportunityDetail({job, version, pending, onUpdate, headingRef}: {
   job: Job; version: number; pending: boolean;
-  onUpdate: (status: Job['status']) => Promise<void>; refresh: () => Promise<void>;
+  onUpdate: (status: Job['status']) => Promise<void>;
   headingRef: React.RefObject<HTMLHeadingElement | null>;
 }) {
   const {t, date, locale} = useI18n();
@@ -112,9 +107,6 @@ function OpportunityDetail({job, version, pending, onUpdate, refresh, headingRef
     <section className="review-detail-section"><h3><Info size={21}/>{t('Key details')}</h3><dl className="review-facts">
      {assessment?.compensation?<><dt>{t('Guaranteed base pay')}</dt><dd>{assessment.compensation.base||t('Not specified')}</dd><dt>{t('Variable pay')}</dt><dd>{assessment.compensation.variable||t('Not specified')}</dd><dt>{t('Advertised package')}</dt><dd>{assessment.compensation.headline||assessment.salaryEvidence||t('Not specified')}</dd></>:<><dt>{t('Salary')}</dt><dd>{assessment?.salaryEvidence||t('Not specified')}</dd></>}
      <dt>{t('Equity')}</dt><dd>{assessment?.compensation?.equity || assessment?.equityEvidence || t('Not specified')}</dd><dt>{t('Source')}</dt><dd>{sourceLabel(job.sourceKey)}</dd><dt>{t('Found')}</dt><dd>{date(job.firstSeen, false)}</dd>{assessment?.founderPathEvidence && <><dt>{t('Ownership evidence')}</dt><dd>{assessment.founderPathEvidence}</dd></>}</dl></section>
-    <TrackingEditor job={job} refresh={refresh}/>
-    <details className="review-research"><summary>{t('Research and evidence')}</summary><ResearchProgress job={job}/><ResearchDossierView dossier={job.research} currentVersion={version}/><ResearchAction job={job} refresh={refresh}/>{job.description && <details className="description"><summary>{t('Read the source description')}</summary><p>{job.description}</p></details>}</details>
-    <OpportunityFeedback job={job} refresh={refresh}/>
     {job.status !== 'dismissed' && <div className="review-archive"><button type="button" className="text-button muted" disabled={pending} onClick={() => void onUpdate('dismissed')}><X size={16}/>{t('Archive opportunity')}</button></div>}
     <p className="review-disclaimer">{t('Scores guide your review; unstated details remain unknown.')}</p>
   </article>;
