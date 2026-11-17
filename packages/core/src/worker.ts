@@ -182,7 +182,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
         await store.researchProgress(id,research);
       }
     }
-    if(research.retryScheduled||research.failed)errors.push('Some research remains unfinished. Saved sources and retry status are available on each opportunity.');
+    if(research.retryScheduled||research.failed)errors.push('Some research remains unfinished. Check investigation coverage and outcomes in Activity for retry and failure counts.');
     const finalJobs=await store.jobs();counts.matched=finalJobs.filter(j=>evaluated.has(j.id)&&strongMatch(j,profile,version)).length;metrics(finalJobs);
     const latest=await store.profile();
     if(latest.version===version&&canNotify){try{await dependencies.notify(store,latest.profile,version);}catch(error){errors.push(error instanceof Error?error.message:'Notification failed.');}}

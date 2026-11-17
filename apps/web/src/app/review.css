@@ -69,16 +69,6 @@
 .review-facts dt { color: var(--muted); }
 .review-facts dd { margin: 0; overflow-wrap: anywhere; }
 .review-notice { display: flex; align-items: center; gap: 7px; color: var(--warning); font-size: 13px; margin: 12px 0; }
-.opportunity-detail > .job-details, .review-research { border-top: 1px solid var(--line); padding: 0; margin: 0; }
-.opportunity-detail > .job-details > summary, .review-research > summary { display: flex; align-items: center; min-height: 60px; padding: 16px 0; color: var(--ink); font-size: 14px; cursor: pointer; gap: 12px; }
-.opportunity-detail > .job-details > summary > span { margin-left: auto; }
-.opportunity-detail > .job-details[open], .review-research[open] { padding-bottom: 22px; }
-.opportunity-detail .details-grid { grid-template-columns: 1fr; padding: 0; }
-.opportunity-detail .details-grid form { margin: 20px 0 0; }
-.opportunity-detail .details-grid p { font-size: 13px; }
-.opportunity-detail .feedback-editor form { padding: 0; }
-.opportunity-detail label { font-size: 13px; }
-.opportunity-detail input, .opportunity-detail textarea, .opportunity-detail select { font-size: 14px; }
 .review-archive { border-top: 1px solid var(--line); padding-top: 10px; }
 .review-disclaimer { font-size: 12px; color: var(--muted); margin-top: 20px; max-width: 65ch; }
 .review-empty, .review-detail-placeholder { padding: 64px 20px; color: var(--muted); }

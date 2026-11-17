@@ -681,50 +681,6 @@ nav {
   justify-content: space-between;
 }
 
-.details-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 30px;
-  padding: 9px 0 20px;
-  color: var(--muted);
-}
-
-.details-grid ul {
-  padding-left: 18px;
-  margin: 0 0 20px;
-}
-
-.details-grid li {
-  margin-bottom: 5px;
-}
-
-.details-grid dt {
-  font-size: 11px;
-  color: var(--muted);
-  margin-top: 10px;
-}
-
-.details-grid dd {
-  margin: 4px 0 12px;
-}
-
-.description {
-  padding: 0 0 18px;
-  color: var(--muted);
-}
-
-.description summary {
-  cursor: pointer;
-}
-
-.description p {
-  white-space: pre-wrap;
-  max-height: 400px;
-  overflow: auto;
-  font-size: 12px;
-  margin-top: 15px;
-}
-
 .empty-state {
   text-align: center;
   background: var(--white);
@@ -1279,10 +1235,6 @@ select {
   margin: 12px 0;
 }
 
-.subheading {
-  margin-top: 24px;
-}
-
 .proposal {
   margin-top: 22px;
   padding: 20px;
@@ -1311,18 +1263,6 @@ select {
 .job-details p {
   margin: 8px 0 14px;
   overflow-wrap: anywhere;
-}
-
-.job-details form {
-  min-width: 0;
-}
-
-.job-details .button {
-  margin: 10px 0;
-}
-
-.job-details q {
-  font-style: italic;
 }
 
 .panel input[type=file] {
@@ -2026,11 +1966,6 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
     padding: 0 16px;
   }
 
-  .details-grid {
-    grid-template-columns: 1fr;
-    gap: 4px;
-  }
-
   .panel {
     padding: 20px;
   }
@@ -2651,17 +2586,6 @@ input:-webkit-autofill, input:-webkit-autofill:hover, input:-webkit-autofill:foc
 .discovery-table th,.discovery-table td { text-align:left; padding:10px; border-bottom:1px solid var(--line); vertical-align:top; }
 .discovery-table small { display:block; color:var(--muted); margin-top:4px; }
 .discovered-employers a,.discovery-round a { overflow-wrap:anywhere; }
-
-.research-evidence-list { list-style:none; padding:0; }
-.research-evidence-list li { border-top:1px solid var(--line); padding:16px 0; }
-.research-dossier blockquote { margin:12px 0; padding-left:16px; border-left:2px solid var(--green); white-space:pre-wrap; }
-.research-dossier li,.research-dossier p { overflow-wrap:anywhere; }
-
-.feedback-editor form, .feedback-review { display: grid; gap: 14px; margin-top: 18px; max-width: 740px; }
-.feedback-review { border-top: 1px solid var(--line); padding-top: 20px; }
-.feedback-editor label:not(.check-label) { display: grid; gap: 8px; }
-.feedback-editor textarea { width: 100%; min-height: 90px; }
-.research-action { margin: 16px 0; }
 
 /* The assistant stays beside the current results throughout the search. */
 .search-workspace {

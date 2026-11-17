@@ -16,5 +16,5 @@ export async function PATCH(request:Request,context:{params:Promise<{id:string}>
    else return localizedJson({error:'Invalid update.'},{status:400});
    return localizedJson({ok:true});
   });
- }catch{return localizedJson({error:'Check the tracking fields and try again.'},{status:400});}
+ }catch{return localizedJson({error:'Could not update job.'},{status:400});}
 }

@@ -921,6 +921,7 @@
   "These counts describe checked sources and remaining uncertainty. They do not measure application or hiring outcomes.": "Estos datos describen las fuentes comprobadas y las dudas pendientes. No miden los resultados de las solicitudes ni las contrataciones.",
   "Research interrupted. Saved checkpoints will be resumed at the next eligible retry.": "Investigación interrumpida. Se retomará desde el progreso guardado en el siguiente reintento disponible.",
   "Some research remains unfinished. Saved sources and retry status are available on each opportunity.": "Queda parte de la investigación pendiente. Puedes ver las fuentes guardadas y el estado de los reintentos en cada oportunidad.",
+  "Some research remains unfinished. Check investigation coverage and outcomes in Activity for retry and failure counts.": "Queda parte de la investigación pendiente. Consulta la cobertura y los resultados de la investigación en Actividad para ver el número de reintentos y fallos.",
   "Company sources are matched by name. Confirm the employer identity before relying on them.": "Las fuentes de la empresa se vinculan por su nombre. Confirma la identidad de la empresa antes de confiar en ellas.",
   "Research processing ended for this run.": "Terminó el procesamiento de investigación de esta búsqueda.",
   "Create your account, add your CV, and chat with your assistant to build a search around you.": "Crea tu cuenta, añade tu CV y conversa con tu asistente para crear una búsqueda a tu medida.",
