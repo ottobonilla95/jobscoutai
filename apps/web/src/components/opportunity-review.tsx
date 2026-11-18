@@ -10,6 +10,8 @@ import {sourceLabel} from '@core/source-settings';
 import {useI18n} from './i18n';
 import ResearchQueue from './research-queue';
 import type {DashboardData} from '@/lib/dashboard';
+import {countryFlag,jobLocationCountries} from '@/lib/job-location';
+import {countryName} from '@core/locations';
 
 type Props = {
   jobs: Job[]; allJobs: Job[]; profile: Profile; version: number;
@@ -64,7 +66,7 @@ export default function OpportunityReview({jobs, allJobs, profile, version, filt
             return <li key={job.id}><button type="button" className={`review-row${selected?.id === job.id ? ' selected' : ''}`} aria-pressed={selected?.id === job.id} aria-controls="opportunity-detail" onClick={() => selectJob(job)}>
               <span className="review-row-heading"><strong>{job.title}</strong>{job.assessment && <span className="review-score" aria-label={t('Fit score: {score} out of 100', {score: number(job.assessment.score)})}>{number(job.assessment.score)}<span>/100</span></span>}</span>
               <span className="review-company">{job.company}</span>
-              <span className="review-location"><MapPin size={15}/>{job.location || t('Location unspecified')}</span>
+              <span className="review-location"><MapPin size={15}/><JobLocation location={job.location}/></span>
               <span className={`review-recommendation${isStrong ? ' strong' : ''}`}><Sparkles size={16}/>{isStrong ? t('Strong match') : t(recommendationLabels[recommendation(job)])}{job.status === 'saved' && <Bookmark size={14} aria-label={t('Saved')}/>}</span>
             </button></li>;
           })}
@@ -81,6 +83,12 @@ export default function OpportunityReview({jobs, allJobs, profile, version, filt
   </section>;
 }
 
+function JobLocation({location}:{location:string}){
+  const {t,locale}=useI18n();
+  const countries=jobLocationCountries(location);
+  return <span className="job-location-text">{countries.length>0&&<span className="job-location-flags">{countries.map(code=><span key={code} role="img" aria-label={countryName(code,locale)} title={countryName(code,locale)}>{countryFlag(code)}</span>)}</span>}{location||t('Location unspecified')}</span>;
+}
+
 function OpportunityDetail({job, version, pending, onUpdate, headingRef}: {
   job: Job; version: number; pending: boolean;
   onUpdate: (status: Job['status']) => Promise<void>;
@@ -92,7 +100,7 @@ function OpportunityDetail({job, version, pending, onUpdate, headingRef}: {
   return <article className="opportunity-detail" aria-labelledby="selected-job-title" aria-busy={pending}>
     <header className="review-detail-header">
       <h2 id="selected-job-title" ref={headingRef} tabIndex={-1}>{job.title}</h2>
-      <div className="review-job-meta"><span><Building2 size={18}/>{job.company}</span><span><MapPin size={18}/>{job.location || t('Location unspecified')}</span></div>
+      <div className="review-job-meta"><span><Building2 size={18}/>{job.company}</span><span><MapPin size={18}/><JobLocation location={job.location}/></span></div>
       <p className="review-summary">{assessment?.summary || t('This opportunity is waiting for its fit assessment.')}</p>
       <div className="review-detail-actions">
         <a className="button primary" href={job.url} target="_blank" rel="noopener noreferrer"><ArrowUpRight size={19}/>{t('View original listing')}</a>
