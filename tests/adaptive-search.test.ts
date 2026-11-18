@@ -151,3 +151,16 @@ test('closed listings do not stop follow-up discovery as strong matches',async t
  await runSearch({store,force:true,dependencies:{search:async(p,s)=>searchQuery(s!,{...q,query:p.titles[0],page:s!.page},async()=>++round===1?[job('40'),job('41')]:[]),describe:async()=>description,rank:async()=>({assessment,inputTokens:1,outputTokens:1}),verify:async()=>{checks++;return {status:'closed',checkedAt:new Date().toISOString(),applicationUrl:null,note:'Listing closed'};},plan:async()=>plan([]),notify:async()=>0}});
  const r=(await store.runs())[0];assert.equal(round,3);assert.equal(checks,2);assert.equal(r.matched,0);assert.equal(r.discovery?.stopReason,'round_limit');assert.ok(r.discovery?.rounds.every(a=>a.strongCandidates===0));
 });
+
+test('truncated structured plans preserve actual hosted-search citations and usage',async t=>{
+ const store=await ready(t,{sources:['companies'],companyBoards:[]});
+ const url='https://jobs.ashbyhq.com/real/ce8175e4-8d92-434a-8c6d-71d009e5568d';
+ const truncated=new MockLanguageModelV4({doGenerate:async()=>({
+  content:[{type:'tool-call' as const,toolCallId:'search-1',toolName:'web_search',input:'{}',providerExecuted:true},{type:'tool-result' as const,toolCallId:'search-1',toolName:'web_search',result:{sources:[{type:'url',url}]}}],
+  finishReason:{unified:'length' as const,raw:'max_output_tokens'},usage:{inputTokens:{total:12,noCache:12,cacheRead:undefined,cacheWrite:undefined},outputTokens:{total:8000,text:0,reasoning:8000}},warnings:[],
+ })});
+ const result=await planAdaptiveSearch({store,profile:(await store.profile()).profile,state:empty(),report:report()},truncated);
+ assert.deepEqual(result.jobUrls,[url]);assert.equal(result.boards.length,1);assert.equal(result.outputTokens,8000);
+ const saved=await store.db.prepare('SELECT status,result FROM ai_generations WHERE id=?').get(result.generationId!);
+ assert.equal(saved.status,'completed');const detail=JSON.parse(saved.result);assert.ok(detail.recoveredFrom);assert.equal(detail.toolResults[0].output.sources[0].url,url);
+});
