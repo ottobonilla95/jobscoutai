@@ -1,5 +1,6 @@
 import {remoteSearchOnly} from './search-plan';
-import {searchTitles} from './discovery';
+import {matchesTitle} from './discovery';
+export {matchesTitle} from './discovery';
 import { load } from 'cheerio';
 import type { Job, JobListing, Profile } from './profile';
 import { searchLinkedIn, fetchDescription, SourceError } from './linkedin';
@@ -19,10 +20,6 @@ export function listingWithinAge(job:JobListing,profile:Profile){
  return Number.isNaN(date)?profile.includeUnknownDates:profile.postedWithinDays===0||date>=Date.now()-profile.postedWithinDays*86400000;
 }
 export type SearchReport = { jobs: JobListing[]; errors: string[]; blocked: string[]; succeeded: number };
-export function matchesTitle(title: string, profile: Profile) {
-  const words = title.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ');
-  return searchTitles(profile).some(query => query.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).every(word => words.split(' ').includes(word)));
-}
 export function parseYcListings(html: string): JobListing[] {
   const $=load(html);const jobs=new Map<string,JobListing>();
   $('a[href]').each((_,e)=>{

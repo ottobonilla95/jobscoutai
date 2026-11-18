@@ -18,7 +18,7 @@ import {queryKey,locationCoverage,type SearchSession} from './search-session';
 import {loadPublicJob} from './public-job';
 import {createHash} from 'node:crypto';
 import {searchTargets} from './search-plan';
-import {searchTitles} from './discovery';
+import {searchTitles,matchesTitle} from './discovery';
 import {activeCountrySources} from './country-sources';
 import {parseBoard} from './source-settings';
 import {loadCompanyBoard} from './company-board';
@@ -62,7 +62,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     else await store.verify(job.id,verification);
   };
   const evaluateCandidates=async(limit:number,fresh=new Set<string>())=>{
-    const pending=report.stopReason==='profile_changed'?[]:(await store.pending(version,Math.min(30,limit*3),profile,[...session.blocked])).sort((a,b)=>Number((b.assessment?.score??0)>=profile.minimumScore)-Number((a.assessment?.score??0)>=profile.minimumScore)||Number(fresh.has(b.id))-Number(fresh.has(a.id))).slice(0,Math.min(30,limit*3));
+    const pending=report.stopReason==='profile_changed'?[]:(await store.pending(version,Math.min(30,limit*3),profile,[...session.blocked])).sort((a,b)=>Number((b.assessment?.score??0)>=profile.minimumScore)-Number((a.assessment?.score??0)>=profile.minimumScore)||Number(matchesTitle(b.title,profile))-Number(matchesTitle(a.title,profile))||Number(fresh.has(b.id))-Number(fresh.has(a.id))).slice(0,Math.min(30,limit*3));
       let budgetStopped=false;
       const initial=counts.evaluated;
       for(const job of pending){

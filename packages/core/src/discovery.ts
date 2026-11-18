@@ -17,3 +17,8 @@ export function searchTitles(profile:{titles:string[];strategy?:{discovery?:Disc
   }
   return result.slice(0,8);
 }
+
+export function matchesTitle(title: string, profile:Parameters<typeof searchTitles>[0]) {
+  const words = title.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ');
+  return searchTitles(profile).some(query => query.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).every(word => words.split(' ').includes(word)));
+}

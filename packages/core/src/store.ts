@@ -1,3 +1,4 @@
+import {matchesTitle} from './discovery';
 import {researchTaskSchema,researchStatsSchema,type ResearchStats} from './research-task-schema';
 import {feedbackSchema} from './feedback-schema';
 import {ResearchMemory} from './research-memory';
@@ -167,6 +168,7 @@ export class Store {
   async pending(version:number,limit:number,profile?:Profile,blocked:string[]=[]):Promise<Job[]>{
     const jobs=(await this.db.prepare("SELECT * FROM jobs WHERE user_id=? AND status!='dismissed' AND duplicate_of IS NULL AND (evaluated_version IS NULL OR evaluated_version!=?) ORDER BY last_seen DESC LIMIT ?").all(this.userId,version,profile?null:limit)).map(jobFromRow).filter(job=>(!profile||sourceEnabled(profile,job.sourceKey))&&!blocked.includes(job.sourceKey||'linkedin'));
     const groups=new Map<string,Job[]>();
+    if(profile)jobs.sort((a,b)=>Number(matchesTitle(b.title,profile))-Number(matchesTitle(a.title,profile)));
     for(const job of jobs){const key=job.sourceKey||'linkedin';if(!groups.has(key))groups.set(key,[]);groups.get(key)!.push(job);}
     const selected:Job[]=[];
     while(selected.length<limit&&groups.size)for(const [key,group] of groups){if(selected.length>=limit)break;selected.push(group.shift()!);if(!group.length)groups.delete(key);}

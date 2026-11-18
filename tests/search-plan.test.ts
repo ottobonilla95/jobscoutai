@@ -116,3 +116,12 @@ test('source collection deadline preserves the independent evaluation time allow
  session.discoveryDeadline=undefined;
  await searchQuery(session,{source:'linkedin',query:'Founding Engineer',location:'Colombia',page:0},async()=>{reads++;return [listing];});assert.equal(reads,1);
 });
+
+test('bounded evaluation prioritizes the requested role family over relaxed portal results without discarding alternatives',async t=>{
+ const store=await storeFixture(t);const profile={...(await store.profile()).profile,titles:['Founding Engineer'],sources:['linkedin' as const]};
+ await store.saveProfile(profile);
+ await store.upsert({...listing,id:'target',title:'Founding Software Engineer',url:'https://www.linkedin.com/jobs/view/100001/'});
+ await store.upsert({...listing,id:'relaxed',title:'Optics Laboratory Technician',url:'https://www.linkedin.com/jobs/view/100002/'});
+ const pending=await store.pending((await store.profile()).version,2,profile);
+ assert.deepEqual(pending.map(j=>j.id),['target','relaxed']);
+});
