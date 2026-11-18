@@ -107,12 +107,12 @@ test('planner failure falls back to untried approved pages and reports the parti
 });
 test('board plans require exact matching citations, supported hosts, selected sources and valid role references',()=>{
  const p={...defaultProfile,titles:['Software Engineer'],sources:['companies'] as const as Profile['sources'],companyBoards:['https://jobs.ashbyhq.com/known']};
- const output={reason:'Discover another relevant employer.',queries:[{roleIndex:0,query:'Software Developer'},{roleIndex:1,query:'Unconfirmed'}],boards:[{url:'https://jobs.ashbyhq.com/real',sourceUrl:'https://jobs.ashbyhq.com/real/123'},{url:'https://jobs.ashbyhq.com/guessed',sourceUrl:'https://jobs.ashbyhq.com/real/123'},{url:'https://evil.example/other',sourceUrl:'https://evil.example/other'}]};
+ const output={jobUrls:[],reason:'Discover another relevant employer.',queries:[{roleIndex:0,query:'Software Developer'},{roleIndex:1,query:'Unconfirmed'}],boards:[{url:'https://jobs.ashbyhq.com/real',sourceUrl:'https://jobs.ashbyhq.com/real/123'},{url:'https://jobs.ashbyhq.com/guessed',sourceUrl:'https://jobs.ashbyhq.com/real/123'},{url:'https://evil.example/other',sourceUrl:'https://evil.example/other'}]};
  const valid=validateAdaptivePlan(output,p,[output.boards[0].sourceUrl],empty());assert.deepEqual(valid.queries,['Software Developer']);assert.equal(valid.boards.length,1);
  assert.equal(validateAdaptivePlan(output,p,[],empty()).boards.length,0);assert.equal(validateAdaptivePlan(output,{...p,sources:['linkedin']},[output.boards[0].sourceUrl],empty()).boards.length,0);
 });
 test('real structured planner persists generation results, usage and observed feedback for the owner',async t=>{
- const store=await ready(t);let prompt='';const before=await store.profile();const output={reason:'Low matching scores: try a common equivalent.',queries:[{roleIndex:0,query:'Software Developer'}],boards:[]};
+ const store=await ready(t);let prompt='';const before=await store.profile();const output={jobUrls:[],reason:'Low matching scores: try a common equivalent.',queries:[{roleIndex:0,query:'Software Developer'}],boards:[]};
  const result=await planAdaptiveSearch({store,profile:before.profile,state:empty(),report:report(),feedback:[{title:'Software Engineer',score:30,eligibility:'uncertain',concerns:['Long working hours'],decision:'research'}]},model(output,p=>{prompt=p;}));
  assert.ok(result.generationId);assert.equal(result.inputTokens,12);assert.equal(result.outputTokens,20);assert.match(prompt,/Long working hours/);assert.match(prompt,/Madrid, Spain/);assert.match(prompt,/Preserve the confirmed role families/);
  const accounts=await accountsFixture(t); // separate account database must not expose this generation
@@ -125,7 +125,7 @@ test('invalid planner output is marked failed and does not mutate the profile',a
 });
 test('temporary AI planner errors retry before recording failure, within one bounded generation',async t=>{
  const store=await ready(t);let calls=0;
- const healthy=model({reason:'Retry an equivalent advertised role.',queries:[{roleIndex:0,query:'Software Developer'}],boards:[]});
+ const healthy=model({jobUrls:[],reason:'Retry an equivalent advertised role.',queries:[{roleIndex:0,query:'Software Developer'}],boards:[]});
  const flaky=new MockLanguageModelV4({doGenerate:async options=>{
   if(++calls<3)throw new APICallError({message:'Temporarily unavailable',url:'https://provider.example.test',requestBodyValues:{},statusCode:503,isRetryable:true});
   return healthy.doGenerate(options);

@@ -9,7 +9,7 @@ import {answeredClarifications,currentClarifications} from './goal-clarification
 import { firstIncompleteStep, lines, matchingBasis, type SetupAnswers, type SetupDraft } from './setup-schema';
 
 export function answersFromProfile(p:Profile):SetupAnswers {
-  return {goalClarifications:p.goalClarifications,clarificationBasis:p.clarificationBasis,selectedLocations:p.searchLocations,rolesBasis:'',name:p.name,cvText:p.cvText,cvFileName:p.cvFileName,objective:p.onboardingCompleted?p.objective:'',
+  return {searchTracks:p.searchTracks,preferredLocations:p.preferredLocations,goalClarifications:p.goalClarifications,clarificationBasis:p.clarificationBasis,selectedLocations:p.searchLocations,rolesBasis:'',name:p.name,cvText:p.cvText,cvFileName:p.cvFileName,objective:p.onboardingCompleted?p.objective:'',
     titles:p.onboardingCompleted?p.titles.join('\n'):'',locations:p.locations.filter(Boolean).join('\n'),
     locationChoice:p.onboardingCompleted?(p.locations.some(Boolean)?'specific':'anywhere'):'',
     remotePreference:p.onboardingCompleted?(p.remoteOnly?'remote':'flexible'):'',workAuthorization:p.workAuthorization,
@@ -33,8 +33,9 @@ export function strategyForAnswers(a:SetupAnswers,groups:Strategy['groups'],loca
   if(a.constraints.trim()) {
     requirements.push({id:'user_dealbreakers',label:translate(locale,'Must-haves and dealbreakers'),instruction:`Apply only explicitly stated must-haves; do not invent exclusions. User answer: ${a.constraints.trim()}`,unknown:'research'});
   }
+  if(a.searchTracks.length)requirements.push({id:'user_search_scope',label:translate(locale,'Location and work'),instruction:`Match at least one of the user's search tracks: ${JSON.stringify(a.searchTracks)}. These are alternatives. Remote work must permit at least one workFromCountries country for that track; employer headquarters is not the work location. A worldwide search does not mean all remote jobs are eligible. Require evidence of actual work mode and permitted work countries; broad region permissions may cover a named country. Missing restrictions stay unknown for research; explicit incompatible restrictions fail. For office/hybrid use the actual role location, not a remote alternative.`,unknown:'research'});
   const accessCoversLocations=a.selectedLocations.length>0&&a.selectedLocations.every(place=>workAccess.some(rule=>rule.country===place.countryCode));
-  if(a.workAuthorization.trim()&&!accessCoversLocations)requirements.push({id:'user_work_access',label:translate(locale,'Work authorization'),instruction:`Use only the user's declared work-access policy; never infer authorization from citizenship or a CV. A job need not restate the candidate's own work rights. Use available location evidence. If the user explicitly accepts unstated sponsorship in a country, silence alone is not a failure or an unknown requirement. For alternative locations, an accessible location may satisfy the policy. User answer: ${a.workAuthorization.trim()}`,unknown:'research'});
+  if(a.workAuthorization.trim()&&(!accessCoversLocations||a.searchTracks.length))requirements.push({id:'user_work_access',label:translate(locale,'Work authorization'),instruction:`Use only the user's declared work-access policy; never infer authorization from citizenship or a CV. A job need not restate the candidate's own work rights. Use available location evidence. If the user explicitly accepts unstated sponsorship in a country, silence alone is not a failure or an unknown requirement. For alternative locations, an accessible location may satisfy the policy. User answer: ${a.workAuthorization.trim()}`,unknown:'research'});
   return {...defaultStrategy,groups,requirements,discovery,workAccess:workAccess.filter(rule=>countryCodes.includes(rule.country))};
 }
 export function completeSetup(p:Profile,draft:SetupDraft,minimum:number,email:string,verified:boolean):Profile {
@@ -44,7 +45,7 @@ export function completeSetup(p:Profile,draft:SetupDraft,minimum:number,email:st
   const a=draft.answers;
   return profileSchema.parse({...p,name:a.name,cvText:a.cvText,cvFileName:a.cvFileName,objective:a.objective,
     goalClarifications:currentClarifications(a),clarificationBasis:a.clarificationBasis,
-    titles:lines(a.titles),searchLocations:a.selectedLocations,locations:a.selectedLocations.map(locationQuery),remoteOnly:a.remotePreference==='remote',
+    titles:lines(a.titles),searchTracks:a.searchTracks,preferredLocations:a.preferredLocations,searchLocations:a.selectedLocations,locations:a.selectedLocations.length?a.selectedLocations.map(locationQuery):[''],remoteOnly:a.remotePreference==='remote',
     workAuthorization:a.workAuthorization,salaryExpectation:a.salaryExpectation,equityExpectation:a.equityExpectation,
     constraints:a.constraints,intervalHours:a.intervalHours,email,emailAlertsRequested:a.emailAlerts,emailEnabled:a.emailAlerts&&verified,
     strategy:draft.matching.strategy,matchingSummary:draft.matching.summary,onboardingCompleted:true,setupDraft:null,

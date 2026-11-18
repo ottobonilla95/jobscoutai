@@ -17,7 +17,7 @@ test('legacy profiles gain source defaults; malformed or empty source selections
  const {sources,companyBoards,...legacy}=defaultProfile;const upgraded=profileSchema.parse(legacy);
  assert.deepEqual(upgraded.sources,['linkedin']);assert.deepEqual(upgraded.companyBoards,[]);
  assert.equal(profileSchema.safeParse({...defaultProfile,sources:[]}).success,false);
- assert.equal(profileSchema.safeParse({...defaultProfile,sources:['companies'],companyBoards:[]}).success,false);
+ assert.equal(profileSchema.safeParse({...defaultProfile,sources:['companies'],companyBoards:[]}).success,true);
 });
 test('company sources accept only exact HTTPS board hosts and board paths',()=>{
  assert.equal(parseBoard('https://jobs.ashbyhq.com/example?utm_source=careers')?.key,'ashby:example');

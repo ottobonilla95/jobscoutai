@@ -1,3 +1,4 @@
+import {searchTrackSchema} from './search-plan';
 import {z} from 'zod';
 import {setupDraftSchema, setupAnswersSchema} from './setup-schema';
 import {parseBoard} from './source-settings';
@@ -9,7 +10,7 @@ export const chatSettingsSchema=z.object({
   companyBoards:z.array(z.string().max(250).refine(url=>Boolean(parseBoard(url)))).max(5),
   enabled:z.boolean(), researchEnabled:z.boolean(),
   minimumScore:z.number().int().min(0).max(100),
-  postedWithinDays:z.number().int().min(1).max(90), includeUnknownDates:z.boolean(),
+  postedWithinDays:z.number().int().min(0).max(90), includeUnknownDates:z.boolean(),
   maxJobsPerRun:z.number().int().min(1).max(30), dailyEvaluationLimit:z.number().int().min(1).max(300),
 });
 export const chatMessageSchema=z.object({id:z.string(),role:z.enum(['user','assistant']),text:z.string().max(32000)});
@@ -30,6 +31,8 @@ export const chatTurnSchema=z.object({
   // Structured provider output requires every property, including empty strings
   // and arrays. Draft-schema defaults would make those JSON properties optional.
   answers:setupAnswersSchema.omit({cvText:true,cvFileName:true,rolesBasis:true,clarificationBasis:true,locations:true}).extend({
+    searchTracks:z.array(searchTrackSchema.safeExtend({locations:z.array(searchLocationSchema.safeExtend({city:z.string().trim().max(80),region:z.string().trim().max(80)})).max(10)})).max(8),
+    preferredLocations:z.array(searchLocationSchema.safeExtend({city:z.string().trim().max(80),region:z.string().trim().max(80)})).max(10),
     titles:z.array(z.string().trim().min(2).max(120)).max(4),
     selectedLocations:z.array(searchLocationSchema.safeExtend({city:z.string().trim().max(80),region:z.string().trim().max(80)})).max(maxSearchLocations),
     goalClarifications:z.array(goalClarificationSchema.extend({answer:z.string().trim().max(1200),importance:z.enum(['preference','requirement'])})).max(3),

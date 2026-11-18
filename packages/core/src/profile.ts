@@ -1,3 +1,4 @@
+import {searchTracksSchema} from './search-plan';
 import type {ResearchTask,ResearchStats} from './research-task-schema';
 import {reviewedPreferenceSchema,type OpportunityFeedback} from './feedback-schema';
 import type {ResearchDossier} from './research-memory-schema';
@@ -20,7 +21,7 @@ export const profileSchema = z.object({
   reviewedPreferences:z.array(reviewedPreferenceSchema).max(8).default([]),
   researchEnabled:z.boolean().default(true),
   strategy: strategySchema.default(defaultStrategy),
-  postedWithinDays: z.number().int().min(1).max(90).default(7),
+  postedWithinDays: z.number().int().min(0).max(90).default(7),
   includeUnknownDates: z.boolean().default(true),
   dailyEvaluationLimit: z.number().int().min(1).max(300).default(50),
   name: z.string().trim().max(100),
@@ -28,6 +29,8 @@ export const profileSchema = z.object({
   cvText: z.string().trim().max(30000),
   cvFileName: z.string().max(200),
   titles: z.array(z.string().trim().min(2).max(120)).min(1).max(4),
+  searchTracks:searchTracksSchema.default([]),
+  preferredLocations:z.array(searchLocationSchema).max(10).default([]),
   searchLocations:z.array(searchLocationSchema).max(maxSearchLocations).default([]),
   locations: z.array(z.string().trim().max(240)).min(1).max(maxSearchLocations),
   remoteOnly: z.boolean(),
@@ -43,7 +46,7 @@ export const profileSchema = z.object({
   maxJobsPerRun: z.number().int().min(1).max(30),
   enabled: z.boolean(),
   emailEnabled: z.boolean(),
-}).refine(p => !p.sources.includes('companies') || p.companyBoards.length > 0, 'Add at least one company board.');
+});
 export type Profile = z.infer<typeof profileSchema>;
 export const defaultProfile: Profile = {
   onboardingCompleted:true, setupDraft:null, workAuthorization:'', matchingSummary:'', goalClarifications:[],clarificationBasis:'',emailAlertsRequested:false,
@@ -51,7 +54,7 @@ export const defaultProfile: Profile = {
   name: '',
   objective: 'Find a role that matches my experience, priorities, and career goals.',
   cvText: '', cvFileName: '',
-  searchLocations:[], titles: ['Software Engineer'], locations: [''], remoteOnly: false,
+  searchTracks:[], preferredLocations:[], searchLocations:[], titles: ['Software Engineer'], locations: [''], remoteOnly: false,
   sources: ['linkedin'], companyBoards: [],discoveredCompanyBoards:[],
   constraints: '', salaryExpectation: '', equityExpectation: '', email: '',
   intervalHours: 4, minimumScore: 80, maxJobsPerRun: 10,

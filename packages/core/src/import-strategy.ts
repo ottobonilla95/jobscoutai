@@ -9,7 +9,7 @@ import {maxSearchLocations} from './locations';
 export const proposalSchema=z.object({
  objective:z.string().min(10).max(3000),constraints:z.string().max(3000),titles:z.array(z.string().min(2).max(120)).min(1).max(4),locations:z.array(z.string().max(240)).min(1).max(maxSearchLocations),
  salaryExpectation:z.string().max(300),equityExpectation:z.string().max(500),strategy:strategySchema,
- postedWithinDays:z.number().int().min(1).max(90),includeUnknownDates:z.boolean(),
+ postedWithinDays:z.number().int().min(0).max(90),includeUnknownDates:z.boolean(),
  warnings:z.array(z.string().max(600)).max(12),
 });
 export type StrategyProposal=z.infer<typeof proposalSchema>;

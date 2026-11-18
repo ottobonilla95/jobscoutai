@@ -3,6 +3,7 @@
 import {useCallback, useEffect, useRef, useState, type ChangeEvent} from 'react';
 import {ArrowRight, Check, FileText, LoaderCircle, MessageCircle, Paperclip, Send} from 'lucide-react';
 import type {SearchChat as Conversation} from '@core/search-chat-schema';
+import EffectiveSearchPlan from './effective-search-plan';
 import {locationLabel} from '@core/locations';
 import {sourceLabel} from '@core/source-settings';
 import {useI18n} from './i18n';
@@ -125,11 +126,11 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
           <dt>{t('Search sources')}</dt><dd>{chat.settings.sources.map(sourceLabel).join(' · ')}{chat.settings.companyBoards.map(url=><div key={url}>{url}</div>)}</dd>
           <dt>{t('Opportunity research')}</dt><dd>{t(chat.settings.researchEnabled?'On':'Off')}</dd>
           <dt>{t('Minimum fit score')}</dt><dd>{chat.settings.minimumScore}/100</dd>
-          <dt>{t('Listing age limit')}</dt><dd>{t('{count} days',{count:chat.settings.postedWithinDays})} · {t(chat.settings.includeUnknownDates?'Include unknown dates':'Exclude unknown dates')}</dd>
+          <dt>{t('Listing age limit')}</dt><dd>{chat.settings.postedWithinDays===0?t('Any age, including older live vacancies'):t('{count} days',{count:chat.settings.postedWithinDays})} · {t(chat.settings.includeUnknownDates?'Include unknown dates':'Exclude unknown dates')}</dd>
           <dt>{t('Evaluations per search')}</dt><dd>{chat.settings.maxJobsPerRun}</dd>
           <dt>{t('Daily AI call limit')}</dt><dd>{chat.settings.dailyEvaluationLimit}</dd>
         </dl></details>
-        <p className="footnote">{t('Save these preferences or keep chatting to refine them.')}</p>
+        <EffectiveSearchPlan answers={answers} settings={chat.settings} sourceSettingsInDraft/><p className="footnote">{t('Save these preferences or keep chatting to refine them.')}</p>
         <div className="chat-actions"><button type="button" className="button primary" disabled={busy} onClick={()=>void save(true)}>{t(onboarding?'Save and start searching':'Save and search')}<ArrowRight size={16}/></button><button type="button" className="text-button" disabled={busy} onClick={()=>void save(false)}>{t('Save preferences')}</button></div>
       </div>}
     </div>

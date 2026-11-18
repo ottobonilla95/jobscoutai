@@ -86,7 +86,7 @@ test('generated strategy uses all preferences and cannot infer hard gates or wor
  assert.deepEqual(result.matching.strategy.discovery,discovery);assert.deepEqual(result.matching.strategy.workAccess,[{country:'GB',access:'sponsorship',unknownSponsorship:'allow'}]);
  assert.deepEqual(result.matching.strategy.requirements,[]);assert.ok(prompt.includes(a.objective));assert.ok(prompt.includes(a.cvText));assert.ok(prompt.includes('workAuthorization'));assert.ok(prompt.includes('United Kingdom'));
  const raw={components:[],requirements:[],countries:[{country:'GB',locationEvidence:'London, United Kingdom',sponsorship:'unknown' as const,sponsorshipEvidence:null}]};
- assert.equal(evaluateStrategy(result.matching.strategy,raw,'London, United Kingdom','London, United Kingdom').decision,'apply_verify');
+ assert.equal(evaluateStrategy(result.matching.strategy,raw,'London, United Kingdom','London, United Kingdom').decision,'research');
  const profile={...defaultProfile,strategy:result.matching.strategy,searchLocations:a.selectedLocations};
  const job={id:'test',title:'Core Engineer',company:'Example',location:'London',description:'Own the technical roadmap and build the first product.',url:'https://example.test/job',postedAt:null,firstSeen:'',lastSeen:'',assessment:null,status:'new' as const,notifiedAt:null,evaluatedVersion:null};
  assert.deepEqual(jobEvaluationContext(job,profile).candidate.strategy.discovery,discovery);

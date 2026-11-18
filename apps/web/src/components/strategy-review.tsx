@@ -12,6 +12,7 @@ export default function StrategyReview({matching,onChange}:{matching:NonNullable
  }
  return <div className="strategy-review">
   <p className="profile-strategy-summary">{matching.summary}</p>
+  <details className="strategy-details"><summary>{t('How fit is scored')}</summary><p className="footnote">{t('Only supported criteria contribute to fit. Evidence coverage is shown separately; hard requirements still apply.')}</p><ul>{strategy.groups.flatMap(group=>group.criteria.map(criterion=>({group,criterion,weight:group.weight/strategy.groups.reduce((sum,item)=>sum+item.weight,0)*criterion.weight/group.criteria.reduce((sum,item)=>sum+item.weight,0)*100}))).sort((a,b)=>b.weight-a.weight).map(({group,criterion,weight})=><li key={criterion.id}><strong>{group.label} · {criterion.label} ({Math.round(weight)}%)</strong><p>{criterion.rubric}</p></li>)}</ul></details>
   {plan&&<details className="strategy-details">
    <summary>{t('Advanced search details')}</summary>
    <PlanField key={`titles-${plan.titleVariants.join('|')}`} label={t('Equivalent search titles')} value={plan.titleVariants.join('\n')} limit={950} rows={3} maxLines={8} hint={t('One per line, up to 8. Your confirmed roles take priority; each search uses up to 8 titles in total.')} onCommit={value=>updatePlan('titleVariants',value)}/>

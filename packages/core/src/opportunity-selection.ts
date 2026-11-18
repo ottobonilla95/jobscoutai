@@ -7,9 +7,13 @@ export function qualifiedOpportunity(job:Job, profile:Profile, version:number) {
 }
 
 export function promisingResearch(job:Job, profile:Profile, version:number) {
+  const evidence=job.assessment?.evaluation;
+  const supported=evidence?.components.filter(c=>c.score!==null&&c.score>=4&&c.evidence).length??0;
+  const enoughEvidence=!evidence || ((supported>=2 || (evidence.components.length===1&&supported===1)) && (evidence.evidenceCoverage??0)>=25);
+  const researchFit=enoughEvidence && job.assessment && (job.assessment.score>=profile.minimumScore || (job.assessment.score>=Math.max(60,profile.minimumScore-15) && supported>=2 && (evidence?.evidenceCoverage??0)>=25));
   return sourceEnabled(profile,job.sourceKey) && job.status!=='dismissed' &&
     job.evaluatedVersion===version && Boolean(job.assessment &&
-      job.assessment.score>=profile.minimumScore && job.assessment.concerns.some(concern=>concern.trim())) &&
+      researchFit && (job.assessment.concerns.some(concern=>concern.trim()) || evidence?.gates.some(g=>g.action==='research') || evidence?.components.some(c=>c.score===null))) &&
     recommendation(job)==='research';
 }
 

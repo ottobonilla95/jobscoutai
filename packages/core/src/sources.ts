@@ -1,3 +1,4 @@
+import {remoteSearchOnly} from './search-plan';
 import {searchTitles} from './discovery';
 import { load } from 'cheerio';
 import type { Job, JobListing, Profile } from './profile';
@@ -13,6 +14,10 @@ import {loadCompanyBoard} from './company-board';
 export {parseCompanyJobs} from './company-board';
 export { plainText } from './source-html';
 
+export function listingWithinAge(job:JobListing,profile:Profile){
+ const date=job.postedAt?Date.parse(job.postedAt):NaN;
+ return Number.isNaN(date)?profile.includeUnknownDates:profile.postedWithinDays===0||date>=Date.now()-profile.postedWithinDays*86400000;
+}
 export type SearchReport = { jobs: JobListing[]; errors: string[]; blocked: string[]; succeeded: number };
 export function matchesTitle(title: string, profile: Profile) {
   const words = title.normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ');
@@ -47,12 +52,12 @@ export function parseYcDescription(html: string) {
 }
 export async function searchYc(profile: Profile,session?:SearchSession) {
   return (await searchQuery(session,{source:'yc',query:'*',location:'',page:0},async()=>parseYcListings(await publicData('https://www.ycombinator.com/jobs/role/all','Y Combinator'))))
-    .filter(job=>matchesTitle(job.title,profile) && (!profile.remoteOnly || /remote/i.test(job.location)));
+    .filter(job=>matchesTitle(job.title,profile) && (!remoteSearchOnly(profile) || /remote/i.test(job.location)));
 }
 export async function searchCompanyBoard(value: string, profile: Profile,session?:SearchSession) {
   const board=parseBoard(value);if(!board)throw new SourceError('Unsupported company board URL.',true);
   return (await searchQuery(session,{source:board.key,query:'*',location:'',page:0},()=>loadCompanyBoard(board)))
-    .filter(job=>matchesTitle(job.title,profile) && (!profile.remoteOnly || /remote/i.test(job.location)));
+    .filter(job=>matchesTitle(job.title,profile) && (!remoteSearchOnly(profile) || /remote/i.test(job.location)));
 }
 export async function searchSources(profile: Profile, adapters: {
   linkedin:typeof searchLinkedIn; yc:typeof searchYc; company:typeof searchCompanyBoard;
@@ -66,6 +71,10 @@ export async function searchSources(profile: Profile, adapters: {
     const board=parseBoard(value);if(board&&!tasks.some(task=>task.key===board.key))tasks.push({key:board.key,run:()=>adapters.company(value,profile,session)});
   }
   for(const source of activeCountrySources(profile))tasks.push({key:source.key,run:()=>(adapters.country || ((s,p,c)=>searchCountrySource(s,p,undefined,c)))(source,profile,session)});
+  if(session)tasks.sort((a,b)=>{
+    const latest=(key:string)=>[...session.history].filter(([query])=>{try{return JSON.parse(query)[0]===key;}catch{return false;}}).map(([,date])=>date).sort().at(-1)||'';
+    return latest(a.key).localeCompare(latest(b.key));
+  });
   for(const task of tasks){
     if(session&&(session.blocked.has(task.key)||session.remaining<=0||Date.now()>=session.deadline))continue;
     const before=session?.attempts.length||0;
@@ -77,12 +86,9 @@ export async function searchSources(profile: Profile, adapters: {
     if(attempt.status==='blocked'&&!report.blocked.includes(attempt.source))report.errors.push(`${attempt.location?attempt.location+': ':''}${attempt.error||'Source request failed. Coverage is unknown.'}`);
   }
   // Preserve successful queries preceding a source failure; filters still apply.
-  if(session)report.jobs.push(...session.items.filter(job=>matchesTitle(job.title,profile)&&(!profile.remoteOnly||/\b(remote|remoto|teletrabajo)\b/i.test(job.location))));
+  if(session)report.jobs.push(...session.items.filter(job=>matchesTitle(job.title,profile)&&(!remoteSearchOnly(profile)||/\b(remote|remoto|teletrabajo)\b/i.test(job.location))));
   report.jobs=[...new Map(report.jobs.map(job=>[job.id,job])).values()];
-  report.jobs=report.jobs.filter(job=>{
-    const date=job.postedAt?Date.parse(job.postedAt):NaN;
-    return Number.isNaN(date)?profile.includeUnknownDates:date>=Date.now()-profile.postedWithinDays*86400000;
-  });
+  report.jobs=report.jobs.filter(job=>listingWithinAge(job,profile));
   return report;
 }
 export async function describeJob(id: string, job: Job) {

@@ -41,13 +41,22 @@ export function evaluateStrategy(strategy:Strategy,raw:Research,description:stri
   const valid=r && supported(r.evidence,description);
   return {id:c.id,label:c.label,score:valid?r.score:null,reason:r?.reason||'No assessment returned.',evidence:valid?r!.evidence:null};
  });
- const groups=strategy.groups.map(g=>({id:g.id,label:g.label,score:Math.round(g.criteria.reduce((sum,c)=>sum+(components.find(r=>r.id===c.id)?.score??1)*c.weight,0)/g.criteria.reduce((sum,c)=>sum+c.weight,0)*10)/10}));
- let overall=Math.round(groups.reduce((sum,g)=>sum+g.score*strategy.groups.find(s=>s.id===g.id)!.weight,0)/strategy.groups.reduce((sum,g)=>sum+g.weight,0)*10)/10;
- let score=Math.round(overall*20);
- for(const cap of strategy.caps)if((components.find(c=>c.id===cap.criterionId)?.score??1)<=cap.atOrBelow)score=Math.min(score,cap.maximum);
+ // Fit uses supported criteria only. Evidence coverage is reported separately;
+ // missing compensation or ownership is never scored as a proven mismatch.
+ const weights=strategy.groups.flatMap(g=>g.criteria.map(c=>({id:c.id,weight:g.weight*c.weight/g.criteria.reduce((sum,item)=>sum+item.weight,0)})));
+ const known=components.filter(c=>c.score!==null);
+ const knownWeight=weights.filter(w=>known.some(c=>c.id===w.id)).reduce((sum,w)=>sum+w.weight,0);
+ const evidenceCoverage=Math.round(knownWeight/weights.reduce((sum,w)=>sum+w.weight,0)*100);
+ const groups=strategy.groups.map(g=>{
+  const scored=g.criteria.filter(c=>known.some(r=>r.id===c.id));
+  const weight=scored.reduce((sum,c)=>sum+c.weight,0);
+  return {id:g.id,label:g.label,score:weight?Math.round(scored.reduce((sum,c)=>sum+known.find(r=>r.id===c.id)!.score!*c.weight,0)/weight*10)/10:0};
+ });
+ let score=knownWeight?Math.round(known.reduce((sum,c)=>sum+c.score!*weights.find(w=>w.id===c.id)!.weight,0)/knownWeight*20):0;
+ for(const cap of strategy.caps){const component=components.find(c=>c.id===cap.criterionId);if(component?.score!=null&&component.score<=cap.atOrBelow)score=Math.min(score,cap.maximum);}
  const gates=strategy.requirements.map(rule=>{
   const entries=raw.requirements.filter(r=>r.id===rule.id);const r=entries.length===1?entries[0]:undefined;
-  const valid=r&&supported(r.evidence,description);const result=valid?r!.result:'unknown';
+  const valid=r&&supported(r.evidence,['user_search_scope','user_work_access'].includes(rule.id)?evidenceSource:description);const result=valid?r!.result:'unknown';
   return {id:rule.id,label:rule.label,result,evidence:valid?r!.evidence:null,reason:r?.reason||'Evidence not established.',action:result==='fail'?'exclude':result==='unknown'?rule.unknown:'allow'};
  });
  const access=raw.countries.filter(c=>/^[A-Z]{2}$/.test(c.country)&&supported(c.locationEvidence,evidenceSource)).map(c=>{
@@ -59,8 +68,8 @@ export function evaluateStrategy(strategy:Strategy,raw:Research,description:stri
  // Alternative locations are alternatives, but missing or ambiguous access never becomes a positive eligibility claim.
  const accessAction=!strategy.workAccess.length?'allow':access.some(a=>a.action==='allow')?'allow':!access.length||access.some(a=>a.action==='research')?'research':'exclude';
  const failed=gates.some(g=>g.action==='exclude')||accessAction==='exclude';
- const research=gates.some(g=>g.action==='research')||accessAction==='research';
+ const research=evidenceCoverage<60||gates.some(g=>g.action==='research')||accessAction==='research';
  const uncertain=components.some(c=>c.score===null)||gates.some(g=>g.result==='unknown')||access.some(a=>a.sponsorship==='unknown'&&strategy.workAccess.find(r=>r.country===a.country)?.access!=='authorized');
  const decision:Decision=failed?'exclude':research?'research':uncertain?'apply_verify':'apply';
- return {score,overall:score/20,groups,components,gates,access,decision};
+ return {score,overall:score/20,evidenceCoverage,groups,components,gates,access,decision};
 }

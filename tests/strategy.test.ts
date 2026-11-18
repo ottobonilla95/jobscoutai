@@ -44,7 +44,7 @@ test('per-country access treats sponsorship uncertainty differently and supports
 });
 test('unsupported and duplicated component evidence remains unknown, not a confident score',()=>{
  const raw=research(defaultStrategy);raw.components[0].evidence='Invented job quote';raw.components.push(raw.components[1]);
- const result=evaluateStrategy(defaultStrategy,raw,quote,'');assert.equal(result.components[0].score,null);assert.equal(result.components[1].score,null);assert.equal(result.decision,'apply_verify');
+ const result=evaluateStrategy(defaultStrategy,raw,quote,'');assert.equal(result.components[0].score,null);assert.equal(result.components[1].score,null);assert.equal(result.decision,'research');assert.equal(result.evidenceCoverage,35);
 });
 test('strategy changes invalidate scores; tracking edits do not; duplicate override persists',async t=>{
  const store=(await fixture(t));const initial=(await store.profile());(await store.saveProfile({...initial.profile,strategy:{...defaultStrategy,relocation:'Open to moving'}}));assert.equal((await store.profile()).version,initial.version+1);

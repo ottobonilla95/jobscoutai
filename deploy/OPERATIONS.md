@@ -4,6 +4,12 @@ The web app and worker are separate deployments. A Vercel deployment does not up
 
 The active worker release is `b0cc64b`, deployed on 12 November 2026 with cleanup after search completion and bounded pending retention. The same day's `6dcc2c6` installed qualified-shortlist and model-output fixes. Earlier repairs on 11 November used `9163668` for the outdated profile/credential setup, `d19ca4d` for regional LinkedIn links, and `1e7e717` for bounded retries and coverage reporting. Prior releases remain available for rollback.
 
+## Search tracks rollout — 18 November 2026
+
+Deploy web and worker together before updating an account to search tracks. New profile JSON adds `searchTracks` and `preferredLocations`; older releases ignore these fields and cannot execute the intended scope. Company sources can now operate without seed boards, and `postedWithinDays=0` means no date cutoff; older schemas reject those settings. There is no SQL migration for this rollout.
+
+Public web discovery imports only cited, retrieved individual JobPosting records, uses the existing public-DNS verifier, and records URL checks in Activity. Missing evidence changes coverage rather than supported fit. A discovery stop drains the remaining candidate evaluation allowance within the existing AI/time budgets. Preserve existing profile snapshots before a live account conversion and verify the effective tracks, source selection, access rules and freshness settings after saving. Never restore an older incompatible worker while leaving the expanded profile active; restore the prior profile snapshot as part of rollback.
+
 ## Shortlist update — 12 November 2026
 
 Deploy web and worker together for the shortlist update. Collected listings remain an internal evaluation queue; the main view and its count require a current qualifying assessment. Saving also checks qualification on the server. Existing manual saves and application history remain accessible separately. Profile corrections invalidate older assessments, so an empty shortlist is valid until jobs pass the current criteria.

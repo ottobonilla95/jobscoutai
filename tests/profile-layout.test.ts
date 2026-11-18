@@ -23,7 +23,7 @@ for(const locale of ['en','es'] as const){
   matching.strategy.discovery={intent:a.objective,titleVariants:['Software Engineer'],evidencePriorities:['Product responsibilities'],questions:[]};
   const noop=()=>{};
   const html=renderToStaticMarkup(createElement(I18nProvider,{initial:{locale,preference:locale}},createElement(Editor,{
-   answers:a,matching,matchingCurrent:true,minimum:4,frequencies:[4,8,24],busy:false,saveState:'Draft saved',error:'',notice:'',invalidStep:null,verificationNotice:null,formRef:createRef(),
+   profile:defaultProfile,answers:a,matching,matchingCurrent:true,minimum:4,frequencies:[4,8,24],busy:false,saveState:'Draft saved',error:'',notice:'',invalidStep:null,verificationNotice:null,formRef:createRef(),
    update:noop,onUpload:async()=>{},onSuggest:async()=>{},onClarifications:noop,onClearClarifications:noop,onStandardMatching:noop,onSave:async()=>{},onLocations:noop,onMatching:noop,
   })));
   const $=load(html);

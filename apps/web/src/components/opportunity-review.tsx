@@ -98,6 +98,7 @@ function OpportunityDetail({job, version, pending, onUpdate, headingRef}: {
         <a className="button primary" href={job.url} target="_blank" rel="noopener noreferrer"><ArrowUpRight size={19}/>{t('View original listing')}</a>
         {job.status === 'dismissed' ? <button type="button" className="button secondary" aria-disabled={pending} onClick={() => {if(!pending) void onUpdate('new');}}>{pending ? t('Saving…') : t('Restore')}</button> : <button type="button" className="button secondary" aria-pressed={job.status === 'saved'} aria-disabled={pending} onClick={() => {if(!pending) void onUpdate(job.status === 'saved' ? 'new' : 'saved');}}><Bookmark size={17} fill={job.status === 'saved' ? 'currentColor' : 'none'}/>{pending ? t('Saving…') : job.status === 'saved' ? t('Saved') : t('Save')}</button>}
       </div>
+      {assessment?.evaluation?.evidenceCoverage!==undefined&&<p className="footnote">{t('Supported fit')}: {assessment.score}/100 · {t('Evidence coverage')}: {assessment.evaluation.evidenceCoverage}%. {t('Missing facts remain open questions, not confirmed mismatches.')}</p>}
       {stale && <p className="review-notice"><Info size={16}/>{t('Profile changed · Review pending')}</p>}
       {job.duplicateOf && <p className="review-notice">{t('Possible duplicate · excluded from alerts')}</p>}
       {assessment && (assessment.language || 'en') !== locale && <p className="footnote">{t('Analysis language: {language}. New evaluations use your current language.', {language: t(assessment.language === 'es' ? 'Spanish' : 'English')})}</p>}

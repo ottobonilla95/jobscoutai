@@ -1,3 +1,6 @@
+import SearchTrackEditor from './search-track-editor';
+import EffectiveSearchPlan from './effective-search-plan';
+import type {Profile} from '@core/profile';
 import {Select} from './ui';
 import type { ChangeEvent, RefObject } from 'react';
 import { Check, FileText, MapPin, SlidersHorizontal, Sparkles, Target, Upload } from 'lucide-react';
@@ -17,6 +20,7 @@ export const profileFieldIds: Record<number, string> = {
 
 type Props = {
   answers: SetupAnswers;
+  profile:Profile;
   matching: SetupDraft['matching'];
   matchingCurrent: boolean;
   minimum: number;
@@ -40,7 +44,7 @@ type Props = {
 };
 
 export default function SearchProfileEditor({
-  answers: a, matching, matchingCurrent, minimum, frequencies, busy, saveState,
+  answers: a, profile, matching, matchingCurrent, minimum, frequencies, busy, saveState,
   error, notice, invalidStep, verificationNotice, formRef, update, onUpload,
   onSuggest, onStandardMatching, onSave, onLocations, onMatching,onClarifications,onClearClarifications,
 }: Props) {
@@ -68,10 +72,12 @@ export default function SearchProfileEditor({
 
           <section className="panel profile-panel" aria-labelledby="profile-location-heading">
             <div className="profile-panel-heading"><MapPin size={19}/><div><h2 id="profile-location-heading">{t('Location and work')}</h2><p>{t('Where and how your next role should fit your life.')}</p></div></div>
-            <div className="profile-field-grid">
+            <div className="profile-field-grid" hidden={a.searchTracks.length>0}>
               <LocationPicker id="profile-location" value={a.selectedLocations} legacyLocations={a.locations} invalid={fieldError(4)} onChange={onLocations}/>
               <label htmlFor="profile-work-preference">{t('Work preference')}<Select id="profile-work-preference" value={a.remotePreference} aria-invalid={fieldError(5)} onValueChange={value=>update('remotePreference',value as SetupAnswers['remotePreference'])} options={[{value:'',label:t('Choose your work preference.'),disabled:true},{value:'remote',label:t('Remote only')},{value:'flexible',label:t('Also open to office work')}]}/><small>{t('Remote jobs can still have location and work-authorization restrictions.')}</small></label>
             </div>
+            <SearchTrackEditor value={a.searchTracks} onChange={tracks=>update('searchTracks',!a.searchTracks.length&&tracks.length&&a.selectedLocations.length?[{area:'locations',locations:a.selectedLocations,workMode:a.remotePreference==='remote'?'remote':'any',workFromCountries:[]},...tracks]:tracks)}/>
+            {a.searchTracks.length>0&&<details><summary>{t('Preferred cities or countries')}</summary><p className="footnote">{t('Search these first while keeping the full area in your tracks.')}</p><LocationPicker id="profile-preferred-locations" value={a.preferredLocations} onChange={places=>update('preferredLocations',places)}/></details>}
             <label htmlFor="profile-authorization">{t('Work authorization')} <span className="profile-optional">{t('Optional')}</span><textarea id="profile-authorization" rows={2} value={a.workAuthorization} maxLength={1000} onChange={event => update('workAuthorization', event.target.value)}/></label>
           </section>
 
@@ -81,6 +87,7 @@ export default function SearchProfileEditor({
               <label htmlFor="profile-salary">{t('Salary expectations')} <span className="profile-optional">{t('Optional')}</span><input id="profile-salary" value={a.salaryExpectation} maxLength={300} placeholder={t('For example: €70,000–90,000 per year, flexible')} onChange={event => update('salaryExpectation', event.target.value)}/></label>
               <label htmlFor="profile-equity">{t('Equity expectations')} <span className="profile-optional">{t('Optional')}</span><input id="profile-equity" value={a.equityExpectation} maxLength={500} onChange={event => update('equityExpectation', event.target.value)}/></label>
             </div>
+            <p className="footnote">{t('For pay, specify currency, annual or monthly, base or total, and what is flexible. Missing pay or equity creates a research question; use dealbreakers for firm minimums only.')}</p>
             <label htmlFor="profile-constraints">{t('Must-haves and dealbreakers')} <span className="profile-optional">{t('Optional')}</span><textarea id="profile-constraints" rows={3} value={a.constraints} maxLength={3000} onChange={event => update('constraints', event.target.value)}/><small>{t('List only firm requirements or things you would rule out. Use your goal above for softer preferences.')}</small></label>
           </section>
 
@@ -112,6 +119,6 @@ export default function SearchProfileEditor({
         </div>
       </div>
     </fieldset>
-    <div className="profile-editor-save"><span>{t('Drafts are saved automatically. Save your profile to apply changes to searches.')}</span><button className="button primary" disabled={busy}><Check size={16}/>{t(busy ? 'Working on it…' : 'Save search profile')}</button></div>
+    <EffectiveSearchPlan answers={a} settings={profile}/><div className="profile-editor-save"><span>{t('Drafts are saved automatically. Save your profile to apply changes to searches.')}</span><button className="button primary" disabled={busy}><Check size={16}/>{t(busy ? 'Working on it…' : 'Save search profile')}</button></div>
   </form>;
 }

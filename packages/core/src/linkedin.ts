@@ -1,3 +1,4 @@
+import {searchTargets} from './search-plan';
 import {searchTitles} from './discovery';
 import { load } from 'cheerio';
 import type { JobListing, Profile } from './profile';
@@ -59,14 +60,18 @@ async function publicPage(url: string): Promise<string> {
 }
 export async function searchLinkedIn(profile: Profile,session?:SearchSession): Promise<JobListing[]> {
   const jobs = new Map<string, JobListing>();
-  const queries=searchTitles(profile).flatMap(query=>profile.locations.map(location=>({source:'linkedin',query,location,page:session?.page||0})));
+  const targets=searchTargets(profile);
+  const titles=searchTitles(profile);
+  const queries=titles.flatMap((_,offset)=>targets.map((target,index)=>({source:'linkedin',query:titles[(index+offset)%titles.length],...target,page:session?.page||0})));
   for (const attempt of orderedQueries(queries,session)) {
-    const {query:title,location,page}=attempt;
+    const {query:title,location,page,workMode}=attempt;
     try{
     const results=await searchQuery(session,attempt,async()=>{
-    const query = new URLSearchParams({ keywords: title, start: String(page*25), f_TPR: `r${profile.postedWithinDays*86400}`, sortBy: 'DD' });
+    const query = new URLSearchParams({ keywords: title, start: String(page*25), sortBy: 'DD' });
+    if(profile.postedWithinDays>0)query.set('f_TPR',`r${profile.postedWithinDays*86400}`);
     if (location) query.set('location', location);
-    if (profile.remoteOnly) query.set('f_WT', '2');
+    if (workMode==='remote') query.set('f_WT', '2');
+    if (workMode==='office') query.set('f_WT', '1,3');
     const html = await publicPage(`https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?${query}`);
     const results = parseListings(html);
     if (!results.length && !/no results|no matching jobs|no jobs found/i.test(html)) {

@@ -20,7 +20,7 @@ test('cleanup removes rejected full listings and their research, retaining quali
   await store.assess('weak',weak,version);await store.assess('ineligible',{...assessment,eligibility:'ineligible'},version);
   await store.assess('stale',weak,version-1);
   const strategy={...profile.strategy,requirements:[{id:'hours',label:'Hours',instruction:'Verify the advertised working hours.',unknown:'research' as const}]};
-  const evaluation=evaluateStrategy(strategy,{components:[],requirements:[],countries:[]},listing('research').description!,'London');
+  const evaluation=evaluateStrategy(strategy,{components:profile.strategy.groups.flatMap(g=>g.criteria.map(c=>({id:c.id,score:5,reason:'Relevant responsibilities',evidence:listing('research').description!}))),requirements:[],countries:[]},listing('research').description!,'London');
   await store.assess('research',{...assessment,concerns:['What hours are required?'],evaluation},version);
   await store.verify('closed',{status:'closed',checkedAt:new Date().toISOString(),applicationUrl:null,note:'Closed'});
   await store.db.prepare('UPDATE jobs SET duplicate_of=? WHERE user_id=? AND id=?').run('original',store.userId,'duplicate');

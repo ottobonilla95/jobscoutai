@@ -1,0 +1,96 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {defaultProfile,profileSchema,type Job} from '../packages/core/src/profile';
+import {searchTargets,searchTrackSchema,type SearchTrack} from '../packages/core/src/search-plan';
+import {draftFromProfile,completeSetup,standardMatching} from '../packages/core/src/search-setup';
+import {matchingBasis} from '../packages/core/src/setup-schema';
+import {discoveryScope} from '../packages/core/src/discovery-state';
+import {evaluateStrategy,defaultStrategy} from '../packages/core/src/strategy';
+import {promisingResearch,qualifiedOpportunity} from '../packages/core/src/opportunity-selection';
+import {parsePublicJob} from '../packages/core/src/public-job';
+import {validateAdaptivePlan} from '../packages/core/src/adaptive-planner';
+import {activeCountrySources} from '../packages/core/src/country-sources';
+import {listingWithinAge} from '../packages/core/src/sources';
+import {runSearch} from '../packages/core/src/worker';
+import {searchQuery} from '../packages/core/src/search-session';
+import {storeFixture} from './database-fixture';
+
+const country=(countryCode:string)=>({kind:'country' as const,countryCode,city:'',region:''});
+const tracks:SearchTrack[]=[
+  {area:'europe',locations:[],workMode:'any',workFromCountries:[]},
+  {area:'locations',locations:[country('CO')],workMode:'office',workFromCountries:[]},
+  {area:'worldwide',locations:[],workMode:'remote',workFromCountries:['DE','FR']},
+  {area:'worldwide',locations:[],workMode:'remote',workFromCountries:['CO']},
+  {area:'locations',locations:[country('US')],workMode:'any',workFromCountries:[]},
+  {area:'locations',locations:[country('IL')],workMode:'any',workFromCountries:[]},
+];
+const description='Own the technical roadmap, build our first product and work directly with customers and founders.';
+const listing={id:'one',title:'Founding Engineer',company:'Example',location:'Berlin, Germany',url:'https://example.test/jobs/one',postedAt:null,description};
+test('Europe stays broad, priority cities do not replace countries, and remote bases and sponsorship markets receive separate targets',()=>{
+  const profile={...defaultProfile,searchTracks:tracks,preferredLocations:[{kind:'city' as const,countryCode:'DE',city:'Berlin',region:''}]};
+  const targets=searchTargets(profile);
+  assert.deepEqual(targets.slice(0,6).map(t=>[t.location,t.workMode]),[['Berlin, Germany','any'],['Colombia','office'],['Berlin, Germany','remote'],['Colombia','remote'],['United States','any'],['Israel','any']]);
+  for(const location of ['France','Finland','Portugal','United Kingdom','Germany'])assert.ok(targets.some(t=>t.location===location&&t.workMode==='any'));
+  assert.ok(targets.some(t=>t.location==='France'&&t.workMode==='remote'));
+  assert.equal(activeCountrySources(profile).length,3);
+  assert.equal(searchTrackSchema.safeParse({...tracks[3],workMode:'office'}).success,false);
+  assert.equal(searchTrackSchema.safeParse({...tracks[3],workFromCountries:['XX']}).success,false);
+});
+test('regional tracks survive profile completion and invalidate assessments and discovery history',async t=>{
+  const store=await storeFixture(t);const original=(await store.profile()).profile;
+  const a={...draftFromProfile(defaultProfile,4).answers,cvText:description.repeat(3),objective:'A paid early engineering role with meaningful ownership.',titles:'Founding Engineer',selectedLocations:[],searchTracks:tracks};
+  const matching=standardMatching(a,'en');
+  const profile=completeSetup(defaultProfile,{step:12,answers:a,matching},4,'',false);
+  assert.deepEqual(profileSchema.parse(profile).searchTracks,tracks);
+  assert.ok(profile.strategy.requirements.some(r=>r.id==='user_search_scope'));
+  assert.notEqual(matchingBasis(a),matchingBasis({...a,searchTracks:tracks.slice(1)}));
+  assert.notEqual(discoveryScope(profile),discoveryScope({...profile,searchTracks:[]}));
+  await store.saveProfile({...original,searchTracks:tracks});const version=(await store.profile()).version;
+  await store.saveProfile({...original,searchTracks:tracks.slice(1)});assert.equal((await store.profile()).version,version+1);
+});
+test('missing pay changes evidence coverage rather than fit; weak evidence cannot become a strong match',()=>{
+  const strategy={...defaultStrategy,requirements:[{id:'package',label:'Package',instruction:'Confirm a meaningful salary and equity package.',unknown:'research' as const}]};
+  const components=[{id:'skills',score:5,evidence:description,reason:'Supported experience'},{id:'responsibilities',score:4,evidence:description,reason:'Supported company-building work'}];
+  const evaluation=evaluateStrategy(strategy,{components,requirements:[],countries:[]},description,listing.location);
+  assert.equal(evaluation.evidenceCoverage,65);assert.ok(evaluation.score>=90);assert.equal(evaluation.decision,'research');
+  const job:Job={...listing,firstSeen:'',lastSeen:'',status:'new',notifiedAt:null,evaluatedVersion:1,assessment:{score:evaluation.score,eligibility:'uncertain',summary:'Promising scope; verify the package.',reasons:[],concerns:['What salary and equity apply?'],salaryEvidence:null,equityEvidence:null,founderPathEvidence:description,evaluation}};
+  assert.equal(promisingResearch(job,defaultProfile,1),true);assert.equal(qualifiedOpportunity(job,defaultProfile,1),false);
+  const empty=evaluateStrategy(strategy,{components:[],requirements:[],countries:[]},description,listing.location);
+  assert.equal(empty.score,0);assert.equal(empty.evidenceCoverage,0);
+  assert.equal(promisingResearch({...job,assessment:{...job.assessment!,score:100,evaluation:empty}},defaultProfile,1),false);
+  const lowerFit=evaluateStrategy(strategy,{components:components.map(c=>({...c,score:4})),requirements:[],countries:[]},description,listing.location);
+  assert.equal(promisingResearch({...job,assessment:{...job.assessment!,score:75,evaluation:lowerFit}},defaultProfile,1),true);
+  assert.equal(promisingResearch({...job,assessment:{...job.assessment!,score:40,evaluation:lowerFit}},defaultProfile,1),false);
+});
+test('web leads require citations and retrieved job evidence; portfolios, expired postings and snippets cannot become vacancies',()=>{
+  const url='https://example.test/jobs/first-engineer';
+  const plan={reason:'Find company-building roles beyond a single portal.',queries:[],boards:[],jobUrls:[url,'https://example.test/guessed','https://localhost/internal']};
+  const state={attempts:[],boards:[]};
+  assert.deepEqual(validateAdaptivePlan(plan,{...defaultProfile,sources:['companies']},[url,'https://localhost/internal'],state).jobUrls,[url]);
+  assert.deepEqual(validateAdaptivePlan(plan,defaultProfile,[url],state).jobUrls,[]);
+  const record={'@type':'JobPosting',title:'First Engineer',hiringOrganization:{name:'Example'},description:description.repeat(2),jobLocationType:'TELECOMMUTE',applicantLocationRequirements:{'@type':'Country',name:'Colombia'},datePosted:'2020-01-01',baseSalary:{currency:'USD',value:{minValue:120000,maxValue:160000,unitText:'YEAR'}}};
+  const page=(data:unknown)=>`<script type="application/ld+json">${JSON.stringify(data)}</script>`;
+  const job=parsePublicJob(page(record),url);assert.equal(job.sourceKey,'web');assert.match(job.location,/Colombia.*Remote/);assert.match(job.description!,/120000/);
+  assert.throws(()=>parsePublicJob('<h1>Portfolio companies</h1>',url));
+  assert.throws(()=>parsePublicJob(page([record,record]),url));
+  assert.throws(()=>parsePublicJob(page({...record,validThrough:'2020-01-02'}),url));
+  assert.equal(listingWithinAge(job,{...defaultProfile,postedWithinDays:0}),true);
+  assert.equal(listingWithinAge(job,{...defaultProfile,postedWithinDays:7}),false);
+});
+test('a bounded discovery run spends its remaining evaluation allowance after collection stops',async t=>{
+  const store=await storeFixture(t);await store.saveProfile({...defaultProfile,cvText:description.repeat(3),maxJobsPerRun:10});
+  const old=process.env.AI_GATEWAY_API_KEY;process.env.AI_GATEWAY_API_KEY='test';t.after(()=>{if(old===undefined)delete process.env.AI_GATEWAY_API_KEY;else process.env.AI_GATEWAY_API_KEY=old;});
+  let evaluated=0;
+  await runSearch({store,force:true,dependencies:{
+    search:async(_p,session)=>{
+      const jobs=[];
+      for(let i=0;i<24;i++)jobs.push(...await searchQuery(session,{source:`source-${i}`,query:'Founding Engineer',location:'Germany',page:session!.round},async()=>[{...listing,id:`job-${session!.round}-${i}`,company:`Example ${session!.round}-${i}`,url:`https://example.test/${session!.round}/${i}`}]));
+      return jobs;
+    },
+    describe:async()=>description,
+    rank:async()=>{evaluated++;return {assessment:{score:30,eligibility:'eligible',summary:'Weak fit.',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null},inputTokens:1,outputTokens:1};},
+    plan:async()=>({reason:'Try another approved page.',queries:[],boards:[],generationId:null,inputTokens:0,outputTokens:0}),notify:async()=>0,
+  }});
+  assert.equal(evaluated,10);
+  const report=(await store.runs())[0].discovery!;assert.equal(report.requests,24);assert.equal(report.rounds.length,3);
+});
