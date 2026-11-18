@@ -1,3 +1,4 @@
+import {countryName} from './locations';
 import {searchTargets} from './search-plan';
 import {searchTitles} from './discovery';
 import { load } from 'cheerio';
@@ -58,11 +59,18 @@ async function publicPage(url: string): Promise<string> {
   }
   return html;
 }
+export function linkedInQueries(profile:Profile,page=0){
+  const targets=searchTargets(profile),titles=searchTitles(profile);
+  return titles.flatMap((_,offset)=>targets.map((target,index)=>{
+    const title=titles[(index+offset)%titles.length];
+    const sponsorshipRequired=profile.strategy.workAccess.some(rule=>rule.access==='sponsorship'&&rule.unknownSponsorship==='exclude'&&(target.location===countryName(rule.country)||target.location.endsWith(`, ${countryName(rule.country)}`)));
+    const query=sponsorshipRequired&&!/sponsor|visa/i.test(title)?`${title.slice(0,103)} visa sponsorship`:title;
+    return {source:'linkedin',query,...target,page};
+  }));
+}
 export async function searchLinkedIn(profile: Profile,session?:SearchSession): Promise<JobListing[]> {
   const jobs = new Map<string, JobListing>();
-  const targets=searchTargets(profile);
-  const titles=searchTitles(profile);
-  const queries=titles.flatMap((_,offset)=>targets.map((target,index)=>({source:'linkedin',query:titles[(index+offset)%titles.length],...target,page:session?.page||0})));
+  const queries=linkedInQueries(profile,session?.page||0);
   for (const attempt of orderedQueries(queries,session)) {
     const {query:title,location,page,workMode}=attempt;
     try{

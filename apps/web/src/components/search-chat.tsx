@@ -111,8 +111,8 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
         <dl>
           {answers.name&&<><dt>{t('Name')}</dt><dd>{answers.name}</dd></>}
           <dt>{t('Target roles')}</dt><dd>{answers.titles.split('\n').join(' · ')}</dd>
-          <dt>{t('Locations')}</dt><dd>{answers.selectedLocations.map(place=>locationLabel(place,locale)).join(' · ')}</dd>
-          <dt>{t('Work preference')}</dt><dd>{t(answers.remotePreference==='remote'?'Remote only':'Also open to office work')}</dd>
+          {!answers.searchTracks.length&&<><dt>{t('Locations')}</dt><dd>{answers.selectedLocations.map(place=>locationLabel(place,locale)).join(' · ')}</dd>
+          <dt>{t('Work preference')}</dt><dd>{t(answers.remotePreference==='remote'?'Remote only':'Also open to office work')}</dd></>}
           <dt>{t('Search frequency')}</dt><dd>{t('Every {count} hours',{count:answers.intervalHours})} · {t(chat.settings.enabled?'Automatic searches enabled':'Automatic searches paused')}</dd>
           <dt>{t('Email alerts')}</dt><dd>{t(answers.emailAlerts?'On after email verification':'Off')}</dd>
         </dl>

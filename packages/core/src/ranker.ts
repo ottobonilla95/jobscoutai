@@ -71,6 +71,6 @@ Explain the match and concerns concretely. Output only the requested structured 
 export function jobEvaluationContext(job:Job,profile:Profile){
  return {candidate:{reviewedPreferences:profile.reviewedPreferences,objective:profile.objective,cv:profile.cvText,targetRoles:profile.titles,
   workAuthorization:profile.workAuthorization,constraints:profile.constraints,salary:profile.salaryExpectation,equity:profile.equityExpectation,
-  searchTracks:profile.searchTracks,preferredLocations:profile.preferredLocations,locations:profile.locations,searchLocations:profile.searchLocations,goalClarifications:answeredClarifications(profile),remoteOnly:profile.remoteOnly,strategy:profile.strategy},
+  searchTracks:profile.searchTracks,preferredLocations:profile.preferredLocations,locations:profile.searchTracks.length?[]:profile.locations,searchLocations:profile.searchTracks.length?[]:profile.searchLocations,goalClarifications:answeredClarifications(profile),remoteOnly:profile.remoteOnly,strategy:profile.strategy},
   job:{title:job.title,company:job.company,location:job.location,description:job.description}};
 }

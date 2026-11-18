@@ -45,7 +45,7 @@ export function completeSetup(p:Profile,draft:SetupDraft,minimum:number,email:st
   const a=draft.answers;
   return profileSchema.parse({...p,name:a.name,cvText:a.cvText,cvFileName:a.cvFileName,objective:a.objective,
     goalClarifications:currentClarifications(a),clarificationBasis:a.clarificationBasis,
-    titles:lines(a.titles),searchTracks:a.searchTracks,preferredLocations:a.preferredLocations,searchLocations:a.selectedLocations,locations:a.selectedLocations.length?a.selectedLocations.map(locationQuery):[''],remoteOnly:a.remotePreference==='remote',
+    titles:lines(a.titles),searchTracks:a.searchTracks,preferredLocations:a.preferredLocations,searchLocations:a.searchTracks.length?[]:a.selectedLocations,locations:!a.searchTracks.length&&a.selectedLocations.length?a.selectedLocations.map(locationQuery):[''],remoteOnly:a.remotePreference==='remote',
     workAuthorization:a.workAuthorization,salaryExpectation:a.salaryExpectation,equityExpectation:a.equityExpectation,
     constraints:a.constraints,intervalHours:a.intervalHours,email,emailAlertsRequested:a.emailAlerts,emailEnabled:a.emailAlerts&&verified,
     strategy:draft.matching.strategy,matchingSummary:draft.matching.summary,onboardingCompleted:true,setupDraft:null,

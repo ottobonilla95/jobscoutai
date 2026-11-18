@@ -11,6 +11,7 @@ import {parsePublicJob} from '../packages/core/src/public-job';
 import {validateAdaptivePlan} from '../packages/core/src/adaptive-planner';
 import {activeCountrySources} from '../packages/core/src/country-sources';
 import {listingWithinAge} from '../packages/core/src/sources';
+import {linkedInQueries} from '../packages/core/src/linkedin';
 import {runSearch} from '../packages/core/src/worker';
 import {searchQuery} from '../packages/core/src/search-session';
 import {storeFixture} from './database-fixture';
@@ -35,6 +36,13 @@ test('Europe stays broad, priority cities do not replace countries, and remote b
   assert.equal(activeCountrySources(profile).length,3);
   assert.equal(searchTrackSchema.safeParse({...tracks[3],workMode:'office'}).success,false);
   assert.equal(searchTrackSchema.safeParse({...tracks[3],workFromCountries:['XX']}).success,false);
+});
+test('sponsorship-only markets are searched explicitly without imposing headquarters-country rules on remote bases',()=>{
+  const profile={...defaultProfile,searchTracks:tracks,strategy:{...defaultProfile.strategy,workAccess:[{country:'US',access:'sponsorship' as const,unknownSponsorship:'exclude' as const},{country:'IL',access:'sponsorship' as const,unknownSponsorship:'exclude' as const}]}};
+  const queries=linkedInQueries(profile);
+  assert.ok(queries.filter(q=>['United States','Israel'].includes(q.location)).every(q=>q.query.includes('visa sponsorship')));
+  assert.ok(queries.filter(q=>q.location==='Colombia').every(q=>!q.query.includes('visa sponsorship')));
+  assert.equal(new Set(queries.slice(0,6).map(q=>q.track)).size,6);
 });
 test('regional tracks survive profile completion and invalidate assessments and discovery history',async t=>{
   const store=await storeFixture(t);const original=(await store.profile()).profile;
