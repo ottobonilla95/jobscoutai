@@ -102,3 +102,17 @@ test('a bounded discovery run spends its remaining evaluation allowance after co
   assert.equal(evaluated,10);
   const report=(await store.runs())[0].discovery!;assert.equal(report.requests,24);assert.equal(report.rounds.length,3);
 });
+
+test('hosted-search citations recover real posting routes when structured URL lists are empty',()=>{
+ const cited=['https://wellfound.com/role/l/technical-lead/europe','https://jobs.ashbyhq.com/real/ce8175e4-8d92-434a-8c6d-71d009e5568d','https://jobs.lever.co/employer/4625811e-f69e-47f1-b278-7da3b5bee806'];
+ const plan=validateAdaptivePlan({reason:'Find real company-building vacancies.',queries:[],boards:[],jobUrls:[]},{...defaultProfile,sources:['companies']},cited,{attempts:[],boards:[]});
+ assert.deepEqual(plan.jobUrls,cited.slice(1));assert.equal(plan.boards.length,1);assert.equal(plan.boards[0].url,'https://jobs.ashbyhq.com/real');
+ assert.equal(validateAdaptivePlan({reason:'Find real company-building vacancies.',queries:[],boards:[],jobUrls:[]},defaultProfile,cited,{attempts:[],boards:[]}).jobUrls?.length,0);
+});
+test('source collection deadline preserves the independent evaluation time allowance',async()=>{
+ let reads=0;const session={round:0,page:0,remaining:24,deadline:Date.now()+60000,discoveryDeadline:Date.now()-1 as number|undefined,seen:new Set<string>(),blocked:new Set<string>(),history:new Map<string,string>(),cache:new Map(),perSource:new Map<string,number>(),attempts:[],items:[]};
+ await searchQuery(session,{source:'linkedin',query:'Founding Engineer',location:'Colombia',page:0},async()=>{reads++;return [listing];});
+ assert.equal(reads,0);assert.equal(session.remaining,24);assert.ok(session.deadline>Date.now());
+ session.discoveryDeadline=undefined;
+ await searchQuery(session,{source:'linkedin',query:'Founding Engineer',location:'Colombia',page:0},async()=>{reads++;return [listing];});assert.equal(reads,1);
+});

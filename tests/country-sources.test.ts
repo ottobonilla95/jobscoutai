@@ -142,3 +142,17 @@ test('distinct anonymous-employer vacancies stay separate while identical listin
   const copy={...job,id:'another-copy'};await store.upsert(copy);
   assert.equal((await store.job(copy.id))!.duplicateOf,job.id);
 });
+
+test('tracks-only Colombia and an explicit remote work-from base activate and query country sources',async()=>{
+ for(const track of [
+  {area:'locations' as const,locations:[{kind:'country' as const,countryCode:'CO',city:'',region:''}],workMode:'any' as const,workFromCountries:[]},
+  {area:'worldwide' as const,locations:[],workMode:'remote' as const,workFromCountries:['CO']},
+ ]){
+  const profile={...defaultProfile,locations:[''],searchLocations:[],searchTracks:[track]};
+  assert.equal(activeCountrySources(profile).length,3);
+  const urls:string[]=[];
+  const jobs=await searchCountrySource(countrySources[0],profile,async url=>{urls.push(url);return JSON.stringify({data:[apiJob()]});});
+  assert.equal(jobs.length,1);assert.equal(urls.length,1);
+  assert.equal(new URL(urls[0]).searchParams.get('remote'),track.workMode==='remote'?'true':null);
+ }
+});

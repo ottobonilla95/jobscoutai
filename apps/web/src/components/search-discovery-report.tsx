@@ -2,7 +2,7 @@ import type {SearchDiscovery} from '@core/adaptive-search-schema';
 import {sourceLabel} from '@core/source-settings';
 import {useI18n} from './i18n';
 const stops:Record<SearchDiscovery['stopReason'],string>={
- sufficient_matches:'Found new strong matches.',round_limit:'Reached the follow-up limit.',request_budget:'Reached the source-query budget.',evaluation_budget:'Reached the evaluation budget.',time_budget:'Reached the run time budget.',profile_changed:'Your profile changed; the next run will use your updated preferences.',no_untried_queries:'No untried search approach remains in this run.',sources_unavailable:'Selected sources were unavailable.',planner_unavailable:'No additional search approach was available.',
+ sufficient_matches:'Found new strong matches.',round_limit:'Reached the follow-up limit.',request_budget:'Reached the source-query budget.',discovery_time_budget:'Reserved remaining time for evaluating collected candidates.',evaluation_budget:'Reached the evaluation budget.',time_budget:'Reached the run time budget.',profile_changed:'Your profile changed; the next run will use your updated preferences.',no_untried_queries:'No untried search approach remains in this run.',sources_unavailable:'Selected sources were unavailable.',planner_unavailable:'No additional search approach was available.',
 };
 export default function SearchDiscoveryReport({report}:{report:SearchDiscovery}){
  const {t}=useI18n();

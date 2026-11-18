@@ -80,7 +80,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
         }
         if(!await current()){report.stopReason='profile_changed';break;}
         try{
-          const result=await dependencies.rank(job,profile,accountId);await store.assess(job.id,result.assessment,version);
+          const result=await dependencies.rank(job,profile,accountId,session.deadline);await store.assess(job.id,result.assessment,version);
           counts.evaluated++;counts.inputTokens+=result.inputTokens;counts.outputTokens+=result.outputTokens;evaluated.add(job.id);
         }catch(error){
           errors.push(error instanceof AIBudgetError?error.message:'AI evaluation failed. Check model access, API balance, and credentials. The job is saved for retry.');
@@ -111,6 +111,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       if(!await current()){report.stopReason='profile_changed';break;}
       if(Date.now()>=session.deadline){report.stopReason='time_budget';break;}
       if(evaluationLimit===0){report.stopReason='evaluation_budget';break;}
+      session.discoveryDeadline=Math.min(session.deadline-180000,Date.now()+90000);
       session.round=round;session.roundRemaining=Math.min(session.remaining,round===0?16:round===1?4:session.remaining);session.perSourceLimit=round===0?6:4;session.perSource.clear();session.attempts=[];session.items=[];
       let listings:JobListing[]=[];
       // Search-engine output contributes URLs only. Fetch actual public posting
@@ -118,7 +119,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       for(const url of (plan?.jobUrls||[]).slice(0,2)){
         if(!await current()||Date.now()>=session.deadline)break;
         try{
-          listings.push(...await searchQuery(session,{source:'web',url,query:`Public posting ${createHash('sha256').update(url).digest('hex').slice(0,24)}`,location:'',page:0},async()=>[await loadPublicJob(url,session.deadline)]));
+          listings.push(...await searchQuery(session,{source:'web',url,query:`Public posting ${createHash('sha256').update(url).digest('hex').slice(0,24)}`,location:'',page:0},async()=>[await loadPublicJob(url,session.discoveryDeadline)]));
         }catch(error){errors.push(error instanceof SourceError?error.message:'A discovered public job could not be read. It was not imported.');}
       }
       try{
@@ -131,6 +132,8 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
         errors.push(error instanceof SourceError?error.message:'Job sources could not be reached. Check connectivity and run again later.');
         if(error instanceof SourceError&&error.stop)throw error;
       }
+      // Later verification may still use source recovery under the full run budget.
+      session.discoveryDeadline=undefined;
       const fresh=new Set<string>();
       for(const listing of listings.filter(listing=>listingWithinAge(listing,profile))){
         if(Date.now()>=session.deadline){report.stopReason='time_budget';break;}
@@ -167,6 +170,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       if(counts.evaluated>=evaluationLimit){report.stopReason='evaluation_budget';break;}
       if(session.remaining<=0){report.stopReason='request_budget';break;}
       if(round===2)break;
+      if(Date.now()>=session.deadline-180000){report.stopReason='discovery_time_budget';break;}
       const sources=[...profile.sources.filter(s=>s!=='companies'),...[...profile.companyBoards,...state.boards.map(b=>b.url)].map(v=>parseBoard(v)!.key),...activeCountrySources(profile).map(s=>s.key)];
       if(!sources.some(s=>!session.blocked.has(s))&&!profile.sources.includes('companies')){report.stopReason='sources_unavailable';break;}
       // Legacy injected search functions cannot report coverage; never extrapolate
@@ -197,7 +201,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     }
     // A discovery stop does not exhaust the independent evaluation allowance.
     // Finish assessing collected candidates when no further collection can run.
-    if(['request_budget','no_untried_queries','sources_unavailable','planner_unavailable','round_limit'].includes(report.stopReason)&&counts.evaluated<evaluationLimit&&Date.now()<session.deadline&&await current()){
+    if(['discovery_time_budget','request_budget','no_untried_queries','sources_unavailable','planner_unavailable','round_limit'].includes(report.stopReason)&&counts.evaluated<evaluationLimit&&Date.now()<session.deadline&&await current()){
       await evaluateCandidates(evaluationLimit-counts.evaluated);
     }
     if(dependencies.verify&&await current()){

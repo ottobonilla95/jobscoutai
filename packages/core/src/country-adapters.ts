@@ -1,3 +1,4 @@
+import {remoteSearchOnly} from './search-plan';
 import {searchTitles} from './discovery';
 import { load } from 'cheerio';
 import { z } from 'zod';
@@ -139,8 +140,11 @@ export async function describeCountryJob(id: string, job: JobListing, read = pub
   return parseCountryDescription(key, await read(url.href,key,true));
 }
 export async function searchCountrySource(source: CountrySource, profile: Profile, read = publicData,session?:SearchSession): Promise<JobListing[]> {
-  const places=profile.searchLocations.filter(p=>p.countryCode==='CO');
-  const cities=places.length?(places.some(p=>p.kind==='country')?['']:places.map(p=>p.city)):colombiaSearchLocations(profile.locations);
+  const tracks=profile.searchTracks;
+  const places=(tracks.length?tracks.flatMap(t=>t.locations):profile.searchLocations).filter(p=>p.countryCode==='CO');
+  const remoteBase=tracks.some(t=>t.workMode==='remote'&&t.workFromCountries.includes('CO'));
+  const cities=remoteBase||places.some(p=>p.kind==='country')?['']:places.length?places.map(p=>p.city):tracks.length?[]:colombiaSearchLocations(profile.locations);
+  const remoteOnly=tracks.length?tracks.filter(t=>t.locations.some(p=>p.countryCode==='CO')||t.workFromCountries.includes('CO')).every(t=>t.workMode==='remote'):remoteSearchOnly(profile);
   if (!cities.length) return [];
   const jobs = new Map<string,JobListing>();
   const queries = new Set<string>();
@@ -151,7 +155,7 @@ export async function searchCountrySource(source: CountrySource, profile: Profil
     if (source.key === 'getonbrd-co') {
       const query = new URLSearchParams({query:title,country_code:'co',per_page:'20',page:String(page+1),lang:profile.outputLanguage,
         expand:JSON.stringify(['company','location_cities','location_tenants','location_regions'])});
-      if (profile.remoteOnly) query.set('remote','true');
+      if (remoteOnly) query.set('remote','true');
       url = `${origins[source.key]}/api/v0/search/jobs?${query}`;
     } else if (source.key === 'elempleo-co') {
       const slug = normalizedLocation(title).replace(/ /g,'-');
@@ -169,7 +173,7 @@ export async function searchCountrySource(source: CountrySource, profile: Profil
     return listings;
     });
     for (const listing of listings) {
-      if (profile.remoteOnly && !/\b(remote|remoto|teletrabajo)\b/i.test(listing.location)) continue;
+      if (remoteOnly && !/\b(remote|remoto|teletrabajo)\b/i.test(listing.location)) continue;
       jobs.set(listing.id,listing);
     }
     }catch(error){if(!session||(error instanceof SourceError&&error.stop))throw error;}

@@ -826,6 +826,7 @@
   "Reached the follow-up limit.": "Se alcanzó el límite de intentos adicionales.",
   "Reached the source-query budget.": "Se alcanzó el límite de consultas a fuentes.",
   "Reached the evaluation budget.": "Se alcanzó el límite de evaluaciones.",
+  "Reserved remaining time for evaluating collected candidates.": "Se reservó el tiempo restante para evaluar las ofertas recopiladas.",
   "Reached the run time budget.": "Se alcanzó el límite de tiempo de esta búsqueda.",
   "Your profile changed; the next run will use your updated preferences.": "Tu perfil cambió; la próxima búsqueda usará tus preferencias actualizadas.",
   "No untried search approach remains in this run.": "No quedan enfoques sin probar para esta búsqueda.",

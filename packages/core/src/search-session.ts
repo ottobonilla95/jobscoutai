@@ -7,7 +7,7 @@ export type SearchQuery={source:string;query:string;location:string;page:number;
 export type SearchAttempt=SearchQuery&{status:'ok'|'blocked';found:number;checkedAt:string;retries?:number;error?:string;scope?:SearchScope};
 export function queryKey(q:SearchQuery){return JSON.stringify([q.source,q.query.toLowerCase(),q.location.toLowerCase(),q.page,...(q.workMode&&q.workMode!=='any'?[q.workMode]:[])]);}
 export type SearchSession={
- round:number;page:number;remaining:number;deadline:number;seen:Set<string>;blocked:Set<string>;
+ round:number;page:number;remaining:number;deadline:number;discoveryDeadline?:number;seen:Set<string>;blocked:Set<string>;
  history:Map<string,string>;cache:Map<string,JobListing[]>;perSource:Map<string,number>;
  attempts:SearchAttempt[];items:JobListing[];perSourceLimit?:number;roundRemaining?:number;successful?:Set<string>;
 };
@@ -20,13 +20,14 @@ export async function searchQuery(session:SearchSession|undefined,q:SearchQuery,
  const key=queryKey(q);
  if(session.blocked.has(q.source))return [];
  if(session.cache.has(key))return session.cache.get(key)!;
+ const deadline=Math.min(session.deadline,session.discoveryDeadline??session.deadline);
  const hasBudget=()=>session.remaining>0&&(session.roundRemaining===undefined||session.roundRemaining>0)&&(session.perSource.get(q.source)||0)<(session.perSourceLimit??6);
- if(session.seen.has(key)||!hasBudget()||Date.now()>=session.deadline)return [];
+ if(session.seen.has(key)||!hasBudget()||Date.now()>=deadline)return [];
  // Follow-up queries rotate across runs rather than retrying the same page daily.
  if(session.round>0&&(session.successful?session.successful.has(key):session.history.has(key)))return [];
  session.seen.add(key);let retries=0;
  try{
-  const result=await retrySource(async()=>{session.remaining--;if(session.roundRemaining!==undefined)session.roundRemaining--;session.perSource.set(q.source,(session.perSource.get(q.source)||0)+1);return read();},{deadline:session.deadline,canRetry:hasBudget,onRetry:count=>{retries=count;}});
+  const result=await retrySource(async()=>{session.remaining--;if(session.roundRemaining!==undefined)session.roundRemaining--;session.perSource.set(q.source,(session.perSource.get(q.source)||0)+1);return read();},{deadline,canRetry:hasBudget,onRetry:count=>{retries=count;}});
   const items=Array.isArray(result)?result:result.jobs;
   const scope:SearchScope=Array.isArray(result)?{status:'unconfirmed',observedLocation:null,evidence:null,resultLocations:[...new Set(items.map(j=>j.location).filter(Boolean))].slice(0,20).map(v=>v.slice(0,240))}:result.scope;
   const accepted=scope.status==='mismatch'?[]:items;

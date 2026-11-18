@@ -34,6 +34,6 @@ export function colombiaSearchLocations(locations: readonly string[]): string[] 
   return cities.has('') ? [''] : [...cities];
 }
 export function activeCountrySources(profile: { locations?: readonly string[]; searchLocations?:readonly {countryCode:string}[];searchTracks?:SearchTrack[] }): CountrySource[] {
-  const countries = profile.searchTracks?.length?profile.searchTracks.flatMap(t=>t.locations.map(p=>p.countryCode)):profile.searchLocations?.length?profile.searchLocations.map(p=>p.countryCode):colombiaSearchLocations(profile.locations || []).length ? ['CO'] : [];
+  const countries = profile.searchTracks?.length?profile.searchTracks.flatMap(t=>[...t.locations.map(p=>p.countryCode),...(t.workMode==='remote'?t.workFromCountries:[])]):profile.searchLocations?.length?profile.searchLocations.map(p=>p.countryCode):colombiaSearchLocations(profile.locations || []).length ? ['CO'] : [];
   return countrySources.filter(source => countries.includes(source.country));
 }

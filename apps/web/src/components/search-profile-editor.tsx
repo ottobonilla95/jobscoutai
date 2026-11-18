@@ -72,10 +72,10 @@ export default function SearchProfileEditor({
 
           <section className="panel profile-panel" aria-labelledby="profile-location-heading">
             <div className="profile-panel-heading"><MapPin size={19}/><div><h2 id="profile-location-heading">{t('Location and work')}</h2><p>{t('Where and how your next role should fit your life.')}</p></div></div>
-            <div className="profile-field-grid" hidden={a.searchTracks.length>0}>
+            {!a.searchTracks.length&&<div className="profile-field-grid">
               <LocationPicker id="profile-location" value={a.selectedLocations} legacyLocations={a.locations} invalid={fieldError(4)} onChange={onLocations}/>
               <label htmlFor="profile-work-preference">{t('Work preference')}<Select id="profile-work-preference" value={a.remotePreference} aria-invalid={fieldError(5)} onValueChange={value=>update('remotePreference',value as SetupAnswers['remotePreference'])} options={[{value:'',label:t('Choose your work preference.'),disabled:true},{value:'remote',label:t('Remote only')},{value:'flexible',label:t('Also open to office work')}]}/><small>{t('Remote jobs can still have location and work-authorization restrictions.')}</small></label>
-            </div>
+            </div>}
             <SearchTrackEditor value={a.searchTracks} onChange={tracks=>update('searchTracks',!a.searchTracks.length&&tracks.length&&a.selectedLocations.length?[{area:'locations',locations:a.selectedLocations,workMode:a.remotePreference==='remote'?'remote':'any',workFromCountries:[]},...tracks]:tracks)}/>
             {a.searchTracks.length>0&&<details><summary>{t('Preferred cities or countries')}</summary><p className="footnote">{t('Search these first while keeping the full area in your tracks.')}</p><LocationPicker id="profile-preferred-locations" value={a.preferredLocations} onChange={places=>update('preferredLocations',places)}/></details>}
             <label htmlFor="profile-authorization">{t('Work authorization')} <span className="profile-optional">{t('Optional')}</span><textarea id="profile-authorization" rows={2} value={a.workAuthorization} maxLength={1000} onChange={event => update('workAuthorization', event.target.value)}/></label>

@@ -76,7 +76,7 @@ export async function searchSources(profile: Profile, adapters: {
     return latest(a.key).localeCompare(latest(b.key));
   });
   for(const task of tasks){
-    if(session&&(session.blocked.has(task.key)||session.remaining<=0||Date.now()>=session.deadline))continue;
+    if(session&&(session.blocked.has(task.key)||session.remaining<=0||Date.now()>=Math.min(session.deadline,session.discoveryDeadline??session.deadline)))continue;
     const before=session?.attempts.length||0;
     try{report.jobs.push(...await task.run());const attempts=session?.attempts.slice(before)||[];if(!attempts.length||attempts.some(a=>a.status==='ok'))report.succeeded++;}
     catch(error){if(error instanceof SourceError&&error.stop){report.blocked.push(task.key);session?.blocked.add(task.key);}report.errors.push(error instanceof SourceError?error.message:`${sourceLabel(task.key)} could not be read. Coverage is unknown; retry later.`);}

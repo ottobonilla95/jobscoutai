@@ -123,7 +123,7 @@ export default function SearchChat({onboarding=false,onSaved,profileKey=''}:{onb
           <dt>{t('Equity')}</dt><dd>{answers.equityExpectation||t('Not specified')}</dd>
           <dt>{t('Must-haves and dealbreakers')}</dt><dd>{answers.constraints||t('Not specified')}</dd>
           {answers.goalClarifications.filter(q=>q.answer).map(q=><div key={q.id}><dt>{q.question}</dt><dd>{q.answer}</dd></div>)}
-          <dt>{t('Search sources')}</dt><dd>{chat.settings.sources.map(sourceLabel).join(' · ')}{chat.settings.companyBoards.map(url=><div key={url}>{url}</div>)}</dd>
+          <dt>{t('Search sources')}</dt><dd>{chat.settings.sources.map(source=>source==='companies'?t('Company career pages'):sourceLabel(source)).join(' · ')}{chat.settings.companyBoards.map(url=><div key={url}>{url}</div>)}</dd>
           <dt>{t('Opportunity research')}</dt><dd>{t(chat.settings.researchEnabled?'On':'Off')}</dd>
           <dt>{t('Minimum fit score')}</dt><dd>{chat.settings.minimumScore}/100</dd>
           <dt>{t('Listing age limit')}</dt><dd>{chat.settings.postedWithinDays===0?t('Any age, including older live vacancies'):t('{count} days',{count:chat.settings.postedWithinDays})} · {t(chat.settings.includeUnknownDates?'Include unknown dates':'Exclude unknown dates')}</dd>
