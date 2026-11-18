@@ -5,7 +5,7 @@ import {searchTargets,searchTrackSchema,type SearchTrack} from '../packages/core
 import {draftFromProfile,completeSetup,standardMatching} from '../packages/core/src/search-setup';
 import {matchingBasis} from '../packages/core/src/setup-schema';
 import {discoveryScope} from '../packages/core/src/discovery-state';
-import {evaluateStrategy,defaultStrategy} from '../packages/core/src/strategy';
+import {evaluateStrategy,defaultStrategy,verifiedExcerpt,supported} from '../packages/core/src/strategy';
 import {promisingResearch,qualifiedOpportunity} from '../packages/core/src/opportunity-selection';
 import {parsePublicJob} from '../packages/core/src/public-job';
 import {validateAdaptivePlan} from '../packages/core/src/adaptive-planner';
@@ -124,4 +124,16 @@ test('bounded evaluation prioritizes the requested role family over relaxed port
  await store.upsert({...listing,id:'relaxed',title:'Optics Laboratory Technician',url:'https://www.linkedin.com/jobs/view/100002/'});
  const pending=await store.pending((await store.profile()).version,2,profile);
  assert.deepEqual(pending.map(j=>j.id),['target','relaxed']);
+});
+
+test('presentation quotation marks cannot erase exact source evidence or admit invented claims',()=>{
+ const source='Own features from the problem to the shipped product. Equity options are available.';
+ for(const quote of ['Own features from the problem to the shipped product','"Own features from the problem to the shipped product"','“Own features from the problem to the shipped product”',"'Own features from the problem to the shipped product'"]){
+  assert.equal(verifiedExcerpt(quote,source),'Own features from the problem to the shipped product');assert.equal(supported(quote,source),true);
+ }
+ assert.equal(supported('"Own the entire business and receive 10% equity"',source),false);
+ assert.equal(supported('"Own features … shipped product"',source),false);
+ assert.equal(supported('"features"','featuring a product'),false);
+ const raw={components:[{id:'skills',score:4,evidence:'"Own features from the problem to the shipped product"',reason:'Exact source evidence.'}],requirements:[],countries:[]};
+ const result=evaluateStrategy(defaultStrategy,raw,source,'');assert.equal(result.components.find(c=>c.id==='skills')?.score,4);assert.ok(result.evidenceCoverage!>0);
 });

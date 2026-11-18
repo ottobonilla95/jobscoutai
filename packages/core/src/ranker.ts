@@ -1,6 +1,6 @@
 import {aiLanguageInstruction} from './i18n/locale';
 import { beginGeneration,finishGeneration } from './ai-usage';
-import { researchSchema, evaluateStrategy } from './strategy';
+import { researchSchema, evaluateStrategy, verifiedExcerpt } from './strategy';
 import { generateText, Output } from 'ai';
 import { aiModel } from './ai-model';
 import { integrations } from './config';
@@ -13,14 +13,12 @@ import {explicitBasePay} from './compensation';
 export const rankingOutputSchema=assessmentSchema.extend({compensation:compensationSchema.nullable(),research:researchSchema});
 
 export function verifyEvidence(assessment: Assessment, description: string): Assessment {
-  const normalized = description.toLowerCase().replace(/\s+/g, ' ');
   const result = { ...assessment };
   for (const key of ['salaryEvidence','equityEvidence','founderPathEvidence'] as const) {
-    const evidence = result[key];
-    if (evidence && !normalized.includes(evidence.toLowerCase().replace(/\s+/g, ' '))) result[key] = null;
+    result[key]=verifiedExcerpt(result[key],description);
   }
   if(result.compensation){
-    const exact=(quote:string|null)=>quote&&normalized.includes(quote.toLowerCase().replace(/\s+/g,' '))?quote:null;
+    const exact=(quote:string|null)=>verifiedExcerpt(quote,description);
     const base=exact(result.compensation.base),variable=exact(result.compensation.variable),equity=exact(result.compensation.equity);
     result.compensation={
       base:base&&explicitBasePay(base)?base:null,

@@ -33,7 +33,16 @@ export const researchSchema=z.object({
 export type Research=z.infer<typeof researchSchema>;
 export type Decision='apply'|'apply_verify'|'research'|'exclude';
 const normalized=(text:string)=>text.toLowerCase().replace(/\s+/g,' ').trim();
-export function supported(quote:string|null,source:string){return Boolean(quote && quote.trim().length>=8 && normalized(source).includes(normalized(quote)));}
+/** Accept an exact excerpt with optional presentation quotes, never a paraphrase. */
+export function verifiedExcerpt(quote:string|null,source:string):string|null{
+ if(!quote)return null;
+ const value=quote.trim(),candidates=[value];
+ for(const [open,close] of [['"','"'],["'","'"],['“','”'],['‘','’']]){
+  if(value.startsWith(open)&&value.endsWith(close)&&value.length>2)candidates.push(value.slice(1,-1).trim());
+ }
+ return candidates.find(candidate=>candidate.length>0&&normalized(source).includes(normalized(candidate)))??null;
+}
+export function supported(quote:string|null,source:string){const excerpt=verifiedExcerpt(quote,source);return Boolean(excerpt&&excerpt.length>=8);}
 export function evaluateStrategy(strategy:Strategy,raw:Research,description:string,location:string){
  const evidenceSource=`${location}\n${description}`;
  const components=strategy.groups.flatMap(g=>g.criteria).map(c=>{
