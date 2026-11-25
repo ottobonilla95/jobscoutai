@@ -11,6 +11,7 @@ import {translate,systemMessage,dictionaries} from '../packages/core/src/i18n';
 import {Accounts} from '../packages/core/src/accounts';
 import {sendAccountLink} from '../packages/core/src/account-email';
 import {notifyMatches,type EmailPayload} from '../packages/core/src/notifications';
+import {readyAssessment,markReady} from './ready-job';
 import {defaultProfile,profileSchema} from '../packages/core/src/profile';
 const require=createRequire(import.meta.url);const parser=require('next/dist/compiled/babel/parser');
 async function fixture(t:test.TestContext){return accountsFixture(t);}
@@ -50,7 +51,7 @@ test('account preferences persist across connections without changing another us
 test('account and job email templates localize copy while preserving titles and evidence',async t=>{
  emailConfig(t);const accounts=(await fixture(t));const user=await accounts.signup({email:'mail-es@example.test',password:'A private test phrase 2026'});(await accounts.setLanguage(user.id,'es','es'));const sent:EmailPayload[]=[];
  await sendAccountLink(accounts,user,'reset',async payload=>{sent.push(payload);});assert.equal(sent[0].subject,`Restablece tu contraseña de ${brand.name}`);assert.match(sent[0].text,/30 minutos/);assert.match(sent[0].text,/#reset=/);
- const store=(await accounts.store(user.id));(await store.upsert({id:'es-mail',title:'Original English Job Title',company:'Original Company',location:'Berlin',url:'https://example.com/job',postedAt:null}));(await store.assess('es-mail',{language:'es',score:90,eligibility:'eligible',summary:'Buen encaje con tu experiencia.',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:'1% equity',founderPathEvidence:null},1));
+ const store=(await accounts.store(user.id));(await store.upsert({id:'es-mail',title:'Original English Job Title',company:'Original Company',location:'Berlin',url:'https://example.com/job',postedAt:null}));(await store.assess('es-mail',readyAssessment({language:'es',score:90,eligibility:'eligible',summary:'Buen encaje con tu experiencia.',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:'1% equity',founderPathEvidence:null}),1));await markReady(store,'es-mail');
  await notifyMatches(store,{...defaultProfile,outputLanguage:'es',email:user.email,emailEnabled:true},1,async payload=>{sent.push(payload);});assert.equal(sent[1].subject,'1 nueva oportunidad para ti');assert.match(sent[1].text,/Original English Job Title/);assert.match(sent[1].text,/Participación accionaria: 1% equity/);assert.match(sent[1].text,/Recomendación:/);
 });
 test('AI language instructions preserve source excerpts and user data',()=>{const instructions=aiLanguageInstruction('es');assert.match(instructions,/neutral Spanish/);assert.match(instructions,/Never translate evidence excerpts/);assert.match(aiLanguageInstruction('en'),/in English/);});

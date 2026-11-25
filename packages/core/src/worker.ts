@@ -8,7 +8,7 @@ import { strongMatch,recommendation } from './recommendation';
 import { SourceError } from './linkedin';
 import { searchSources, listingWithinAge, describeJob, type SearchReport } from './sources';
 import type { JobListing, Profile } from './profile';
-import { rankJob } from './ranker';
+import { rankJob,checkedRoleEvidence } from './ranker';
 import { notifyMatches } from './notifications';
 import { type Store } from './store';
 import {planAdaptiveSearch,fallbackPage,type AdaptivePlan,type PlannerInput} from './adaptive-planner';
@@ -23,6 +23,7 @@ import {activeCountrySources} from './country-sources';
 import {parseBoard} from './source-settings';
 import {loadCompanyBoard} from './company-board';
 import {searchQuery} from './search-session';
+import {promisingResearch} from './opportunity-selection';
 
 const defaults = { verify: verifyListing, search: (profile:Profile,session?:SearchSession)=>searchSources(profile,undefined,session), describe: describeJob, rank: rankJob, notify: notifyMatches,plan:planAdaptiveSearch,investigate:investigateOpportunity };
 type Dependencies={investigate?:typeof investigateOpportunity;search:(profile:Profile,session?:SearchSession)=>Promise<SearchReport|JobListing[]>;describe:typeof describeJob;rank:typeof rankJob;notify:typeof notifyMatches;verify?:typeof verifyListing;plan?:(input:PlannerInput)=>Promise<AdaptivePlan>};
@@ -41,8 +42,18 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
   const report:SearchDiscovery={profileVersion:version,rounds:[],requests:0,requestLimit:24,stopReason:'round_limit',coverage:locationCoverage(searchTargets(profile).map(t=>targetLabel(t)),[])};
   const session:SearchSession={round:0,page:0,remaining:24,deadline:started+8*60000,seen:new Set(),blocked:new Set(),history:new Map(state.attempts.map(a=>[queryKey(a),a.checkedAt])),successful:new Set(state.attempts.filter(a=>a.status==='ok'&&a.scope?.status!=='mismatch').map(queryKey)),cache:new Map(),perSource:new Map(),perSourceLimit:6,attempts:[],items:[]};
   const errors:string[]=[];let failed=false,hadSuccess=false;
-  const known=new Set((await store.jobs()).map(j=>j.id)),seen=new Set<string>(),evaluated=new Set<string>(),newCandidates=new Set<string>(),verified=new Set<string>();
+  const existingJobs=await store.jobs();
+  const known=new Set(existingJobs.map(j=>j.id)),seen=new Set<string>(),evaluated=new Set<string>(),newCandidates=new Set<string>(),verified=new Set<string>();
+  const verificationLimit=10;
+  const needsVerification=(job:typeof existingJobs[number])=>{
+    if(job.verification?.status==='closed')return false;
+    const age=Date.now()-Date.parse(job.verification?.checkedAt||'');
+    return !job.verification||!Number.isFinite(age)||age>(job.verification.status==='open'?14:1)*86400000;
+  };
   const evaluationLimit=Math.max(0,Math.min(profile.maxJobsPerRun,profile.dailyEvaluationLimit-await store.evaluatedToday()));
+  const needsResearchReview=(job:typeof existingJobs[number])=>Boolean(job.assessment&&job.researchTask?.status==='completed'&&job.research?.profileVersion===version&&job.research.generationIds.length&&job.research.generationIds.at(-1)!==job.assessment.researchGenerationId);
+  const researchReserve=profile.researchEnabled?Math.min(4,evaluationLimit,existingJobs.filter(j=>needsResearchReview(j)||promisingResearch(j,profile,version)).length):0;
+  const discoveryEvaluationLimit=evaluationLimit-researchReserve;
   let searchProfile=profile,plan:AdaptivePlan|null=null;
   const heartbeat=setInterval(()=>{void store.heartbeat(id).catch(()=>console.error('Worker heartbeat failed.'));},30000);
   const current=async()=> (await store.profile()).version===version;
@@ -98,7 +109,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     if(!integrations().ai)throw new Error('Add OPENAI_API_KEY on the server to enable matching.');
     // Seedless company discovery must run before collection, not after LinkedIn
     // has spent the request budget. Only the opted-in source enables web tools.
-    if(profile.sources.includes('companies')&&!profile.companyBoards.length&&!state.boards.length&&dependencies.plan&&evaluationLimit>0){
+    if(profile.sources.includes('companies')&&!profile.companyBoards.length&&!state.boards.length&&dependencies.plan&&discoveryEvaluationLimit>0){
       try{
         plan=await dependencies.plan({profile,report,state,store,deadline:session.deadline,feedback:[]});counts.inputTokens+=plan.inputTokens;counts.outputTokens+=plan.outputTokens;
         if(plan.boards.length&&await current()){
@@ -110,7 +121,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     for(let round=0;round<3;round++){
       if(!await current()){report.stopReason='profile_changed';break;}
       if(Date.now()>=session.deadline){report.stopReason='time_budget';break;}
-      if(evaluationLimit===0){report.stopReason='evaluation_budget';break;}
+      if(discoveryEvaluationLimit===0){report.stopReason='evaluation_budget';break;}
       session.discoveryDeadline=Math.min(session.deadline-180000,Date.now()+90000);
       session.round=round;session.roundRemaining=Math.min(session.remaining,round===0?16:round===1?4:session.remaining);session.perSourceLimit=round===0?6:4;session.perSource.clear();session.attempts=[];session.items=[];
       let listings:JobListing[]=[];
@@ -144,12 +155,12 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       if(!await current())report.stopReason='profile_changed';
       // Reserve evaluation capacity for follow-up discoveries rather than judging
       // every first-page result before the agent has a chance to adapt.
-      const allowance=round===2||session.remaining<=0||(!session.attempts.length&&!dependencies.plan)?evaluationLimit-counts.evaluated:Math.ceil((evaluationLimit-counts.evaluated)/(3-round));
+      const allowance=round===2||session.remaining<=0||(!session.attempts.length&&!dependencies.plan)?discoveryEvaluationLimit-counts.evaluated:Math.ceil((discoveryEvaluationLimit-counts.evaluated)/(3-round));
       const budgetStopped=await evaluateCandidates(allowance,fresh);
       // Check fresh strong candidates before deciding that discovery has found
       // enough. A closed listing must not stop the loop as a successful match.
       if(dependencies.verify&&await current()){
-        const candidates=(await store.jobs()).filter(j=>newCandidates.has(j.id)&&strongMatch(j,profile,version)&&!verified.has(j.id)&&(!j.verification||Date.now()-Date.parse(j.verification.checkedAt)>14*86400000)).slice(0,3-verified.size);
+        const candidates=(await store.jobs()).filter(j=>newCandidates.has(j.id)&&strongMatch(j,profile,version)&&!verified.has(j.id)&&needsVerification(j)).slice(0,verificationLimit-verified.size);
         for(const job of candidates){if(Date.now()>=session.deadline)break;await verify(job);verified.add(job.id);}
       }
       if(Date.now()>=session.deadline)report.stopReason='time_budget';
@@ -167,7 +178,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       await store.progress(id,counts,report);
       if(report.stopReason==='profile_changed'||report.stopReason==='time_budget'||budgetStopped)break;
       if(strong>=2){report.stopReason='sufficient_matches';break;}
-      if(counts.evaluated>=evaluationLimit){report.stopReason='evaluation_budget';break;}
+      if(counts.evaluated>=discoveryEvaluationLimit){report.stopReason='evaluation_budget';break;}
       if(session.remaining<=0){report.stopReason='request_budget';break;}
       if(round===2)break;
       if(Date.now()>=session.deadline-180000){report.stopReason='discovery_time_budget';break;}
@@ -201,16 +212,12 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     }
     // A discovery stop does not exhaust the independent evaluation allowance.
     // Finish assessing collected candidates when no further collection can run.
-    if(['discovery_time_budget','request_budget','no_untried_queries','sources_unavailable','planner_unavailable','round_limit'].includes(report.stopReason)&&counts.evaluated<evaluationLimit&&Date.now()<session.deadline&&await current()){
-      await evaluateCandidates(evaluationLimit-counts.evaluated);
-    }
-    if(dependencies.verify&&await current()){
-      const stale=(await store.jobs()).filter(j=>j.status!=='dismissed'&&!j.duplicateOf&&!verified.has(j.id)&&(!j.verification||Date.now()-Date.parse(j.verification.checkedAt)>14*86400000)).slice(0,3-verified.size);
-      for(const job of stale){if(Date.now()>=session.deadline)break;await verify(job);}
+    if(['discovery_time_budget','request_budget','no_untried_queries','sources_unavailable','planner_unavailable','round_limit'].includes(report.stopReason)&&counts.evaluated<discoveryEvaluationLimit&&Date.now()<session.deadline&&await current()){
+      await evaluateCandidates(discoveryEvaluationLimit-counts.evaluated);
     }
     if(dependencies.investigate&&profile.researchEnabled&&await current()){
-      const tasks=new ResearchTasks(store),eligible=(await store.jobs()).filter(j=>!session.blocked.has(j.sourceKey||'linkedin')&&dueForInvestigation(j,profile,version)).sort((a,b)=>Number(Boolean(b.researchRequested))-Number(Boolean(a.researchRequested)));
-      const readiness=await Promise.all(eligible.map(j=>tasks.ready(j,version)));const candidates=eligible.filter((_,i)=>readiness[i]).slice(0,2);if(eligible.filter((_,i)=>readiness[i]).length>2)research.stopReason='opportunity_limit';
+      const tasks=new ResearchTasks(store),eligible=(await store.jobs()).filter(j=>!session.blocked.has(j.sourceKey||'linkedin')&&dueForInvestigation(j,profile,version)).sort((a,b)=>Number(Boolean(b.researchRequested))-Number(Boolean(a.researchRequested))||Number(promisingResearch(b,profile,version))-Number(promisingResearch(a,profile,version))||(b.assessment?.score||0)-(a.assessment?.score||0));
+      const readiness=await Promise.all(eligible.map(j=>tasks.ready(j,version)));const candidates=eligible.filter((_,i)=>readiness[i]).slice(0,4);if(eligible.filter((_,i)=>readiness[i]).length>4)research.stopReason='opportunity_limit';
       for(const job of candidates){
         if(Date.now()>=session.deadline){research.stopReason='time_budget';break;}if(!await current())break;
         try{const result=await dependencies.investigate(store,job.id,{deadline:session.deadline});counts.inputTokens+=result.inputTokens;counts.outputTokens+=result.outputTokens;
@@ -219,6 +226,30 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
         }catch(error){research.attempted++;research.failed++;errors.push(error instanceof AIBudgetError?error.message:'Investigation could not finish. Saved evidence remains available; unresolved questions will be retried.');if(error instanceof AIBudgetError){research.stopReason='daily_budget';break;}}
         await store.researchProgress(id,research);
       }
+    }
+    // Research is not the final verdict. Reassess the exact vacancy using its
+    // checked role excerpts; company facts cannot establish role conditions.
+    if(profile.researchEnabled&&await current())for(const job of (await store.jobs()).filter(needsResearchReview)){
+      if(Date.now()>=session.deadline)break;
+      if(!await current())break;
+      try{
+        const generationId=job.research!.generationIds.at(-1)!;
+        if(!checkedRoleEvidence(job,job.research).length){
+          await store.assess(job.id,{...job.assessment!,researchGenerationId:generationId,researchReviewed:true},version);
+          continue;
+        }
+        if(counts.evaluated>=evaluationLimit)break;
+        const result=await dependencies.rank(job,profile,accountId,session.deadline,job.research);
+        if(!await current())break;
+        result.assessment.researchGenerationId=generationId;
+        result.assessment.researchReviewed=true;
+        await store.assess(job.id,result.assessment,version);
+        counts.evaluated++;counts.inputTokens+=result.inputTokens;counts.outputTokens+=result.outputTokens;evaluated.add(job.id);
+      }catch(error){errors.push(error instanceof AIBudgetError?error.message:'Research-based classification could not finish; it will be retried on the next search.');if(error instanceof AIBudgetError)break;}
+    }
+    if(dependencies.verify&&await current()){
+      const unverified=(await store.jobs()).filter(j=>strongMatch(j,profile,version)&&!verified.has(j.id)&&needsVerification(j)).slice(0,verificationLimit-verified.size);
+      for(const job of unverified){if(Date.now()>=session.deadline)break;await verify(job);verified.add(job.id);}
     }
     if(research.retryScheduled||research.failed)errors.push('Some research remains unfinished. Check investigation coverage and outcomes in Activity for retry and failure counts.');
     const finalJobs=await store.jobs();counts.matched=finalJobs.filter(j=>evaluated.has(j.id)&&strongMatch(j,profile,version)).length;metrics(finalJobs);

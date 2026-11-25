@@ -78,7 +78,7 @@ export const assessmentSchema = z.object({
   founderPathEvidence: z.string().max(500).nullable(),
   compensation: compensationSchema.nullish(),
 });
-export type Assessment = z.infer<typeof assessmentSchema> & { language?:'en'|'es'; evaluation?: ReturnType<typeof evaluateStrategy> };
+export type Assessment = z.infer<typeof assessmentSchema> & { language?:'en'|'es'; evaluation?: ReturnType<typeof evaluateStrategy>; researchGenerationId?:string; researchReviewed?:boolean };
 
 export type JobListing = {
   id: string; title: string; company: string; location: string; url: string; postedAt: string | null;

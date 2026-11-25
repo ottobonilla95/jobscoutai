@@ -11,9 +11,10 @@ import { defaultProfile, type Assessment, type JobListing } from '../packages/co
 import { verifyEvidence } from '../packages/core/src/ranker';
 import { notifyMatches, type EmailPayload } from '../packages/core/src/notifications';
 import { runSearch } from '../packages/core/src/worker';
+import {readyAssessment,markReady,readyVerification} from './ready-job';
 
 const listing: JobListing = { id:'12345', title:'Founding Engineer', company:'Example', location:'Remote', url:'https://www.linkedin.com/jobs/view/12345/', postedAt:null };
-const assessment: Assessment = { score:91, eligibility:'eligible', summary:'Strong overlap with the stated experience.', reasons:['Relevant product engineering experience'], concerns:['Confirm work authorization'], salaryEvidence:null, equityEvidence:'1% equity', founderPathEvidence:null };
+const assessment: Assessment = readyAssessment({ score:91, eligibility:'eligible', summary:'Strong overlap with the stated experience.', reasons:['Relevant product engineering experience'], concerns:['Confirm work authorization'], salaryEvidence:null, equityEvidence:'1% equity', founderPathEvidence:null });
 async function fixture(t:test.TestContext){return {store:await storeFixture(t)};}
 function configure(t: test.TestContext) {
   for (const [key,value] of Object.entries({ AI_GATEWAY_API_KEY:'test-key', RESEND_API_KEY:'test-key', EMAIL_FROM:'test@example.com' })) {
@@ -67,7 +68,7 @@ test('preference changes trigger reevaluation; cadence and email changes do not'
 });
 test('email retries use the same stored payload/key and successful sends never repeat',async t=>{
   configure(t);const {store}=(await fixture(t));const p={...defaultProfile,email:'me@example.com',emailEnabled:true};
-  (await store.upsert(listing));(await store.assess(listing.id,assessment,1));
+  (await store.upsert(listing));(await store.assess(listing.id,assessment,1));await markReady(store,listing.id);
   const attempts:{payload:EmailPayload;id:string}[]=[];
   const sender=async(payload:EmailPayload,id:string)=>{attempts.push({payload,id});if(attempts.length===1)throw new Error('Network interrupted');};
   await assert.rejects(notifyMatches(store,p,1,sender),/Network interrupted/);
@@ -76,7 +77,7 @@ test('email retries use the same stored payload/key and successful sends never r
 });
 test('uncertain deliveries beyond the idempotency window are not resent',async t=>{
   configure(t);const {store}=(await fixture(t));const p={...defaultProfile,email:'me@example.com',emailEnabled:true};
-  (await store.upsert(listing));(await store.assess(listing.id,assessment,1));
+  (await store.upsert(listing));(await store.assess(listing.id,assessment,1));await markReady(store,listing.id);
   await assert.rejects(notifyMatches(store,p,1,async()=>{throw new Error('Uncertain');}));
   (await store.db.prepare('UPDATE deliveries SET created_at=?').run(new Date(Date.now()-25*3600000).toISOString()));
   let sent=0;await notifyMatches(store,p,1,async()=>{sent++;});assert.equal(sent,0);
@@ -87,7 +88,7 @@ test('search → persist → score → email completes, and repeat scans do not 
   (await store.saveProfile({...defaultProfile,cvText:'Test candidate with product engineering and startup experience. '.repeat(5),email:'me@example.com',emailEnabled:true}));
   let ranked=0;let sent=0;
   const dependencies={search:async()=>[listing],describe:async()=> 'Build products with the founding team. We offer 1% equity and full technical ownership.',
-    rank:async()=>{ranked++;return {assessment,inputTokens:123,outputTokens:45};},
+    rank:async()=>{ranked++;return {assessment,inputTokens:123,outputTokens:45};},verify:async()=>readyVerification(listing.url),
     notify:async(s:Store,p:typeof defaultProfile,v:number)=>notifyMatches(s,p,v,async()=>{sent++;})};
   const first=await runSearch({store,force:true,dependencies});assert.equal(first.status,'completed');assert.equal((await store.jobs()).length,1);assert.equal(sent,1);
   await runSearch({store,force:true,dependencies});assert.equal(ranked,1);assert.equal(sent,1);assert.equal((await store.runs()).length,2);

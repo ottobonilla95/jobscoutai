@@ -8,6 +8,7 @@ import { describeCountryJob, listingDate, parseCountryDescription, parseElEmpleo
 import { searchSources } from '../packages/core/src/sources';
 import { SourceError } from '../packages/core/src/linkedin';
 import { notifyMatches } from '../packages/core/src/notifications';
+import {readyAssessment,markReady} from './ready-job';
 
 function apiJob(id = 'engineer-example-remote') {
   return {id,attributes:{title:'Software Engineer',remote:true,remote_modality:'remote_local',published_at:Math.floor(Date.now()/1000),
@@ -127,7 +128,7 @@ test('Colombia additions run once each, preserve other source results on failure
 test('removing Colombia stops evaluation and new alerts for its sources, and holds an already queued digest', async t => {
   const store=await storeFixture(t); const job=parseGetOnBoardJobs({data:[apiJob()]})[0]; await store.upsert(job);
   assert.equal((await store.pending(1,10,coProfile)).length,1); assert.equal((await store.pending(1,10,defaultProfile)).length,0);
-  await store.assess(job.id,{score:95,eligibility:'eligible',summary:'Good fit.',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null},1);
+  await store.assess(job.id,readyAssessment({score:95,eligibility:'eligible',summary:'Good fit.',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null}),1);await markReady(store,job.id);
   for(const [key,value] of Object.entries({RESEND_API_KEY:'test',EMAIL_FROM:'test@example.test'})) {const old=process.env[key];process.env[key]=value;t.after(()=>{if(old===undefined)delete process.env[key];else process.env[key]=old;});}
   const profile={...coProfile,email:'test@example.test',emailEnabled:true};let sent=0;
   assert.equal(await notifyMatches(store,{...profile,locations:['Spain']},1,async()=>{sent++;}),0);

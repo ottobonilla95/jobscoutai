@@ -1,10 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {defaultProfile,type Job} from '../packages/core/src/profile';
-import {opportunitiesForView,qualifiedOpportunity,promisingResearch} from '../packages/core/src/opportunity-selection';
+import {opportunitiesForView,qualifiedOpportunity,promisingResearch,readyOpportunity} from '../packages/core/src/opportunity-selection';
 import {storeFixture} from './database-fixture';
+import {evaluateStrategy} from '../packages/core/src/strategy';
 
-const match:Job={id:'qualified',sourceKey:'linkedin',title:'Product Engineer',company:'Example',location:'London',url:'https://example.com/job',postedAt:null,firstSeen:'2026-11-11',lastSeen:'2026-11-12',description:'Build and own the product with customers.',status:'new',evaluatedVersion:1,notifiedAt:null,assessment:{score:90,eligibility:'eligible',summary:'Supported fit.',reasons:['Responsibilities advance the stated goal.'],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null}};
+const description='Build and own the product with customers.';
+const evaluation=evaluateStrategy(defaultProfile.strategy,{components:defaultProfile.strategy.groups.flatMap(group=>group.criteria.map(criterion=>({id:criterion.id,score:5,reason:'Supported.',evidence:description}))),requirements:[],countries:[]},description,'London');
+const match:Job={id:'qualified',sourceKey:'linkedin',title:'Product Engineer',company:'Example',location:'London',url:'https://example.com/job',postedAt:null,firstSeen:'2026-11-11',lastSeen:'2026-11-12',description,status:'new',evaluatedVersion:1,notifiedAt:null,verification:{status:'open',checkedAt:new Date().toISOString(),applicationUrl:'https://example.com/apply',note:'Form found.'},assessment:{score:90,eligibility:'eligible',summary:'Supported fit.',reasons:['Responsibilities advance the stated goal.'],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null,evaluation}};
 test('hundreds of raw discoveries do not inflate the shortlist or research queue',()=>{
   const raw=Array.from({length:376},(_,i)=>({...match,id:`raw-${i}`,assessment:null,evaluatedVersion:null}));
   assert.deepEqual(opportunitiesForView([...raw,match],defaultProfile,1,'all').map(j=>j.id),['qualified']);
@@ -16,6 +19,16 @@ test('weak, stale, excluded, closed, duplicate and disabled-source jobs never qu
   for(const job of variants){assert.equal(qualifiedOpportunity(job,defaultProfile,1),false);assert.equal(promisingResearch(job,defaultProfile,1),false);}
   assert.equal(qualifiedOpportunity(match,defaultProfile,1),true);
 });
+test('daily feed includes only current checked application routes and puts new additions first',()=>{
+ const older={...match,id:'older',firstSeen:'2026-11-10',assessment:{...match.assessment!,score:99}};
+ assert.deepEqual(opportunitiesForView([older,match],defaultProfile,1,'all').map(job=>job.id),['qualified','older']);
+ const unverified={...match,verification:null};
+ const stale={...match,verification:{...match.verification!,checkedAt:'2020-01-01T00:00:00.000Z'}};
+ const uncertain={...match,assessment:{...match.assessment!,eligibility:'uncertain' as const}};
+ const research={...match,assessment:{...match.assessment!,evaluation:{...evaluation,decision:'research' as const}}};
+ for(const job of [unverified,stale,uncertain,research])assert.equal(readyOpportunity(job,defaultProfile,1),false);
+ assert.equal(readyOpportunity(match,defaultProfile,1),true);
+});
 test('research needs a current promising assessment and a question, and remains separate from matches',()=>{
   const research={...match,assessment:{...match.assessment!,eligibility:'uncertain' as const,concerns:['Does this role allow working from the selected country?']}};
   assert.equal(promisingResearch(research,defaultProfile,1),false); // apply + verify is still a qualified match
@@ -24,6 +37,7 @@ test('research needs a current promising assessment and a question, and remains 
   assert.deepEqual(opportunitiesForView([pending],defaultProfile,1,'research'),[pending]);
   assert.equal(promisingResearch({...pending,assessment:{...pending.assessment,score:30}},defaultProfile,1),false);
   assert.equal(promisingResearch({...pending,assessment:{...pending.assessment,concerns:[]}},defaultProfile,1),false);
+  assert.equal(promisingResearch({...pending,assessment:{...pending.assessment,researchReviewed:true}},defaultProfile,1),false);
 });
 test('explicit saves and applications remain accessible after profile changes without being called matches',()=>{
   const saved={...match,status:'saved' as const,evaluatedVersion:0};

@@ -1,10 +1,10 @@
 import {translate} from './i18n';
 import {formatNumber} from './i18n/locale';
-import { strongMatch, recommendation, recommendationLabels } from './recommendation';
+import { recommendation, recommendationLabels } from './recommendation';
 import { randomUUID } from 'node:crypto';
 import type { Store } from './store';
 import type { Profile } from './profile';
-import { sourceEnabled } from './source-settings';
+import {readyOpportunity} from './opportunity-selection';
 
 export type EmailPayload = { from: string; to: string[]; subject: string; text: string };
 export async function sendEmail(payload: EmailPayload, id: string) {
@@ -22,7 +22,7 @@ export async function notifyMatches(store: Store, profile: Profile, version: num
 
   // Persist the exact payload before contacting the provider. Retries reuse its idempotency key.
   const reserved=await store.reservedJobs();
-  const candidates = (await store.jobs()).filter(job => sourceEnabled(profile, job.sourceKey) && strongMatch(job,profile,version) &&
+  const candidates = (await store.jobs()).filter(job => readyOpportunity(job,profile,version) &&
     !reserved.includes(job.id)).slice(0,10);
   if (candidates.length) {
     const id = randomUUID();
@@ -38,8 +38,7 @@ export async function notifyMatches(store: Store, profile: Profile, version: num
     const savedJobs=await store.deliveryJobs(String(batch.id));
     // A deleted account cascades its queue and jobs, even if this worker already read the batch.
     if(!savedJobs.length)continue;
-    if(savedJobs.some(job=>!strongMatch(job,profile,version))){await store.holdDelivery(String(batch.id),'Matching preferences or job eligibility changed; review this digest.');continue;}
-    if(savedJobs.some(job=>!sourceEnabled(profile,job.sourceKey))){await store.holdDelivery(String(batch.id),'A job source was disabled; this saved digest needs review.');continue;}
+    if(savedJobs.some(job=>!readyOpportunity(job,profile,version))){await store.holdDelivery(String(batch.id),'Matching preferences, source, or application availability changed; review this digest.');continue;}
     if (payload.to[0] !== profile.email) {
       await store.holdDelivery(String(batch.id),'Recipient changed; review delivery before resending.');
       continue;

@@ -2,6 +2,7 @@ import {accountsFixture,storeFixture} from './database-fixture';
 import {brand} from '../packages/core/src/brand';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readyAssessment,markReady} from './ready-job';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -70,7 +71,7 @@ test('disabling a source prevents new emails and holds its uncertain queued dige
   const old=process.env[key];process.env[key]=value;t.after(()=>{if(old===undefined)delete process.env[key];else process.env[key]=old;});
  }
  const store=(await fixture(t));(await store.upsert({...yc,id:'123',sourceKey:'linkedin'}));
- (await store.assess('123',{score:90,eligibility:'eligible',summary:'Relevant role.',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null},1));
+ (await store.assess('123',readyAssessment({score:90,eligibility:'eligible',summary:'Relevant role.',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null}),1));await markReady(store,'123');
  const profile={...defaultProfile,email:'me@example.com',emailEnabled:true};let sent=0;
  assert.equal(await notifyMatches(store,{...profile,sources:['yc']},1,async()=>{sent++;}),0);
  await assert.rejects(notifyMatches(store,profile,1,async()=>{throw new Error('Uncertain delivery');}));

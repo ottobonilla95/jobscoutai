@@ -7,6 +7,7 @@ import { integrations } from './config';
 import { assessmentSchema, compensationSchema, type Assessment, type Job, type Profile } from './profile';
 import {answeredClarifications} from './goal-clarifications';
 import {explicitBasePay} from './compensation';
+import type {ResearchDossier} from './research-memory-schema';
 
 // Stored legacy assessments can omit compensation. Strict model output cannot:
 // every property must be required, with null representing missing evidence.
@@ -30,7 +31,16 @@ export function verifyEvidence(assessment: Assessment, description: string): Ass
   if (result.eligibility === 'ineligible') result.score = Math.min(result.score, 39);
   return result;
 }
-export async function rankJob(job: Job, profile: Profile, accountId?:string, deadline?:number) {
+/** Only checked excerpts from this exact vacancy may affect role fit or gates. */
+export function checkedRoleEvidence(job:Job,research?:ResearchDossier|null){
+ const answered=new Set(research?.questions.filter(q=>q.status!=='open').flatMap(q=>q.evidenceIds)??[]);
+ return research?.evidence.filter(e=>answered.has(e.id)&&e.scope==='job'&&e.url===job.url&&e.origin==='listing')??[];
+}
+export function evaluationText(job:Job,research?:ResearchDossier|null){
+ const excerpts=checkedRoleEvidence(job,research).map(e=>e.quote);
+ return [job.description||'',...new Set(excerpts)].filter(Boolean).join('\n');
+}
+export async function rankJob(job: Job, profile: Profile, accountId?:string, deadline?:number,research?:ResearchDossier|null) {
   if (!integrations().ai) throw new Error('Add OPENAI_API_KEY to enable CV-based matching.');
   const generation=accountId?(await beginGeneration(accountId,'ranking',profile.dailyEvaluationLimit)):null;
   try{
@@ -51,11 +61,12 @@ Score supported fit separately from evidence completeness. Use null for an unsup
 Each evidence field must be an exact short excerpt from the description, or null if absent. Never estimate equity, salary or founder progression.
 Also separate compensation into exact quotes: base (explicit guaranteed/base/fixed cash only), variable (bonus/commission), equity (grant/value/terms as stated), and headline (advertised package/range). Return null for unstated components. A total/OTE or base-plus-bonus range is never guaranteed base. An equity currency value does not establish a grant percentage. Preserve contradictory headline/body terms in concerns and evidence; never average or resolve them by guessing.
 Explain the match and concerns concretely. Output only the requested structured result.`,
-    prompt: JSON.stringify(jobEvaluationContext(job,profile)),
+    prompt: JSON.stringify(jobEvaluationContext({...job,description:evaluationText(job,research)},profile)),
   });
-  const assessment=verifyEvidence(result.output, job.description || '');
+  const evidenceText=evaluationText(job,research);
+  const assessment=verifyEvidence(result.output, evidenceText);
   assessment.language=profile.outputLanguage;
-  const evaluation=evaluateStrategy(profile.strategy,result.output.research,job.description||'',job.location);
+  const evaluation=evaluateStrategy(profile.strategy,result.output.research,evidenceText,job.location);
   assessment.score=evaluation.score; assessment.evaluation=evaluation;
   if(evaluation.decision==='exclude'){assessment.eligibility='ineligible';}
   if(assessment.eligibility==='ineligible')evaluation.decision='exclude';
