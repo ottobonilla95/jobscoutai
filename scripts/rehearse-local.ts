@@ -24,7 +24,7 @@ async function sourceProfile():Promise<Profile>{
  if(profilePath)return profileSchema.parse(JSON.parse(await readFile(profilePath,'utf8')));
  if(!process.env.DATABASE_URL)throw new Error('DATABASE_URL is needed only to read the account profile.');
  const production=createDatabase(process.env.DATABASE_URL);
- try{return (await new Store(production,userId!).profile()).profile;}
+ try{return await production.transaction(async db=>{await db.exec('SET TRANSACTION READ ONLY');return (await new Store(db,userId!).profile()).profile;});}
  finally{await production.close();}
 }
 
