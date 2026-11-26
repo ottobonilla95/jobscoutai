@@ -93,12 +93,25 @@ test('verification and password reset tokens are purpose-bound, expiring and sin
  const session=(await accounts.session(user));const reset=(await accounts.issueToken(user,'reset'));assert.equal(await accounts.consumeToken(reset,'reset','New long test password'),true);assert.equal((await accounts.current(session)),null);assert.equal(await accounts.login(user.email,'Old long test password'),null);assert.ok(await accounts.login(user.email,'New long test password'));
  const expired=(await accounts.issueToken(user,'reset'));(await accounts.db.exec('UPDATE account_tokens SET expires=0'));assert.equal(await accounts.consumeToken(expired,'reset','Another test password'),false);
 });
-test('AI reservations enforce shared budgets across accounts and retain failed-call usage',async t=>{
+test('AI reservations enforce shared completed-call budgets and failed-attempt ceilings',async t=>{
  const oldLimit=process.env.AI_DAILY_CALL_LIMIT;process.env.AI_DAILY_CALL_LIMIT='2';
  const {beginGeneration,finishGeneration}=await import('../packages/core/src/ai-usage');const accounts=await accountsFixture(t);
  t.after(()=>{if(oldLimit===undefined)delete process.env.AI_DAILY_CALL_LIMIT;else process.env.AI_DAILY_CALL_LIMIT=oldLimit;});
  const a=await accounts.signup({email:'budget-one@example.test',password:'Budget test password 123'});const b=await accounts.signup({email:'budget-two@example.test',password:'Budget test password 123'});
- const id=(await beginGeneration(a.id,'ranking',1,accounts));(await finishGeneration(id,'failed',0,0,accounts));await assert.rejects(beginGeneration(a.id,'strategy',1,accounts),/budget/);const second=(await beginGeneration(b.id,'ranking',2,accounts));(await finishGeneration(second,'completed',10,20,accounts));await assert.rejects(beginGeneration(b.id,'ranking',2,accounts),/budget/);assert.equal((await accounts.db.prepare('SELECT input_tokens FROM ai_generations WHERE id=?').get(second))!.input_tokens,10);
+ const id=(await beginGeneration(a.id,'ranking',1,accounts));(await finishGeneration(id,'failed',0,0,accounts));await assert.rejects(beginGeneration(a.id,'strategy',1,accounts),/budget/);
+ const second=(await beginGeneration(b.id,'ranking',2,accounts));(await finishGeneration(second,'completed',10,20,accounts));
+ const third=await beginGeneration(b.id,'ranking',2,accounts);await finishGeneration(third,'completed',10,20,accounts);
+ await assert.rejects(beginGeneration(b.id,'ranking',2,accounts),/budget/);
+ assert.equal((await accounts.db.prepare('SELECT input_tokens FROM ai_generations WHERE id=?').get(second))!.input_tokens,10);
+});
+test('zero-token failures free evaluation capacity but have their own retry ceiling',async t=>{
+ const {beginGeneration,finishGeneration,remainingGenerations}=await import('../packages/core/src/ai-usage');
+ const accounts=await accountsFixture(t),user=await accounts.signup({email:'retry-budget@example.test',password:'Budget test password 123'});
+ const failed=await beginGeneration(user.id,'ranking',3,accounts);await finishGeneration(failed,'failed',0,0,accounts);
+ assert.equal(await remainingGenerations(user.id,3,accounts),3);
+ for(let i=0;i<3;i++){const id=await beginGeneration(user.id,'ranking',3,accounts);await finishGeneration(id,'completed',10,5,accounts);}
+ assert.equal(await remainingGenerations(user.id,3,accounts),0);
+ await assert.rejects(beginGeneration(user.id,'ranking',3,accounts),/budget/);
 });
 
 test('pinned DNS supports Node dual-stack lookup without resolving the host again',()=>{
