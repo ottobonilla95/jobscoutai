@@ -60,11 +60,16 @@ npm run worker:once -- --user <account-id>  # Run one account immediately
 npm run worker        # Check whether a search is due, then exit
 npm run typecheck
 npm test
+npm run test:acceptance # isolated search → classify → verify → daily-feed rehearsal
 npm run build
 npm start
 npm run backup
 npm run check:ai       # Small paid API check using synthetic data
 ```
+
+`test:acceptance` uses an in-memory PostgreSQL database and fixed source/model responses. It does not read `.env`, use the production database, call an AI provider, or send notifications. Run it after changing the worker, source adapters, application verification, retention, or feed selection. It proves the local pipeline and a rejection case; a separate live run is still needed to check external sources and the real model before declaring the daily feed reliable.
+
+For one real posting, run `npm run rehearse:local -- --user <account-id> --board https://jobs.ashbyhq.com/clickhouse --title 'Langfuse - Senior Product Engineer'`. This reads the account's current profile from `DATABASE_URL`, then closes that connection; all search records and evaluations are written only to an in-memory PostgreSQL database. It fetches the live board, performs one ranking generation (with provider retries if needed), verifies the application route, and sends no email. Use `--profile-json <file>` instead of `--user <account-id>` to avoid reading any remote database. This targeted rehearsal checks one posting; it does not establish that a broad scheduled search will find every suitable job.
 
 ## Vercel + DigitalOcean deployment
 

@@ -14,6 +14,8 @@
     "worker:once": "npm run worker -- --force",
     "worker:watch": "npm run worker -- --watch",
     "test": "node --import tsx --test tests/*.test.ts",
+    "test:acceptance": "node --import tsx --test tests/local-acceptance.test.ts",
+    "rehearse:local": "node --env-file-if-exists=.env --import tsx scripts/rehearse-local.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p apps/web/tsconfig.json",
     "setup": "node scripts/setup.mjs",
     "backup": "node --env-file-if-exists=.env --import tsx scripts/backup.ts",
