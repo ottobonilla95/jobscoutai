@@ -59,8 +59,11 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
   if(profile.researchEnabled&&generationBudget===0)research.stopReason='daily_budget';
   const evaluationLimit=Math.max(0,Math.min(profile.maxJobsPerRun,profile.dailyEvaluationLimit-await store.evaluatedToday(),generationBudget));
   const needsResearchReview=(job:typeof existingJobs[number])=>Boolean(job.assessment&&job.researchTask?.status==='completed'&&job.research?.profileVersion===version&&job.research.generationIds.length&&job.research.generationIds.at(-1)!==job.assessment.researchGenerationId);
-  const researchReserve=profile.researchEnabled?Math.min(4,evaluationLimit,existingJobs.filter(j=>needsResearchReview(j)||promisingResearch(j,profile,version)).length):0;
+  const pendingCount=(await store.pending(version,30,profile)).length;
+  const researchCandidates=existingJobs.filter(j=>needsResearchReview(j)||promisingResearch(j,profile,version)).length;
+  const researchReserve=profile.researchEnabled?Math.min(pendingCount>=evaluationLimit?1:4,pendingCount?Math.max(0,evaluationLimit-1):evaluationLimit,researchCandidates):0;
   const discoveryEvaluationLimit=evaluationLimit-researchReserve;
+  const backlogOnly=pendingCount>0&&generationBudget<=2;
   let searchProfile=profile,plan:AdaptivePlan|null=null;
   const heartbeat=setInterval(()=>{void store.heartbeat(id).catch(()=>console.error('Worker heartbeat failed.'));},30000);
   const current=async()=> (await store.profile()).version===version;
@@ -115,9 +118,13 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
   try{
     if(profile.cvText.length<100)throw new Error('Add your CV in Search profile before running a search.');
     if(!integrations().ai)throw new Error('Add OPENAI_API_KEY on the server to enable matching.');
+    if(backlogOnly){
+      await evaluateCandidates(discoveryEvaluationLimit);
+      if(report.stopReason==='round_limit')report.stopReason='evaluation_budget';
+    }
     // Seedless company discovery must run before collection, not after LinkedIn
     // has spent the request budget. Only the opted-in source enables web tools.
-    if(profile.sources.includes('companies')&&!profile.companyBoards.length&&!state.boards.length&&dependencies.plan&&discoveryEvaluationLimit>0){
+    if(!backlogOnly&&profile.sources.includes('companies')&&!profile.companyBoards.length&&!state.boards.length&&dependencies.plan&&discoveryEvaluationLimit>0){
       try{
         plan=await dependencies.plan({profile,report,state,store,deadline:session.deadline,feedback:[]});counts.inputTokens+=plan.inputTokens;counts.outputTokens+=plan.outputTokens;
         if(plan.boards.length&&await current()){
@@ -126,7 +133,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
         }
       }catch(error){if(providerBalanceExhausted(error))aiUnavailable=true;errors.push(error instanceof AIBudgetError?error.message:'Company discovery was unavailable; other selected sources will still run.');}
     }
-    for(let round=0;round<3;round++){
+    for(let round=0;round<3&&!backlogOnly;round++){
       if(aiUnavailable){report.stopReason='evaluation_budget';break;}
       if(!await current()){report.stopReason='profile_changed';break;}
       if(Date.now()>=session.deadline){report.stopReason='time_budget';break;}
@@ -226,7 +233,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     if(['discovery_time_budget','request_budget','no_untried_queries','sources_unavailable','planner_unavailable','round_limit'].includes(report.stopReason)&&counts.evaluated<discoveryEvaluationLimit&&Date.now()<session.deadline&&await current()){
       await evaluateCandidates(discoveryEvaluationLimit-counts.evaluated);
     }
-    if(dependencies.investigate&&profile.researchEnabled&&!aiUnavailable&&generationBudget>0&&await current()){
+    if(!backlogOnly&&dependencies.investigate&&profile.researchEnabled&&!aiUnavailable&&generationBudget>0&&await current()){
       const tasks=new ResearchTasks(store),eligible=(await store.jobs()).filter(j=>!descriptionBlocked.has(j.sourceKey||'linkedin')&&dueForInvestigation(j,profile,version)).sort((a,b)=>Number(Boolean(b.researchRequested))-Number(Boolean(a.researchRequested))||Number(promisingResearch(b,profile,version))-Number(promisingResearch(a,profile,version))||(b.assessment?.score||0)-(a.assessment?.score||0));
       const readiness=await Promise.all(eligible.map(j=>tasks.ready(j,version)));const candidates=eligible.filter((_,i)=>readiness[i]).slice(0,4);if(eligible.filter((_,i)=>readiness[i]).length>4)research.stopReason='opportunity_limit';
       for(const job of candidates){
@@ -241,7 +248,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     }
     // Research is not the final verdict. Reassess the exact vacancy using its
     // checked role excerpts; company facts cannot establish role conditions.
-    if(profile.researchEnabled&&!aiUnavailable&&generationBudget>0&&await current())for(const job of (await store.jobs()).filter(needsResearchReview)){
+    if(!backlogOnly&&profile.researchEnabled&&!aiUnavailable&&generationBudget>0&&await current())for(const job of (await store.jobs()).filter(needsResearchReview)){
       if(Date.now()>=session.deadline)break;
       if(!await current())break;
       try{
