@@ -8,9 +8,14 @@ export function qualifiedOpportunity(job:Job, profile:Profile, version:number) {
 
 /** The daily feed contains decisions the user can act on now. */
 export function readyOpportunity(job:Job,profile:Profile,version:number){
+ const evaluation=job.assessment?.evaluation,verification=job.verification;
+ const checkedAt=Date.parse(verification?.checkedAt||'');
  return qualifiedOpportunity(job,profile,version)&&job.assessment?.eligibility==='eligible'&&
-   job.assessment.evaluation?.decision==='apply'&&recommendation(job)==='apply'&&
-   job.verification?.status==='open'&&Boolean(job.verification.applicationUrl);
+   (evaluation?.decision==='apply'||evaluation?.decision==='apply_verify')&&
+   evaluation.gates.every(gate=>gate.action==='allow')&&
+   ['apply','apply_verify'].includes(recommendation(job))&&
+   verification?.status==='open'&&Boolean(verification.applicationUrl)&&
+   Number.isFinite(checkedAt)&&Date.now()-checkedAt<=14*86400000;
 }
 
 export function promisingResearch(job:Job, profile:Profile, version:number) {

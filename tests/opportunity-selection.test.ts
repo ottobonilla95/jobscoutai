@@ -29,6 +29,14 @@ test('daily feed includes only current checked application routes and puts new a
  for(const job of [unverified,stale,uncertain,research])assert.equal(readyOpportunity(job,defaultProfile,1),false);
  assert.equal(readyOpportunity(match,defaultProfile,1),true);
 });
+test('a verified eligible role with only non-gating diligence is ready to review',()=>{
+ const diligence={...match,assessment:{...match.assessment!,evaluation:{...evaluation,decision:'apply_verify' as const}}};
+ assert.equal(readyOpportunity(diligence,defaultProfile,1),true);
+ assert.equal(readyOpportunity({...diligence,verification:{...match.verification!,checkedAt:'invalid'}},defaultProfile,1),false);
+ assert.equal(readyOpportunity({...diligence,assessment:{...diligence.assessment,eligibility:'uncertain' as const}},defaultProfile,1),false);
+ const gate={...diligence,assessment:{...diligence.assessment,evaluation:{...evaluation,decision:'apply_verify' as const,gates:[{id:'pay',label:'Pay',result:'unknown' as const,evidence:null,reason:'Not stated.',action:'research' as const}]}}};
+ assert.equal(readyOpportunity(gate,defaultProfile,1),false);
+});
 test('research needs a current promising assessment and a question, and remains separate from matches',()=>{
   const research={...match,assessment:{...match.assessment!,eligibility:'uncertain' as const,concerns:['Does this role allow working from the selected country?']}};
   assert.equal(promisingResearch(research,defaultProfile,1),false); // apply + verify is still a qualified match
