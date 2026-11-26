@@ -6,7 +6,8 @@ import type {LookupAddress} from 'node:dns';
 import { load } from 'cheerio';
 import type { Verification,JobListing } from './profile';
 import {parseBoard} from './source-settings';
-import {loadCompanyBoard} from './company-board';
+import {ashbySchema,loadCompanyBoard} from './company-board';
+import {publicData} from './source-http';
 
 export function publicAddress(address:string):boolean {
  if(isIP(address)===4){const [a,b]=address.split('.').map(Number);return !(a===0||a===10||a===127||a>=224||a===169&&b===254||a===172&&b>=16&&b<=31||a===192&&[0,168].includes(b)||a===100&&b>=64&&b<=127||a===198&&[18,19,51].includes(b)||a===203&&b===0);}
@@ -49,8 +50,31 @@ export function inspectPage(html:string,url:string,status:number):Pick<Verificat
  return {status:'unknown' as const,applicationUrl};
 }
 export type ListingVerification=Verification&{replacement?:JobListing};
-type VerifyOptions={job?:Pick<JobListing,'title'|'location'>;readBoard?:typeof loadCompanyBoard;deadline?:number};
+type VerifyOptions={job?:Pick<JobListing,'title'|'location'>;readBoard?:typeof loadCompanyBoard;readAshbyBoard?:(url:string)=>Promise<unknown>;deadline?:number};
 const identityText=(text:string)=>text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+async function verifyAshbyListing(url:string,read:typeof publicHtml,options:VerifyOptions,checkedAt:string):Promise<ListingVerification|null>{
+ if(read!==publicHtml&&!options.readAshbyBoard)return null;
+ const original=safeUrl(url),parts=original.pathname.split('/').filter(Boolean);
+ if(original.hostname!=='jobs.ashbyhq.com'||parts.length!==2)return null;
+ const board=parseBoard(`${original.origin}/${parts[0]}`);if(!board)return null;
+ try{
+  const endpoint=`https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(board.slug)}?includeCompensation=true`;
+  const raw=await (options.readAshbyBoard?options.readAshbyBoard(endpoint):publicData(endpoint,'Ashby application check').then(JSON.parse));
+  const jobs=ashbySchema.parse(raw).jobs.filter(job=>{
+   const posted=safeUrl(job.jobUrl),segments=posted.pathname.split('/').filter(Boolean);
+   return posted.hostname==='jobs.ashbyhq.com'&&segments.length===2&&segments[0].toLowerCase()===parts[0].toLowerCase()&&segments[1]===parts[1];
+  });
+  if(jobs.length!==1)return {status:'unknown',applicationUrl:null,checkedAt,note:'The official Ashby board did not confirm this exact posting.'};
+  const job=jobs[0];
+  if(options.job&&identityText(job.title)!==identityText(options.job.title))return {status:'unknown',applicationUrl:null,checkedAt,note:'The official posting title changed; its fit needs reassessment.'};
+  if(!job.applyUrl)return {status:'unknown',applicationUrl:null,checkedAt,note:'The official posting has no application URL.'};
+  const posting=safeUrl(job.jobUrl),application=safeUrl(job.applyUrl);
+  if(application.origin!==posting.origin||application.pathname!==`${posting.pathname.replace(/\/$/,'')}/application`)return {status:'unknown',applicationUrl:null,checkedAt,note:'The official application route could not be validated.'};
+  const page=await read(application.href);
+  if(page.status!==200||page.url!==application.href)return {status:'unknown',applicationUrl:null,checkedAt,note:'The official application route did not open.'};
+  return {status:'open',applicationUrl:application.href,checkedAt,note:'The official Ashby board lists this posting and its application route is reachable. No application was submitted.'};
+ }catch{return null;}
+}
 async function recoverListing(url:string,read:typeof publicHtml,options:VerifyOptions,checkedAt:string):Promise<ListingVerification|null>{
  const original=safeUrl(url),slug=original.pathname.split('/').filter(Boolean)[0];
  const board=parseBoard(`${original.origin}/${slug}`);
@@ -80,6 +104,7 @@ async function recoverListing(url:string,read:typeof publicHtml,options:VerifyOp
 export async function verifyListing(url:string,read=publicHtml,options:VerifyOptions={}):Promise<ListingVerification>{
  const checkedAt=new Date().toISOString();
  try{
+  const ashby=await verifyAshbyListing(url,read,options,checkedAt);if(ashby)return ashby;
   const first=await read(url);const found=inspectPage(first.html,first.url,first.status);
   if(found.status==='closed'){const recovered=await recoverListing(url,read,options,checkedAt);if(recovered)return recovered;}
   if(found.status==='closed')return {...found,checkedAt,note:'The listing reports that it is closed or unavailable.'};

@@ -6,9 +6,9 @@ import {SourceError} from './source-error';
 import {publicData} from './source-http';
 import {plainText} from './source-html';
 
-const ashbySchema=z.object({jobs:z.array(z.object({
+export const ashbySchema=z.object({jobs:z.array(z.object({
   id:z.string().optional(),title:z.string(),location:z.string(),jobUrl:z.url(),isListed:z.boolean().optional(),
-  isRemote:z.boolean().optional(),descriptionPlain:z.string().optional(),descriptionHtml:z.string().optional(),
+  isRemote:z.boolean().nullish(),applyUrl:z.url().nullish(),descriptionPlain:z.string().optional(),descriptionHtml:z.string().optional(),
   publishedAt:z.string().optional(),compensation:z.object({compensationTierSummary:z.string().nullish()}).nullish(),
   secondaryLocations:z.array(z.object({location:z.string()})).optional(),
 }))});

@@ -41,6 +41,7 @@ test('company feeds exclude unlisted roles, preserve compensation, and namespace
  const jobs=parseCompanyJobs({jobs:[job,{...job,id:'hidden',isListed:false}]},board);
  assert.equal(jobs.length,1);assert.equal(jobs[0].id,'ashby:example:abc');assert.match(jobs[0].description!,/1% equity/);
  assert.equal(parseCompanyJobs({jobs:[{...job,compensation:{compensationTierSummary:null}}]},board).length,1);
+ assert.equal(parseCompanyJobs({jobs:[{...job,isRemote:null,applyUrl:'https://jobs.ashbyhq.com/example/abc/application'}]},board).length,1);
  const gh=parseCompanyJobs({jobs:[{id:123,title:'Engineer',location:{name:'Remote'},absolute_url:'https://job-boards.greenhouse.io/example/jobs/123',content:'&lt;p&gt;Build products &amp;amp; own delivery.&lt;/p&gt;'}]},parseBoard('https://boards.greenhouse.io/example')!);
  assert.match(gh[0].description!,/Build products & own delivery/);assert.doesNotMatch(gh[0].description!,/<p>/);
 });

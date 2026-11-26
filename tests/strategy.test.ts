@@ -62,6 +62,17 @@ test('application verification does not treat a newsletter form or login challen
  assert.equal(inspectPage('<body>Verify you are human<form><input name="resume"/></form></body>',listing.url,200).status,'unknown');
  const urls:string[]=[];const result=await verifyListing(listing.url,async url=>{urls.push(url);return {url,status:200,html:urls.length===1?'<body><a href="https://apply.example/form">Apply now</a></body>':'<body><form><input type="file" name="resume"/></form></body>'};});assert.equal(result.status,'open');assert.equal(urls.length,2);
 });
+test('official Ashby posting API verifies its reachable application route',async()=>{
+ const url='https://jobs.ashbyhq.com/example/abc',application='https://jobs.ashbyhq.com/example/abc/application';
+ const posting={id:'abc',title:'Founding Engineer',location:'London',jobUrl:url,applyUrl:application,isRemote:null,descriptionPlain:'Build products.'};
+ const read=async(requested:string)=>({url:requested,status:200,html:'<body><div id="root"></div></body>'});
+ const check=(value:typeof posting)=>verifyListing(url,read,{job:{title:'Founding Engineer',location:'London'},readAshbyBoard:async endpoint=>{
+  assert.equal(endpoint,'https://api.ashbyhq.com/posting-api/job-board/example?includeCompensation=true');return {jobs:[value]};
+ }});
+ const open=await check(posting);assert.equal(open.status,'open');assert.equal(open.applicationUrl,application);
+ assert.equal((await check({...posting,title:'Different role'})).status,'unknown');
+ assert.equal((await check({...posting,applyUrl:'https://other.example/application'})).status,'unknown');
+});
 test('application checks reject private, link-local and credential-bearing destinations',()=>{
  for(const ip of ['127.0.0.1','10.0.0.1','169.254.169.254','172.16.0.1','192.168.1.1','100.64.0.1','::1','::ffff:127.0.0.1','fd00::1','2001:db8::1'])assert.equal(publicAddress(ip),false,ip);
  assert.equal(publicAddress('8.8.8.8'),true);for(const url of ['http://example.com','https://user:pass@example.com','https://localhost','https://example.com:8443'])assert.throws(()=>safeUrl(url));
