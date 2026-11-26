@@ -45,6 +45,21 @@ test('old automatic research leads expire while saved leads remain',async t=>{
  assert.equal((await store.cleanupJobs(version,now)).removed,1);
  assert.equal(await store.job('expired'),null);assert.ok(await store.job('saved'));
 });
+test('automatic research queue keeps the newest bounded set',async t=>{
+ const store=await storeFixture(t),{profile,version}=await store.profile(),now=new Date();
+ const strategy={...profile.strategy,requirements:[{id:'hours',label:'Hours',instruction:'Verify the advertised working hours.',unknown:'research' as const}]};
+ for(let i=0;i<profile.maxJobsPerRun+2;i++){
+  const id=String(i);await store.upsert(listing(id));
+  const evaluation=evaluateStrategy(strategy,{components:profile.strategy.groups.flatMap(g=>g.criteria.map(c=>({id:c.id,score:5,reason:'Relevant responsibilities',evidence:listing(id).description!}))),requirements:[],countries:[]},listing(id).description!,'London');
+  await store.assess(id,{...assessment,concerns:['What hours are required?'],evaluation},version);
+  await store.db.prepare('UPDATE jobs SET first_seen=? WHERE user_id=? AND id=?').run(stamp(now,-i*1000),store.userId,id);
+ }
+ assert.equal((await store.cleanupJobs(version,now)).removed,2);
+ assert.equal((await store.jobs()).length,profile.maxJobsPerRun);
+ assert.equal(await store.job(String(profile.maxJobsPerRun+1)),null);
+ const row=await store.db.prepare('SELECT reason FROM job_dedup WHERE user_id=? AND job_id=?').get(store.userId,String(profile.maxJobsPerRun+1));
+ assert.equal(row.reason,'research_overflow');
+});
 
 test('explicit saves, archives, tracking, feedback, research requests, duplicate reviews and delivery history survive cleanup',async t=>{
   const store=await storeFixture(t),{version}=await store.profile();

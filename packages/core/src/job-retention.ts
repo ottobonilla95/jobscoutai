@@ -50,16 +50,21 @@ export async function pruneJobs(store:Store,profile:Profile,version:number,now:D
     ...await store.reservedJobs(),
     ...(await store.db.prepare('SELECT DISTINCT job_id FROM opportunity_feedback WHERE user_id=?').all(store.userId)).map(r=>String(r.job_id)),
   ]);
-  const jobs=await store.jobs(),pending:Job[]=[],discard:Array<{job:Job;reason:string;retry:boolean}>=[];
+  const jobs=await store.jobs(),pending:Job[]=[],research:Job[]=[],discard:Array<{job:Job;reason:string;retry:boolean}>=[];
   for(const job of jobs){
     if(hasUserHistory(job)||protectedIds.has(job.id)||manuallyDistinct.has(job.id))continue;
     if(job.duplicateOf||job.verification?.status==='closed'){
       discard.push({job,reason:job.duplicateOf?'duplicate':'closed',retry:false});
     }else if(job.assessment&&job.evaluatedVersion===version){
-      if(promisingResearch(job,profile,version)&&now.getTime()-Date.parse(job.firstSeen)>=researchLifetimeMs)discard.push({job,reason:'research_expired',retry:false});
-      else if(!qualifiedOpportunity(job,profile,version)&&!promisingResearch(job,profile,version))discard.push({job,reason:'not_qualified',retry:false});
+      if(promisingResearch(job,profile,version)){
+        if(now.getTime()-Date.parse(job.firstSeen)>=researchLifetimeMs)discard.push({job,reason:'research_expired',retry:false});
+        else research.push(job);
+      }else if(!qualifiedOpportunity(job,profile,version))discard.push({job,reason:'not_qualified',retry:false});
     }else pending.push(job);
   }
+  // Bound unattended research to the newest candidates the next runs can finish.
+  research.sort((a,b)=>Date.parse(b.firstSeen)-Date.parse(a.firstSeen)||(b.assessment?.score??0)-(a.assessment?.score??0));
+  for(const job of research.slice(profile.maxJobsPerRun))discard.push({job,reason:'research_overflow',retry:false});
   // Expiry uses first_seen: repeatedly rediscovering a broken listing cannot keep it forever.
   pending.sort((a,b)=>Date.parse(b.firstSeen)-Date.parse(a.firstSeen)||a.id.localeCompare(b.id));
   for(const job of pending){
