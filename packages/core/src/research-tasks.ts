@@ -9,7 +9,8 @@ export class ResearchTasks{
   const task=await this.get(job.id,version);if(!task)return true;
   if(task.status==='running'&&task.expiresAt!>now)return false;
   if(task.requestId!==(job.researchRequestId||null))return true;
-  if(task.status==='failed'||task.status==='cancelled')return false;
+  if(task.status==='failed')return Date.parse(task.updatedAt)+12*3600000<=now;
+  if(task.status==='cancelled')return false;
   return task.status!=='waiting'||Date.parse(task.nextAttemptAt!)<=now;
  }
  async claim(job:Job,version:number,now=Date.now()){
@@ -19,7 +20,8 @@ export class ResearchTasks{
    const previous=await tasks.get(job.id,version,true);if(!await tasks.ready(live,version,now))return null;
    const requestId=live.researchRequestId||null,newRequest=previous&&previous.requestId!==requestId;
    const fresh=!previous||previous.status==='completed'||previous.status==='cancelled';
-   const attempts=fresh||newRequest?0:previous.attempts;if(attempts>=3){previous!.status='failed';previous!.lease=null;previous!.expiresAt=null;previous!.nextAttemptAt=null;previous!.updatedAt=new Date(now).toISOString();await tasks.write(previous!);await scoped.clearResearchRequest(job.id,previous!.requestId);return null;}
+   const retryFailed=previous?.status==='failed';
+   const attempts=fresh||newRequest||retryFailed?0:previous.attempts;if(attempts>=3){previous!.status='failed';previous!.lease=null;previous!.expiresAt=null;previous!.nextAttemptAt=null;previous!.updatedAt=new Date(now).toISOString();await tasks.write(previous!);await scoped.clearResearchRequest(job.id,previous!.requestId);return null;}
    const task=researchTaskSchema.parse({jobId:job.id,profileVersion:version,requestId,status:'running',attempts:attempts+1,lease:randomUUID(),expiresAt:now+180000,nextAttemptAt:null,updatedAt:new Date(now).toISOString(),plan:fresh?null:previous.plan,pages:fresh?[]:previous.pages,lastError:null});
    await db.prepare('INSERT INTO research_tasks(user_id,job_id,profile_version,value) VALUES(?,?,?,?) ON CONFLICT(user_id,job_id,profile_version) DO UPDATE SET value=excluded.value').run(scoped.userId,job.id,version,JSON.stringify(task));return task;
   });

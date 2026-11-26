@@ -1,7 +1,7 @@
 import {Output,ToolLoopAgent,stepCountIs,type LanguageModel,type ToolSet} from 'ai';
 import {openai} from '@ai-sdk/openai';import {z} from 'zod';import {isIP} from 'node:net';
 import {aiModel} from './ai-model';import {integrations} from './config';import {aiLanguageInstruction} from './i18n/locale';import {translate} from './i18n';
-import {Accounts} from './accounts';import {AIBudgetError,beginGeneration,finishGeneration} from './ai-usage';
+import {Accounts} from './accounts';import {AIBudgetError,beginGeneration,finishGeneration,providerBalanceExhausted} from './ai-usage';
 import {answeredClarifications} from './goal-clarifications';import {sourceEnabled} from './source-settings';
 import {publicHtml,safeUrl,publicAddress} from './verification';import {plainText} from './source-html';import {supported} from './strategy';
 import {ResearchMemory,listingDossier,researchId,evidenceRecord,mergeEvidence} from './research-memory';
@@ -114,7 +114,7 @@ export async function investigateOpportunity(store:Store,jobId:string,options:In
   await finishGeneration(plan.generationId,'completed',plan.inputTokens,plan.outputTokens,accounts,{kind:'goal-investigation',profileVersion:version,jobId:job.id,...checked,taskStatus:task.status});
   return {status:retry?'retry':'completed',resumed,retryAt:task.nextAttemptAt,failed:task.status==='failed',generationId:plan.generationId,inputTokens,outputTokens,verifiedEvidence:Math.max(0,checked.verifiedEvidence-previouslyChecked),answered:checked.answered,unresolved:checked.unresolved};
  }catch(error){
-  await tasks.failure(task,error instanceof AIBudgetError);
+  await tasks.failure(task,error instanceof AIBudgetError||providerBalanceExhausted(error));
   if(id&&!generationRecorded)await finishGeneration(id,'failed',inputTokens,outputTokens,accounts);
   throw error;
  }

@@ -1,8 +1,14 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {MockLanguageModelV4} from 'ai/test';
+import {providerBalanceExhausted} from '../packages/core/src/ai-usage';
 import {storeFixture,accountsFixture} from './database-fixture';import {defaultProfile,type Assessment,type Job} from '../packages/core/src/profile';import {ResearchTasks} from '../packages/core/src/research-tasks';import {investigateOpportunity,validatedInvestigation} from '../packages/core/src/investigator';import {listingDossier} from '../packages/core/src/research-memory';import {beginGeneration} from '../packages/core/src/ai-usage';import {Accounts} from '../packages/core/src/accounts';import type {Store} from '../packages/core/src/store';import type {InvestigationOutput} from '../packages/core/src/research-task-schema';
 const companyUrl='https://example.test/about',quote='Example Company serves over two thousand customers.';
 const job:Job={id:'resume',title:'Engineer',company:'Example Company',location:'Spain',url:'https://example.test/job',postedAt:null,description:'The role includes 20 hours per week and no on-call duties, working with a small product team.',firstSeen:'2026-01-01T00:00:00.000Z',lastSeen:'2026-01-01T00:00:00.000Z',assessment:null,status:'new',notifiedAt:null,evaluatedVersion:1};
 const assessment:Assessment={score:70,eligibility:'uncertain',summary:'Hours and customers need investigation.',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null};
+test('provider credit errors are recognized without misclassifying network errors',()=>{
+ assert.equal(providerBalanceExhausted({responseBody:'{"error":{"code":"credit_balance_exhausted"}}'}),true);
+ assert.equal(providerBalanceExhausted({data:{error:{code:'insufficient_quota'}}}),true);
+ assert.equal(providerBalanceExhausted(new Error('Research page unavailable')),false);
+});
 const output:InvestigationOutput={questions:[{question:'What weekly hours does this specific role advertise?',topic:'Hours',scope:'job',claims:[{url:job.url,quote:'20 hours per week and no on-call duties',scope:'job',stance:'supports'}]},{question:'What customers does the company serve?',topic:'Customers',scope:'company',claims:[{url:companyUrl,quote,scope:'company',stance:'supports'}]}]};
 function model(onCall:()=>void=()=>{},value:InvestigationOutput=output){return new MockLanguageModelV4({doGenerate:async()=>{onCall();return {content:[{type:'text' as const,text:JSON.stringify(value)},{type:'source' as const,sourceType:'url' as const,id:'company',url:companyUrl,title:'Company information'}],finishReason:{unified:'stop' as const,raw:undefined},usage:{inputTokens:{total:12,noCache:12,cacheRead:undefined,cacheWrite:undefined},outputTokens:{total:22,text:22,reasoning:undefined}},warnings:[]};}});}
 async function retryNow(store:Store,version=1){const tasks=new ResearchTasks(store),task=(await tasks.get(job.id,version))!;task.nextAttemptAt='2020-01-01T00:00:00.000Z';await store.db.prepare('UPDATE research_tasks SET value=? WHERE user_id=? AND job_id=? AND profile_version=?').run(JSON.stringify(task),store.userId,job.id,version);}
@@ -18,6 +24,22 @@ test('failed sources stop after three attempts and manual retry preserves checke
  for(let attempt=1;attempt<=3;attempt++){const result=await investigateOpportunity(store,job.id,{model:mock,read});assert.equal(result.failed,attempt===3);if(attempt<3)await retryNow(store);}
  const saved=(await store.job(job.id))!;assert.equal(saved.researchTask?.status,'failed');assert.equal(saved.researchRequested,false);assert.equal(await new ResearchTasks(store).ready(saved,1),false);assert.equal(models,1);
  await store.requestResearch(job.id);const result=await investigateOpportunity(store,job.id,{model:mock,read:async url=>({url,status:200,html:`<p>${job.description} ${quote}</p>`})});assert.equal(result.status,'completed');assert.equal(models,1);assert.equal(result.resumed,true);
+});
+test('exhausted research retries automatically after a cooldown without losing its plan',async t=>{
+ const store=await setup(t),tasks=new ResearchTasks(store);
+ for(let attempt=0;attempt<3;attempt++){
+  const task=(await tasks.claim((await store.job(job.id))!,1))!;
+  assert.ok(task);
+  await tasks.failure(task);
+  if(attempt<2)await retryNow(store);
+ }
+ const failed=(await tasks.get(job.id,1))!;
+ assert.equal(failed.status,'failed');
+ assert.equal(await tasks.ready((await store.job(job.id))!,1,Date.parse(failed.updatedAt)+12*3600000-1),false);
+ const later=Date.parse(failed.updatedAt)+12*3600000+1;
+ assert.equal(await tasks.ready((await store.job(job.id))!,1,later),true);
+ const retried=(await tasks.claim((await store.job(job.id))!,1,later))!;
+ assert.equal(retried.status,'running');assert.equal(retried.attempts,1);
 });
 test('expired leases can be reclaimed but old workers cannot publish checkpoints, and newer requests survive completion',async t=>{
  const store=await setup(t);await store.requestResearch(job.id);const live=(await store.job(job.id))!,tasks=new ResearchTasks(store),old=(await tasks.claim(live,1))!;assert.equal(await tasks.claim(live,1),null);

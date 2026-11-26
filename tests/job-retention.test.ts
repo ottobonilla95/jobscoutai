@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {accountsFixture,storeFixture} from './database-fixture';
 import {Store} from '../packages/core/src/store';
 import {defaultProfile,type Assessment,type JobListing} from '../packages/core/src/profile';
-import {dedupLifetimeMs,pendingLifetimeMs,pendingLimit,pendingRetryMs,listingHashes} from '../packages/core/src/job-retention';
+import {dedupLifetimeMs,pendingLifetimeMs,pendingLimit,pendingRetryMs,researchLifetimeMs,listingHashes} from '../packages/core/src/job-retention';
 import {runSearch} from '../packages/core/src/worker';
 import {evaluateStrategy} from '../packages/core/src/strategy';
 
@@ -31,6 +31,19 @@ test('cleanup removes rejected full listings and their research, retaining quali
   const records=await store.db.prepare('SELECT * FROM job_dedup WHERE user_id=?').all(store.userId);
   assert.equal(records.length,4);assert.equal(records.find(r=>r.job_id==='weak')?.reason,'not_qualified');
   assert.equal('description' in records[0],false);assert.equal('assessment' in records[0],false);assert.equal('title' in records[0],false);
+});
+test('old automatic research leads expire while saved leads remain',async t=>{
+ const store=await storeFixture(t),{profile,version}=await store.profile(),now=new Date();
+ const strategy={...profile.strategy,requirements:[{id:'hours',label:'Hours',instruction:'Verify the advertised working hours.',unknown:'research' as const}]};
+ for(const id of ['expired','saved']){
+  await store.upsert(listing(id));
+  const evaluation=evaluateStrategy(strategy,{components:profile.strategy.groups.flatMap(g=>g.criteria.map(c=>({id:c.id,score:5,reason:'Relevant responsibilities',evidence:listing(id).description!}))),requirements:[],countries:[]},listing(id).description!,'London');
+  await store.assess(id,{...assessment,concerns:['What hours are required?'],evaluation},version);
+  await store.db.prepare('UPDATE jobs SET first_seen=? WHERE user_id=? AND id=?').run(stamp(now,-researchLifetimeMs-1),store.userId,id);
+ }
+ await store.setStatus('saved','saved');
+ assert.equal((await store.cleanupJobs(version,now)).removed,1);
+ assert.equal(await store.job('expired'),null);assert.ok(await store.job('saved'));
 });
 
 test('explicit saves, archives, tracking, feedback, research requests, duplicate reviews and delivery history survive cleanup',async t=>{

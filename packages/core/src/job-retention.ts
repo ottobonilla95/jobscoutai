@@ -8,6 +8,7 @@ const day=86400000;
 export const pendingLifetimeMs=2*day;
 export const dedupLifetimeMs=90*day;
 export const pendingRetryMs=day;
+export const researchLifetimeMs=7*day;
 export const pendingLimit=(profile:Profile)=>profile.maxJobsPerRun*2;
 export type CleanupResult={removed:number;rejected:number;pendingRemoved:number;pendingKept:number;skipped:boolean};
 const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
@@ -55,7 +56,8 @@ export async function pruneJobs(store:Store,profile:Profile,version:number,now:D
     if(job.duplicateOf||job.verification?.status==='closed'){
       discard.push({job,reason:job.duplicateOf?'duplicate':'closed',retry:false});
     }else if(job.assessment&&job.evaluatedVersion===version){
-      if(!qualifiedOpportunity(job,profile,version)&&!promisingResearch(job,profile,version))discard.push({job,reason:'not_qualified',retry:false});
+      if(promisingResearch(job,profile,version)&&now.getTime()-Date.parse(job.firstSeen)>=researchLifetimeMs)discard.push({job,reason:'research_expired',retry:false});
+      else if(!qualifiedOpportunity(job,profile,version)&&!promisingResearch(job,profile,version))discard.push({job,reason:'not_qualified',retry:false});
     }else pending.push(job);
   }
   // Expiry uses first_seen: repeatedly rediscovering a broken listing cannot keep it forever.
