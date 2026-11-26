@@ -6,5 +6,5 @@ export async function POST(request:Request,context:{params:Promise<{id:string}>}
  const denied=await guard(request);if(denied)return denied;const account=(await currentAccount())!;
  if(!(await getAccounts().allow(`verify:${account.id}`,5,300000)))return localizedJson({error:'Please wait a few minutes before checking more links.'},{status:429});
  const {id}=await context.params;
- return withUserStore(async store=>{const job=(await store.job(id));if(!job)return localizedJson({error:'Job not found.'},{status:404});const verification=await verifyListing(job.url);(await store.verify(id,verification));return localizedJson({verification});});
+ return withUserStore(async store=>{const job=(await store.job(id));if(!job)return localizedJson({error:'Job not found.'},{status:404});const verification=await verifyListing(job.url,undefined,{job});(await store.verify(id,verification));return localizedJson({verification});});
 }

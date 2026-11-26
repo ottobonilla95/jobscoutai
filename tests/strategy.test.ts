@@ -73,6 +73,21 @@ test('official Ashby posting API verifies its reachable application route',async
  assert.equal((await check({...posting,title:'Different role'})).status,'unknown');
  assert.equal((await check({...posting,applyUrl:'https://other.example/application'})).status,'unknown');
 });
+test('a LinkedIn match uses the exact employer posting to verify its application form',async()=>{
+ const linkedIn='https://www.linkedin.com/jobs/view/1234567890/';
+ const url='https://jobs.ashbyhq.com/clickhouse/abc',application=`${url}/application`;
+ const description=Array.from({length:100},(_,i)=>`feature${i} customers product TypeScript delivery`).join(' ');
+ const posting={id:'abc',title:'Senior Product Engineer',location:'Germany · Italy · Remote',jobUrl:url,applyUrl:application,descriptionPlain:description};
+ const official={id:'ashby:clickhouse:abc',sourceKey:'ashby:clickhouse',title:posting.title,company:'clickhouse',location:posting.location,url,postedAt:null,description};
+ const job={...official,sourceKey:'linkedin',company:'ClickHouse',location:'Rome, Italy',url:linkedIn};
+ let boardReads=0,applicationReads=0;
+ const read=async(requested:string)=>{if(requested===application)applicationReads++;return {url:requested,status:200,html:'<body>Sign in to continue</body>'};};
+ const check=(candidate:typeof job)=>verifyListing(linkedIn,read,{job:candidate,readBoard:async board=>{boardReads++;assert.equal(board.url,'https://jobs.ashbyhq.com/clickhouse');return [official];},readAshbyBoard:async()=>({jobs:[posting]})});
+ const found=await check(job);assert.equal(found.status,'open');assert.equal(found.applicationUrl,application);assert.equal(boardReads,1);assert.equal(applicationReads,1);
+ assert.equal((await check({...job,description:'Completely different work and responsibilities. '.repeat(40)})).status,'unknown');
+ assert.equal((await check({...job,location:'Rome, Canada'})).status,'unknown');
+ assert.equal(applicationReads,1);
+});
 test('application checks reject private, link-local and credential-bearing destinations',()=>{
  for(const ip of ['127.0.0.1','10.0.0.1','169.254.169.254','172.16.0.1','192.168.1.1','100.64.0.1','::1','::ffff:127.0.0.1','fd00::1','2001:db8::1'])assert.equal(publicAddress(ip),false,ip);
  assert.equal(publicAddress('8.8.8.8'),true);for(const url of ['http://example.com','https://user:pass@example.com','https://localhost','https://example.com:8443'])assert.throws(()=>safeUrl(url));

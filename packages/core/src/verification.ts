@@ -50,8 +50,32 @@ export function inspectPage(html:string,url:string,status:number):Pick<Verificat
  return {status:'unknown' as const,applicationUrl};
 }
 export type ListingVerification=Verification&{replacement?:JobListing};
-type VerifyOptions={job?:Pick<JobListing,'title'|'location'>;readBoard?:typeof loadCompanyBoard;readAshbyBoard?:(url:string)=>Promise<unknown>;deadline?:number};
+type VerifyOptions={job?:Pick<JobListing,'title'|'location'> & Partial<Pick<JobListing,'company'|'description'|'sourceKey'>>;readBoard?:typeof loadCompanyBoard;readAshbyBoard?:(url:string)=>Promise<unknown>;deadline?:number};
 const identityText=(text:string)=>text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+async function verifyLinkedInOnEmployerBoard(url:string,read:typeof publicHtml,options:VerifyOptions,checkedAt:string):Promise<ListingVerification|null>{
+ const original=safeUrl(url),job=options.job;
+ if(original.hostname!=='www.linkedin.com'||!original.pathname.startsWith('/jobs/view/')||job?.sourceKey!=='linkedin'||!job.company||!job.description||Date.now()>=(options.deadline??Infinity))return null;
+ const slug=job.company.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+ if(slug.length<2||slug.length>50)return null;
+ const board=parseBoard(`https://jobs.ashbyhq.com/${slug}`);
+ if(!board)return null;
+ try{
+  const candidates=(await (options.readBoard||loadCompanyBoard)(board)).filter(candidate=>identityText(candidate.title)===identityText(job.title));
+  const location=identityText(job.location.split(',').at(-1)||'');
+  const words=(value:string)=>new Set(value.toLowerCase().match(/[a-z0-9]{4,}/g)||[]);
+  const originalWords=words(job.description);
+  const matches=candidates.filter(candidate=>{
+   if(!location||!identityText(candidate.location).includes(location))return false;
+   const candidateWords=words(candidate.description||'');
+   if(originalWords.size<80||candidateWords.size<80)return false;
+   return [...originalWords].filter(word=>candidateWords.has(word)).length/Math.min(originalWords.size,candidateWords.size)>=0.95;
+  });
+  if(matches.length!==1||Date.now()>=(options.deadline??Infinity))return null;
+  const official=await verifyAshbyListing(matches[0].url,read,{...options,job:matches[0]},checkedAt);
+  if(official?.status!=='open'||!official.applicationUrl)return null;
+  return {...official,note:'The exact title, location, and posting text match the employer Ashby board, and its application form is reachable. No application was submitted.'};
+ }catch{return null;}
+}
 async function verifyAshbyListing(url:string,read:typeof publicHtml,options:VerifyOptions,checkedAt:string):Promise<ListingVerification|null>{
  if(read!==publicHtml&&!options.readAshbyBoard)return null;
  const original=safeUrl(url),parts=original.pathname.split('/').filter(Boolean);
@@ -110,6 +134,7 @@ export async function verifyListing(url:string,read=publicHtml,options:VerifyOpt
   if(found.status==='closed')return {...found,checkedAt,note:'The listing reports that it is closed or unavailable.'};
   if(found.status==='open')return {...found,checkedAt,note:'A reachable application form was found. No application was submitted.'};
   if(found.applicationUrl&&found.applicationUrl!==first.url){const final=await read(found.applicationUrl);const result=inspectPage(final.html,final.url,final.status);return {status:result.status,applicationUrl:final.url,checkedAt,note:result.status==='open'?'The linked application form is reachable. No application was submitted.':'The linked page needs a manual application-route check.'};}
+  const employer=await verifyLinkedInOnEmployerBoard(url,read,options,checkedAt);if(employer)return employer;
   return {status:'unknown',applicationUrl:found.applicationUrl,checkedAt,note:'A working application form could not be confirmed. Check manually; login or JavaScript may be required.'};
  }catch{return {status:'unknown',applicationUrl:null,checkedAt,note:'The page could not be safely reached or verified. Check the original listing manually.'};}
 }
