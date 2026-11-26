@@ -42,13 +42,13 @@ test('a bounded employer board is checked before broad sources, rotating across 
  await searchSources({...defaultProfile,sources:['linkedin','companies'],discoveredCompanyBoards:boards},{
   linkedin:async(_profile,session)=>{called.push('linkedin');return searchQuery(session!,q,async()=>[job('priority')]);},
   yc:async()=>[],company:async (value,_profile,session)=>{called.push(value);return searchQuery(session!,{source:parseBoard(value)!.key,query:'*',location:'',page:0},async()=>[]);}},s);
- assert.deepEqual(called,[boards[0]]);
- const next=session();next.remaining=1;next.history.set(queryKey({source:parseBoard(boards[0])!.key,query:'*',location:'',page:0}),new Date().toISOString());
+ assert.deepEqual(called,[boards[19]]);
+ const next=session();next.remaining=1;next.history.set(queryKey({source:parseBoard(boards[19])!.key,query:'*',location:'',page:0}),new Date().toISOString());
  called.length=0;
  await searchSources({...defaultProfile,sources:['linkedin','companies'],discoveredCompanyBoards:boards},{
   linkedin:async(_profile,session)=>{called.push('linkedin');return searchQuery(session!,q,async()=>[job('priority')]);},
   yc:async()=>[],company:async (value,_profile,session)=>{called.push(value);return searchQuery(session!,{source:parseBoard(value)!.key,query:'*',location:'',page:0},async()=>[]);}},next);
- assert.deepEqual(called,[boards[1]]);
+ assert.deepEqual(called,[boards[18]]);
 });
 test('access challenges block the source for the whole run, retaining earlier successful results',async()=>{
  const s=session();await searchQuery(s,q,async()=>[job('2')]);
@@ -99,11 +99,11 @@ test('company feed cache can find an equivalent title without fetching the feed 
 test('weak and repeated results trigger new queries, stop at strong matches and leave the profile unchanged',async t=>{
  const store=await ready(t);await store.upsert(job('10'));const before=await store.profile();let rounds=0,plans=0,notifications=0;const searched:string[][]=[];
  const result=await runSearch({store,force:true,dependencies:{
-  search:async(p,s)=>{searched.push(p.titles);return searchQuery(s!,{...q,query:p.titles[0]},async()=>++rounds===1?[job('10'),job('11')]:[job('12'),job('13')]);},
+  search:async(p,s)=>{searched.push(p.titles);return searchQuery(s!,{...q,query:p.titles.at(-1)!},async()=>++rounds===1?[job('10'),job('11')]:[job('12'),job('13')]);},
   describe:async()=>description,rank:async j=>({assessment:{...assessment,score:j.id==='11'?40:90,concerns:j.id==='11'?['Schedule expectations unclear']:[]},inputTokens:5,outputTokens:6}),
   plan:async input=>{plans++;assert.equal(input.report.rounds[0].newCandidates,1);assert.ok(input.feedback?.some(j=>j.concerns.includes('Schedule expectations unclear')));assert.deepEqual(input.profile.titles,before.profile.titles);return plan();},notify:async()=>{notifications++;return 0;}
  }});
- assert.equal(result.status,'completed');assert.equal(plans,1);assert.deepEqual(searched,[['Software Engineer'],['Ingeniero de software']]);assert.deepEqual(await store.profile(),before);assert.equal(notifications,1);
+ assert.equal(result.status,'completed');assert.equal(plans,1);assert.deepEqual(searched,[['Software Engineer'],['Software Engineer','Ingeniero de software']]);assert.deepEqual(await store.profile(),before);assert.equal(notifications,1);
  const run=(await store.runs())[0];assert.equal(run.discovery?.stopReason,'sufficient_matches');assert.equal(run.discovery?.requests,2);assert.equal(run.discovery?.rounds.length,2);assert.equal(run.discovery?.rounds[1].strongCandidates,2);
 });
 test('canonical duplicates and ineligible jobs cannot satisfy the adaptive stopping condition',async t=>{

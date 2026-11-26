@@ -13,6 +13,7 @@ import { rankJob,checkedRoleEvidence } from './ranker';
 import { notifyMatches } from './notifications';
 import { type Store } from './store';
 import {planAdaptiveSearch,fallbackPage,type AdaptivePlan,type PlannerInput} from './adaptive-planner';
+import {discoveredBoardLimit} from './adaptive-search-schema';
 import {discoveryScope,freshDiscoveryState} from './discovery-state';
 import type {SearchDiscovery} from './adaptive-search-schema';
 import {queryKey,locationCoverage,type SearchSession} from './search-session';
@@ -248,12 +249,12 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       }
       if(!await current()){report.stopReason='profile_changed';break;}
       if(plan?.boards.length){
-        state={...state,boards:[...state.boards,...plan.boards].slice(0,20)};
+        state={...state,boards:[...state.boards,...plan.boards].slice(-discoveredBoardLimit)};
         if(!await store.saveDiscoveryState(scope,state,version)){report.stopReason='profile_changed';break;}
         profile.discoveredCompanyBoards=state.boards.map(b=>b.url);
       }
       if(plan&&(plan.queries.length||plan.boards.length||plan.jobUrls?.length)){
-        session.page=0;searchProfile={...profile,titles:plan.queries.length?plan.queries:profile.titles,strategy:{...profile.strategy,discovery:profile.strategy.discovery?{...profile.strategy.discovery,titleVariants:[]}:null}};
+        session.page=0;searchProfile={...profile,titles:plan.queries.length?[...new Set([...profile.titles,...plan.queries])]:profile.titles,strategy:{...profile.strategy,discovery:profile.strategy.discovery?{...profile.strategy.discovery,titleVariants:[]}:null}};
       }else{
         const page=fallbackPage(profile,state,report);
         if(page===null){report.stopReason=dependencies.plan&&!plan?'planner_unavailable':'no_untried_queries';break;}

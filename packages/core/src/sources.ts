@@ -67,7 +67,7 @@ export async function searchSources(profile: Profile, adapters: {
     const explicit=profile.companyBoards.map(value=>({value,board:parseBoard(value)})).filter(x=>x.board);
     const explicitKeys=new Set(explicit.map(x=>x.board!.key));
     const discovered=profile.discoveredCompanyBoards.map(value=>({value,board:parseBoard(value)})).filter(x=>x.board&&!explicitKeys.has(x.board.key));
-    const selected=session?discovered.sort((a,b)=>latest(a.board!.key).localeCompare(latest(b.board!.key))).slice(0,3):discovered;
+    const selected=session?discovered.reverse().sort((a,b)=>latest(a.board!.key).localeCompare(latest(b.board!.key))).slice(0,3):discovered;
     for(const {value,board} of [...explicit,...selected])if(board&&!tasks.some(task=>task.key===board.key))tasks.push({key:board.key,priority:explicitKeys.has(board.key)?0:1,run:()=>adapters.company(value,profile,session)});
   }
   if(profile.sources.includes('yc'))tasks.push({key:'yc',priority:2,run:()=>adapters.yc(profile,session)});

@@ -7,6 +7,7 @@ import {searchLocationSchema,maxSearchLocations} from './locations';
 import { setupDraftSchema } from './setup-schema';
 import { strategySchema, defaultStrategy, type Research, type evaluateStrategy } from './strategy';
 import { parseBoard } from './source-settings';
+import {discoveredBoardLimit} from './adaptive-search-schema';
 import type {SearchDiscovery} from './adaptive-search-schema';
 import {goalClarificationsSchema} from './goal-clarifications';
 
@@ -36,7 +37,7 @@ export const profileSchema = z.object({
   remoteOnly: z.boolean(),
   sources: z.array(z.enum(['linkedin','yc','companies'])).min(1).max(3).default(['linkedin']),
   companyBoards: z.array(z.string().trim().max(250).refine(value => Boolean(parseBoard(value)), 'Use an Ashby or Greenhouse company board URL.')).max(5).default([]),
-  discoveredCompanyBoards:z.array(z.string().max(250).refine(v=>Boolean(parseBoard(v)))).max(20).default([]),
+  discoveredCompanyBoards:z.array(z.string().max(250).refine(v=>Boolean(parseBoard(v)))).max(discoveredBoardLimit).default([]),
   constraints: z.string().trim().max(3000),
   salaryExpectation: z.string().trim().max(300),
   equityExpectation: z.string().trim().max(500),

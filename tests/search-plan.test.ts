@@ -10,7 +10,7 @@ import {promisingResearch,qualifiedOpportunity} from '../packages/core/src/oppor
 import {parsePublicJob} from '../packages/core/src/public-job';
 import {validateAdaptivePlan} from '../packages/core/src/adaptive-planner';
 import {activeCountrySources} from '../packages/core/src/country-sources';
-import {listingWithinAge} from '../packages/core/src/sources';
+import {listingWithinAge,searchSources} from '../packages/core/src/sources';
 import {linkedInQueries} from '../packages/core/src/linkedin';
 import {runSearch} from '../packages/core/src/worker';
 import {searchQuery} from '../packages/core/src/search-session';
@@ -108,6 +108,28 @@ test('hosted-search citations recover real posting routes when structured URL li
  const plan=validateAdaptivePlan({reason:'Find real company-building vacancies.',queries:[],boards:[],jobUrls:[]},{...defaultProfile,sources:['companies']},cited,{attempts:[],boards:[]});
  assert.deepEqual(plan.jobUrls,cited.slice(1));assert.equal(plan.boards.length,1);assert.equal(plan.boards[0].url,'https://jobs.ashbyhq.com/real');
  assert.equal(validateAdaptivePlan({reason:'Find real company-building vacancies.',queries:[],boards:[],jobUrls:[]},defaultProfile,cited,{attempts:[],boards:[]}).jobUrls?.length,0);
+});
+test('planner sends only role titles to job feeds and can add a board when twenty are saved',()=>{
+ const boards=Array.from({length:20},(_,i)=>({url:`https://jobs.ashbyhq.com/old-${i}`,sourceUrl:`https://jobs.ashbyhq.com/old-${i}/role`,discoveredAt:'2026-11-01T00:00:00.000Z'}));
+ const sourceUrl='https://jobs.ashbyhq.com/new-employer/9e1f9f97-1e52-4ba7-9d9e-8972d93d69e1';
+ const profile={...defaultProfile,titles:['Founding Engineer'],sources:['companies' as const]};
+ const plan=validateAdaptivePlan({reason:'Find another relevant employer board.',queries:[
+  {roleIndex:0,query:'site:jobs.ashbyhq.com "Founding Engineer" Berlin remote'},
+  {roleIndex:0,query:'Founding Engineer site:jobs.ashbyhq.com/new-employer'},
+  {roleIndex:0,query:'Founding Software Engineer'},
+ ],boards:[],jobUrls:[]},profile,[sourceUrl],{attempts:[],boards});
+ assert.deepEqual(plan.queries,['Founding Software Engineer']);
+ assert.deepEqual(plan.boards.map(board=>board.url),['https://jobs.ashbyhq.com/new-employer']);
+});
+test('newly discovered employer boards are checked before older untried boards',async()=>{
+ const boardUrls=Array.from({length:20},(_,i)=>`https://jobs.ashbyhq.com/old-${i}`);
+ boardUrls.push('https://jobs.ashbyhq.com/new-employer');
+ const checked:string[]=[];
+ const session={round:0,page:0,remaining:24,deadline:Date.now()+60000,seen:new Set<string>(),blocked:new Set<string>(),history:new Map<string,string>(),cache:new Map(),perSource:new Map<string,number>(),attempts:[],items:[]};
+ await searchSources({...defaultProfile,sources:['companies'],discoveredCompanyBoards:boardUrls},
+  {company:async url=>{checked.push(url);return [];},yc:async()=>[],linkedin:async()=>[]},session);
+ assert.equal(checked[0],boardUrls.at(-1));
+ assert.equal(checked.length,3);
 });
 test('source collection deadline preserves the independent evaluation time allowance',async()=>{
  let reads=0;const session={round:0,page:0,remaining:24,deadline:Date.now()+60000,discoveryDeadline:Date.now()-1 as number|undefined,seen:new Set<string>(),blocked:new Set<string>(),history:new Map<string,string>(),cache:new Map(),perSource:new Map<string,number>(),attempts:[],items:[]};
