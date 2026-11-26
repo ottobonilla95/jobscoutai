@@ -47,6 +47,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
   // Search endpoint throttling does not imply that an individual listing page
   // is unreadable. Keep description failures separate from search blocks.
   const descriptionBlocked=new Set<string>();
+  const descriptionFailed=new Set<string>();
   const errors:string[]=[];let failed=false,hadSuccess=false,aiUnavailable=false;
   const existingJobs=await store.jobs();
   const known=new Set(existingJobs.map(j=>j.id)),seen=new Set<string>(),evaluated=new Set<string>(),newCandidates=new Set<string>(),verified=new Set<string>();
@@ -61,9 +62,14 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
   const needsResearchReview=(job:typeof existingJobs[number])=>Boolean(job.assessment&&job.researchTask?.status==='completed'&&job.research?.profileVersion===version&&job.research.generationIds.length&&job.research.generationIds.at(-1)!==job.assessment.researchGenerationId);
   const pendingCount=(await store.pending(version,30,profile)).length;
   const researchCandidates=existingJobs.filter(j=>needsResearchReview(j)||promisingResearch(j,profile,version)).length;
-  const researchReserve=profile.researchEnabled?Math.min(pendingCount>=evaluationLimit?1:4,pendingCount?Math.max(0,evaluationLimit-1):evaluationLimit,researchCandidates):0;
-  const discoveryEvaluationLimit=evaluationLimit-researchReserve;
-  const backlogOnly=pendingCount>0&&generationBudget<=2;
+  // Investigation may need one call to find evidence and another to rescore
+  // the exact posting. Keep both available when a research lead exists.
+  const researchReserve=profile.researchEnabled&&researchCandidates?Math.min(2,Math.max(0,evaluationLimit-1)):0;
+  // A full saved queue should be processed before collecting more listings.
+  // In particular, avoid spending a scarce call on an adaptive search plan.
+  const backlogOnly=pendingCount>0&&(pendingCount>=evaluationLimit||generationBudget<=2);
+  const planningReserve=!backlogOnly&&dependencies.plan&&researchReserve&&generationBudget<=profile.maxJobsPerRun?1:0;
+  const discoveryEvaluationLimit=evaluationLimit-researchReserve-planningReserve;
   let searchProfile=profile,plan:AdaptivePlan|null=null;
   const heartbeat=setInterval(()=>{void store.heartbeat(id).catch(()=>console.error('Worker heartbeat failed.'));},30000);
   const current=async()=> (await store.profile()).version===version;
@@ -83,7 +89,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     else await store.verify(job.id,verification);
   };
   const evaluateCandidates=async(limit:number,fresh=new Set<string>())=>{
-    const pending=report.stopReason==='profile_changed'?[]:(await store.pending(version,Math.min(30,limit*3),profile,[...descriptionBlocked])).sort((a,b)=>Number((b.assessment?.score??0)>=profile.minimumScore)-Number((a.assessment?.score??0)>=profile.minimumScore)||Number(matchesTitle(b.title,profile))-Number(matchesTitle(a.title,profile))||Number(fresh.has(b.id))-Number(fresh.has(a.id))).slice(0,Math.min(30,limit*3));
+    const pending=report.stopReason==='profile_changed'?[]:(await store.pending(version,Math.min(30,limit*3),profile,[...descriptionBlocked])).filter(job=>!descriptionFailed.has(job.id)).sort((a,b)=>Number((b.assessment?.score??0)>=profile.minimumScore)-Number((a.assessment?.score??0)>=profile.minimumScore)||Number(matchesTitle(b.title,profile))-Number(matchesTitle(a.title,profile))||Number(fresh.has(b.id))-Number(fresh.has(a.id))).slice(0,Math.min(30,limit*3));
       let budgetStopped=false;
       const initial=counts.evaluated;
       for(const job of pending){
@@ -97,6 +103,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
           if(job.description.length<50)throw new SourceError('A source returned too little description text to assess fit.');
         }catch(error){
           errors.push(error instanceof SourceError?error.message:'A job description could not be fetched. It will be retried next run.');
+          descriptionFailed.add(job.id);
           if(error instanceof SourceError&&error.stop)descriptionBlocked.add(job.sourceKey||'linkedin');continue;
         }
         if(!await current()){report.stopReason='profile_changed';break;}
@@ -204,7 +211,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       // or trigger paid planning from an unobservable source implementation.
       if(!session.attempts.length&&!dependencies.plan){report.stopReason='no_untried_queries';break;}
       plan=null;
-      if(dependencies.plan){
+      if(dependencies.plan&&(!researchReserve||await remainingGenerations(store.userId,profile.dailyEvaluationLimit,new Accounts(store.db))>researchReserve)){
         try{plan=await dependencies.plan({profile,report,state,store,deadline:session.deadline,feedback:jobs.filter(j=>evaluated.has(j.id)&&j.assessment).slice(-8).map(j=>({title:j.title,score:j.assessment!.score,eligibility:j.assessment!.eligibility,concerns:j.assessment!.concerns.map(v=>v.slice(0,300)).slice(0,4),decision:recommendation(j)}))});counts.inputTokens+=plan.inputTokens;counts.outputTokens+=plan.outputTokens;}
         catch(error){
           if(providerBalanceExhausted(error))aiUnavailable=true;
@@ -233,9 +240,15 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     if(['discovery_time_budget','request_budget','no_untried_queries','sources_unavailable','planner_unavailable','round_limit'].includes(report.stopReason)&&counts.evaluated<discoveryEvaluationLimit&&Date.now()<session.deadline&&await current()){
       await evaluateCandidates(discoveryEvaluationLimit-counts.evaluated);
     }
-    if(!backlogOnly&&dependencies.investigate&&profile.researchEnabled&&!aiUnavailable&&generationBudget>0&&await current()){
+    if(dependencies.investigate&&profile.researchEnabled&&!aiUnavailable&&generationBudget>0&&await current()){
       const tasks=new ResearchTasks(store),eligible=(await store.jobs()).filter(j=>!descriptionBlocked.has(j.sourceKey||'linkedin')&&dueForInvestigation(j,profile,version)).sort((a,b)=>Number(Boolean(b.researchRequested))-Number(Boolean(a.researchRequested))||Number(promisingResearch(b,profile,version))-Number(promisingResearch(a,profile,version))||(b.assessment?.score||0)-(a.assessment?.score||0));
-      const readiness=await Promise.all(eligible.map(j=>tasks.ready(j,version)));const candidates=eligible.filter((_,i)=>readiness[i]).slice(0,4);if(eligible.filter((_,i)=>readiness[i]).length>4)research.stopReason='opportunity_limit';
+      const readiness=await Promise.all(eligible.map(j=>tasks.ready(j,version)));
+      const ready=eligible.filter((_,i)=>readiness[i]);
+      // Keep one generation for rescoring a role if research finds checked
+      // evidence. Otherwise two investigations can consume both reserved calls.
+      const available=await remainingGenerations(store.userId,profile.dailyEvaluationLimit,new Accounts(store.db));
+      const researchLimit=Math.min(4,available>1?available-1:available);
+      const candidates=ready.slice(0,researchLimit);if(ready.length>researchLimit)research.stopReason='opportunity_limit';
       for(const job of candidates){
         if(await remainingGenerations(store.userId,profile.dailyEvaluationLimit,new Accounts(store.db))===0){research.stopReason='daily_budget';break;}
         if(Date.now()>=session.deadline){research.stopReason='time_budget';break;}if(!await current())break;
@@ -248,7 +261,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     }
     // Research is not the final verdict. Reassess the exact vacancy using its
     // checked role excerpts; company facts cannot establish role conditions.
-    if(!backlogOnly&&profile.researchEnabled&&!aiUnavailable&&generationBudget>0&&await current())for(const job of (await store.jobs()).filter(needsResearchReview)){
+    if(profile.researchEnabled&&!aiUnavailable&&generationBudget>0&&await current())for(const job of (await store.jobs()).filter(needsResearchReview)){
       if(Date.now()>=session.deadline)break;
       if(!await current())break;
       try{

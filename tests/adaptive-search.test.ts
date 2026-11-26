@@ -110,15 +110,15 @@ test('evaluation allowance and source budget are shared across all attempts',asy
  await runSearch({store,force:true,dependencies:{search:async(p,s)=>searchQuery(s!,{...q,query:p.titles[0],page:s!.page},async()=>Array.from({length:6},(_,i)=>job(String(s!.round*100+i)))),describe:async()=>description,rank:async()=>{ranked++;return {assessment:{...assessment,score:20},inputTokens:1,outputTokens:1};},plan:async()=>plan([]),notify:async()=>0}});
  assert.equal(ranked,3);const r=(await store.runs())[0];assert.equal(r.evaluated,3);assert.equal(r.discovery?.rounds.length,3);assert.equal(r.discovery?.stopReason,'evaluation_budget');assert.equal(r.discovery?.requests,3);
 });
-test('a large unevaluated backlog keeps most AI slots for classification',async t=>{
+test('a full backlog is classified before discovery and leaves room for research',async t=>{
  const store=await ready(t,{maxJobsPerRun:10});const version=(await store.profile()).version;
  for(let i=0;i<4;i++){
   await store.upsert(job(`research-${i}`));await store.assess(`research-${i}`,{...assessment,concerns:['Check this role further.']},version);
   await store.track(`research-${i}`,{stage:'not_recorded',recommendation:'research',nextAction:'Check role evidence.',notes:'',followUp:''});
  }
  for(let i=0;i<10;i++)await store.upsert(job(`pending-${i}`));
- let ranked=0;await runSearch({store,force:true,dependencies:{search:async()=>[],describe:async()=>description,rank:async()=>{ranked++;return {assessment,inputTokens:1,outputTokens:1};},notify:async()=>0}});
- assert.equal(ranked,9);
+ let ranked=0,researched=0;await runSearch({store,force:true,dependencies:{search:async()=>{throw Error('A full backlog must be processed first');},plan:async()=>{throw Error('Planning must wait for the backlog');},describe:async()=>description,rank:async()=>{ranked++;return {assessment,inputTokens:1,outputTokens:1};},investigate:async()=>{researched++;return {status:'completed',generationId:null,inputTokens:1,outputTokens:1,verifiedEvidence:0,answered:0,unresolved:1};},notify:async()=>0}});
+ assert.equal(ranked,8);assert.ok(researched>0);assert.equal((await store.runs())[0].discovery?.requests,0);
 });
 test('the final AI call classifies a saved candidate before starting discovery',async t=>{
  const store=await ready(t,{dailyEvaluationLimit:1});await store.upsert(job('last-slot'));

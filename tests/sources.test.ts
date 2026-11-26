@@ -64,7 +64,7 @@ test('worker finishes partial when one source fails and still assesses another w
  const old=process.env.AI_GATEWAY_API_KEY;process.env.AI_GATEWAY_API_KEY='test';t.after(()=>{if(old===undefined)delete process.env.AI_GATEWAY_API_KEY;else process.env.AI_GATEWAY_API_KEY=old;});
  (await store.upsert({...yc,id:'123',sourceKey:'linkedin',company:'Different employer',url:'https://www.linkedin.com/jobs/view/123/',description:null}));let described=0;
  const result=await runSearch({store,force:true,dependencies:{search:async()=>({jobs:[yc],errors:['LinkedIn HTTP 429'],blocked:['linkedin'],succeeded:1}),describe:async()=>{described++;return '';},rank:async()=>({assessment:{score:85,eligibility:'uncertain',summary:'Relevant role.',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null},inputTokens:1,outputTokens:1}),notify:async()=>0}});
- assert.equal(result.status,'partial');assert.equal(described,0);assert.equal((await store.runs())[0].evaluated,1);assert.equal((await store.jobs()).find(j=>j.id==='123')?.assessment,null);
+ assert.equal(result.status,'partial');assert.equal(described,1);assert.equal((await store.runs())[0].evaluated,1);assert.equal((await store.jobs()).find(j=>j.id==='123')?.assessment,null);
 });
 
 test('disabling a source prevents new emails and holds its uncertain queued digest',async t=>{
