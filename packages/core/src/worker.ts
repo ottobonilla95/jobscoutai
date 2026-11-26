@@ -44,6 +44,9 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
   const targetLabel=(target:{location:string;workMode?:string})=>target.workMode&&target.workMode!=='any'?`${target.location} · ${target.workMode}`:target.location;
   const report:SearchDiscovery={profileVersion:version,rounds:[],requests:0,requestLimit:24,stopReason:'round_limit',coverage:locationCoverage(searchTargets(profile).map(t=>targetLabel(t)),[])};
   const session:SearchSession={round:0,page:0,remaining:24,deadline:started+8*60000,seen:new Set(),blocked:new Set(),history:new Map(state.attempts.map(a=>[queryKey(a),a.checkedAt])),successful:new Set(state.attempts.filter(a=>a.status==='ok'&&a.scope?.status!=='mismatch').map(queryKey)),cache:new Map(),perSource:new Map(),perSourceLimit:6,attempts:[],items:[]};
+  // Search endpoint throttling does not imply that an individual listing page
+  // is unreadable. Keep description failures separate from search blocks.
+  const descriptionBlocked=new Set<string>();
   const errors:string[]=[];let failed=false,hadSuccess=false,aiUnavailable=false;
   const existingJobs=await store.jobs();
   const known=new Set(existingJobs.map(j=>j.id)),seen=new Set<string>(),evaluated=new Set<string>(),newCandidates=new Set<string>(),verified=new Set<string>();
@@ -77,12 +80,12 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     else await store.verify(job.id,verification);
   };
   const evaluateCandidates=async(limit:number,fresh=new Set<string>())=>{
-    const pending=report.stopReason==='profile_changed'?[]:(await store.pending(version,Math.min(30,limit*3),profile,[...session.blocked])).sort((a,b)=>Number((b.assessment?.score??0)>=profile.minimumScore)-Number((a.assessment?.score??0)>=profile.minimumScore)||Number(matchesTitle(b.title,profile))-Number(matchesTitle(a.title,profile))||Number(fresh.has(b.id))-Number(fresh.has(a.id))).slice(0,Math.min(30,limit*3));
+    const pending=report.stopReason==='profile_changed'?[]:(await store.pending(version,Math.min(30,limit*3),profile,[...descriptionBlocked])).sort((a,b)=>Number((b.assessment?.score??0)>=profile.minimumScore)-Number((a.assessment?.score??0)>=profile.minimumScore)||Number(matchesTitle(b.title,profile))-Number(matchesTitle(a.title,profile))||Number(fresh.has(b.id))-Number(fresh.has(a.id))).slice(0,Math.min(30,limit*3));
       let budgetStopped=false;
       const initial=counts.evaluated;
       for(const job of pending){
         if(counts.evaluated-initial>=limit)break;
-        if(session.blocked.has(job.sourceKey||'linkedin'))continue;
+        if(descriptionBlocked.has(job.sourceKey||'linkedin'))continue;
         if(!await current()){report.stopReason='profile_changed';break;}
         if(Date.now()>=session.deadline){report.stopReason='time_budget';break;}
         await store.heartbeat(id);
@@ -91,7 +94,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
           if(job.description.length<50)throw new SourceError('A source returned too little description text to assess fit.');
         }catch(error){
           errors.push(error instanceof SourceError?error.message:'A job description could not be fetched. It will be retried next run.');
-          if(error instanceof SourceError&&error.stop)session.blocked.add(job.sourceKey||'linkedin');continue;
+          if(error instanceof SourceError&&error.stop)descriptionBlocked.add(job.sourceKey||'linkedin');continue;
         }
         if(!await current()){report.stopReason='profile_changed';break;}
         try{
@@ -224,7 +227,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       await evaluateCandidates(discoveryEvaluationLimit-counts.evaluated);
     }
     if(dependencies.investigate&&profile.researchEnabled&&!aiUnavailable&&generationBudget>0&&await current()){
-      const tasks=new ResearchTasks(store),eligible=(await store.jobs()).filter(j=>!session.blocked.has(j.sourceKey||'linkedin')&&dueForInvestigation(j,profile,version)).sort((a,b)=>Number(Boolean(b.researchRequested))-Number(Boolean(a.researchRequested))||Number(promisingResearch(b,profile,version))-Number(promisingResearch(a,profile,version))||(b.assessment?.score||0)-(a.assessment?.score||0));
+      const tasks=new ResearchTasks(store),eligible=(await store.jobs()).filter(j=>!descriptionBlocked.has(j.sourceKey||'linkedin')&&dueForInvestigation(j,profile,version)).sort((a,b)=>Number(Boolean(b.researchRequested))-Number(Boolean(a.researchRequested))||Number(promisingResearch(b,profile,version))-Number(promisingResearch(a,profile,version))||(b.assessment?.score||0)-(a.assessment?.score||0));
       const readiness=await Promise.all(eligible.map(j=>tasks.ready(j,version)));const candidates=eligible.filter((_,i)=>readiness[i]).slice(0,4);if(eligible.filter((_,i)=>readiness[i]).length>4)research.stopReason='opportunity_limit';
       for(const job of candidates){
         if(await remainingGenerations(store.userId,profile.dailyEvaluationLimit,new Accounts(store.db))===0){research.stopReason='daily_budget';break;}

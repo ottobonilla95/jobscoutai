@@ -51,6 +51,17 @@ test('access challenges block the source for the whole run, retaining earlier su
  const result=await searchSources({...defaultProfile,titles:['Software Engineer'],remoteOnly:false}, {linkedin:async()=>{throw new SourceError('Stopped',true);},yc:async()=>[],company:async()=>[]},s);
  assert.equal(result.jobs.length,1);assert.equal(result.jobs[0].id,'2');
 });
+test('a blocked search endpoint does not prevent classification from a readable listing page',async t=>{
+ const store=await ready(t,{researchEnabled:false});let described=0,ranked=0;
+ await runSearch({store,force:true,dependencies:{
+  search:async()=>({jobs:[job('readable',{description:null})],errors:['LinkedIn: HTTP 429'],blocked:['linkedin'],succeeded:0}),
+  describe:async()=>{described++;return description;},
+  rank:async()=>{ranked++;return {assessment,inputTokens:1,outputTokens:1};},
+  notify:async()=>0,
+ }});
+ assert.equal(described,1);assert.equal(ranked,1);
+ assert.equal((await store.job('readable'))?.assessment?.score,90);
+});
 test('LinkedIn follow-ups page the confirmed location and preserve remote/date restrictions',async t=>{
  const old=globalThis.fetch;let url='';globalThis.fetch=async input=>{url=String(input);return new Response('No results');};t.after(()=>{globalThis.fetch=old;});
  const s=session();s.page=2;await searchLinkedIn({...defaultProfile,titles:[q.query],locations:[q.location],remoteOnly:true},s);
