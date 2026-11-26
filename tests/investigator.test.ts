@@ -1,11 +1,26 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {MockLanguageModelV4} from 'ai/test';
 import {storeFixture} from './database-fixture';import {defaultProfile,type Assessment,type Job} from '../packages/core/src/profile';
-import {investigateOpportunity,validatedInvestigation,publicResearchUrl,dueForInvestigation,type InvestigationOutput} from '../packages/core/src/investigator';
+import {investigateOpportunity,validatedInvestigation,publicResearchUrl,dueForInvestigation,researchPageText,type InvestigationOutput} from '../packages/core/src/investigator';
 import {listingDossier,evidenceRecord} from '../packages/core/src/research-memory';import {generationForAccount} from '../packages/core/src/ai-usage';import {Accounts} from '../packages/core/src/accounts';
 const job:Job={id:'investigation',title:'Product Engineer',company:'Example Company',location:'Spain',url:'https://example.test/jobs/1',postedAt:null,description:'This specific role has twenty guaranteed hours per week and no on-call duties.',firstSeen:'2026-01-01T00:00:00.000Z',lastSeen:'2026-01-01T00:00:00.000Z',assessment:null,status:'new',notifiedAt:null,evaluatedVersion:1};
 const assessment:Assessment={score:70,eligibility:'uncertain',summary:'Check hours.',reasons:[],concerns:[],salaryEvidence:null,equityEvidence:null,founderPathEvidence:null};
 const companyUrl='https://example.test/about',quote='Example Company serves over two thousand customers.';
 const output:InvestigationOutput={questions:[{question:'What weekly hours are guaranteed in this role?',topic:'Hours',scope:'job',claims:[{url:job.url,quote:'twenty guaranteed hours per week',scope:'job',stance:'supports'}]},{question:'What customers does the employer serve?',topic:'Customers',scope:'company',claims:[{url:companyUrl,quote,scope:'company',stance:'supports'}]}]};
+test('research checks structured job text in a JavaScript shell only for the same role',()=>{
+ const html=(title:string)=>`<body><div id="root"></div><script type="application/ld+json">${JSON.stringify({'@type':'JobPosting',title,hiringOrganization:{name:job.company},description:`<p>${job.description} ${job.description}</p>`})}</script></body>`;
+ assert.match(researchPageText(html(job.title),job.url,job)!,/twenty guaranteed hours per week/);
+ assert.equal(researchPageText(html('Different role'),job.url,job),null);
+});
+test('investigation saves evidence from a live structured posting with no visible description',async t=>{
+ const store=await storeFixture(t),version=(await store.profile()).version;
+ const structured={...job,id:'structured-posting',url:'https://example.test/jobs/structured',description:`${job.description} ${job.description}`};
+ await store.upsert(structured);await store.assess(structured.id,assessment,version);
+ const html=`<body><div id="root"></div><script type="application/ld+json">${JSON.stringify({'@type':'JobPosting',title:structured.title,hiringOrganization:{name:structured.company},description:`<p>${structured.description}</p>`})}</script></body>`;
+ const plan:InvestigationOutput={questions:[{...output.questions[0],claims:[{...output.questions[0].claims[0],url:structured.url}]}]};
+ const result=await investigateOpportunity(store,structured.id,{model:model(plan),read:async url=>({url,status:200,html})});
+ assert.equal(result.verifiedEvidence,1);assert.equal(result.answered,1);
+ assert.equal((await store.job(structured.id))?.research?.questions.at(-1)?.status,'answered');
+});
 function model(value:unknown,onPrompt?:(prompt:string)=>void){return new MockLanguageModelV4({doGenerate:async options=>{onPrompt?.(JSON.stringify(options.prompt));return {content:[{type:'text' as const,text:JSON.stringify(value)},{type:'source' as const,sourceType:'url' as const,id:'company',url:companyUrl,title:'Company information'}],finishReason:{unified:'stop' as const,raw:undefined},usage:{inputTokens:{total:12,noCache:12,cacheRead:undefined,cacheWrite:undefined},outputTokens:{total:22,text:22,reasoning:undefined}},warnings:[]};}});}
 test('investigation saves only checked exact quotes, uses the user goal and records generation ownership',async t=>{
  const store=await storeFixture(t);await store.saveProfile({...defaultProfile,objective:'Find part-time work with predictable hours',cvText:'PRIVATE CV NEVER INCLUDED IN RESEARCH'});const version=(await store.profile()).version;await store.upsert(job);await store.assess(job.id,assessment,version);

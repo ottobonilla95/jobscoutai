@@ -9,10 +9,20 @@ import type {Store} from './store';import type {Job,Profile} from './profile';im
 import {investigationSchema,investigationOutputSchema,type InvestigationOutput} from './research-task-schema';
 import {ResearchTasks} from './research-tasks';
 import {explicitBasePay} from './compensation';
+import {parsePublicJob} from './public-job';
 export {investigationSchema};export type {InvestigationOutput};
 export type InvestigationResult={status:'completed'|'unavailable'|'profile_changed'|'retry'|'deferred';resumed?:boolean;retryAt?:string|null;failed?:boolean;generationId:string|null;inputTokens:number;outputTokens:number;verifiedEvidence:number;answered:number;unresolved:number};
 export type InvestigationOptions={model?:LanguageModel;read?:typeof publicHtml;deadline?:number};
 const normalized=(value:string)=>value.normalize('NFKC').toLowerCase().replace(/\s+/g,' ').trim();
+/** A live JobPosting can carry the role text in JSON-LD while its visible HTML is only a JavaScript shell. */
+export function researchPageText(html:string,url:string,job:Pick<Job,'title'|'company'>):string|null{
+ const visible=plainText(html);
+ try{
+  const posting=parsePublicJob(html,url);
+  if(normalized(posting.title)!==normalized(job.title)||normalized(posting.company)!==normalized(job.company))return null;
+  return `${visible}\n${posting.description}`;
+ }catch{return visible||null;}
+}
 export function publicResearchUrl(value:string){try{const url=safeUrl(value);const address=url.hostname.replace(/[\[\]]/g,'');if(isIP(address)&&!publicAddress(address))return null;url.hash='';return url.href;}catch{return null;}}
 export function citationsFrom(result:{sources:readonly {sourceType:string;url?:string}[];steps:readonly {toolResults:readonly {output:unknown}[]}[]}){
  const urls=result.sources.filter(s=>s.sourceType==='url'&&s.url).map(s=>s.url!);
@@ -101,9 +111,9 @@ export async function investigateOpportunity(store:Store,jobId:string,options:In
     const page=await Promise.race([(options.read||publicHtml)(url,{signal}),new Promise<never>((_,reject)=>signal.addEventListener('abort',()=>reject(new Error('Research page deadline reached.')),{once:true}))]);
     if(page.status===429||page.status>=500){retry=true;continue;}
     const readable=page.status===200&&!/captcha|verify you are human|security check/i.test(page.html)&&publicResearchUrl(page.url)===url;
-    const text=readable?plainText(page.html):'';
-    const quotes=readable?plan.output.questions.flatMap(q=>q.claims.filter(c=>publicResearchUrl(c.url)===url&&supported(c.quote,text)).map(c=>c.quote)):[];
-    task.pages.push({url,retrievedAt:new Date().toISOString(),status:readable?'checked':'unavailable',employerNamed:normalized(text).includes(normalized(job.company)),quotes:[...new Set(quotes)].slice(0,12)});
+    const text=readable?researchPageText(page.html,page.url,job):null;
+    const quotes=text?plan.output.questions.flatMap(q=>q.claims.filter(c=>publicResearchUrl(c.url)===url&&supported(c.quote,text)).map(c=>c.quote)):[];
+    task.pages.push({url,retrievedAt:new Date().toISOString(),status:text?'checked':'unavailable',employerNamed:Boolean(text&&normalized(text).includes(normalized(job.company))),quotes:[...new Set(quotes)].slice(0,12)});
     const partial=validatedInvestigation(plan.output,job,previous,pageMap(),cited,plan.generationId,profile.outputLanguage);
     if(!await tasks.checkpoint(task,partial.dossier))throw new Error('Research profile changed.');
    }catch{retry=true;}
