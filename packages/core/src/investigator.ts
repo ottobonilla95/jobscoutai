@@ -58,7 +58,7 @@ export function validatedInvestigation(output:InvestigationOutput,job:Job,previo
  return {dossier,verifiedEvidence,answered,unresolved};
 }
 export function dueForInvestigation(job:Job,profile:Profile,version:number,now=Date.now()){
- return sourceEnabled(profile,job.sourceKey)&&job.status!=='dismissed'&&!job.duplicateOf&&job.verification?.status!=='closed'&&job.assessment?.eligibility!=='ineligible'&&job.assessment?.evaluation?.decision!=='exclude'&&Boolean(job.assessment&&job.evaluatedVersion===version&&(job.researchRequested||job.assessment.score>=50)&&(['running','waiting'].includes(job.researchTask?.status||'')||!job.research?.generationIds.length||job.research.profileVersion!==version||now-Date.parse(job.research.updatedAt)>7*86400000||job.researchRequested));
+ return sourceEnabled(profile,job.sourceKey)&&job.status!=='dismissed'&&!job.duplicateOf&&job.verification?.status!=='closed'&&job.assessment?.eligibility!=='ineligible'&&job.assessment?.evaluation?.decision!=='exclude'&&Boolean(job.assessment&&job.evaluatedVersion===version&&(job.researchRequested||job.assessment.score>=50)&&(['running','waiting','failed'].includes(job.researchTask?.status||'')||!job.research?.generationIds.length||job.research.profileVersion!==version||now-Date.parse(job.research.updatedAt)>7*86400000||job.researchRequested));
 }
 export async function investigateOpportunity(store:Store,jobId:string,options:InvestigationOptions={}):Promise<InvestigationResult>{
  const empty={generationId:null,inputTokens:0,outputTokens:0,verifiedEvidence:0,answered:0,unresolved:0};

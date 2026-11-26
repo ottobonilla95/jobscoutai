@@ -1,5 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {MockLanguageModelV4} from 'ai/test';
 import {providerBalanceExhausted} from '../packages/core/src/ai-usage';
+import {dueForInvestigation} from '../packages/core/src/investigator';
 import {storeFixture,accountsFixture} from './database-fixture';import {defaultProfile,type Assessment,type Job} from '../packages/core/src/profile';import {ResearchTasks} from '../packages/core/src/research-tasks';import {investigateOpportunity,validatedInvestigation} from '../packages/core/src/investigator';import {listingDossier} from '../packages/core/src/research-memory';import {beginGeneration} from '../packages/core/src/ai-usage';import {Accounts} from '../packages/core/src/accounts';import type {Store} from '../packages/core/src/store';import type {InvestigationOutput} from '../packages/core/src/research-task-schema';
 const companyUrl='https://example.test/about',quote='Example Company serves over two thousand customers.';
 const job:Job={id:'resume',title:'Engineer',company:'Example Company',location:'Spain',url:'https://example.test/job',postedAt:null,description:'The role includes 20 hours per week and no on-call duties, working with a small product team.',firstSeen:'2026-01-01T00:00:00.000Z',lastSeen:'2026-01-01T00:00:00.000Z',assessment:null,status:'new',notifiedAt:null,evaluatedVersion:1};
@@ -40,6 +41,14 @@ test('exhausted research retries automatically after a cooldown without losing i
  assert.equal(await tasks.ready((await store.job(job.id))!,1,later),true);
  const retried=(await tasks.claim((await store.job(job.id))!,1,later))!;
  assert.equal(retried.status,'running');assert.equal(retried.attempts,1);
+});
+test('failed research with saved evidence remains eligible for automatic retry',async t=>{
+ const store=await setup(t),task=(await new ResearchTasks(store).claim((await store.job(job.id))!,1))!;
+ await store.db.prepare('UPDATE research_tasks SET value=? WHERE user_id=? AND job_id=? AND profile_version=?').run(JSON.stringify({...task,status:'failed',attempts:3,lease:null,expiresAt:null,nextAttemptAt:null}),store.userId,job.id,1);
+ const dossier=(await store.job(job.id))!.research!;
+ await store.db.prepare('UPDATE jobs SET research=? WHERE user_id=? AND id=?').run(JSON.stringify({...dossier,generationIds:['prior-generation']}),store.userId,job.id);
+ const live=(await store.job(job.id))!,{profile,version}=await store.profile();
+ assert.equal(dueForInvestigation(live,profile,version),true);
 });
 test('expired leases can be reclaimed but old workers cannot publish checkpoints, and newer requests survive completion',async t=>{
  const store=await setup(t);await store.requestResearch(job.id);const live=(await store.job(job.id))!,tasks=new ResearchTasks(store),old=(await tasks.claim(live,1))!;assert.equal(await tasks.claim(live,1),null);
