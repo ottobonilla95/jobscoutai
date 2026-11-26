@@ -7,6 +7,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {Accounts,hashPassword,verifyPassword} from '../packages/core/src/accounts';
 import {runScheduled} from '../packages/core/src/scheduler';
+import {beginGeneration,finishGeneration} from '../packages/core/src/ai-usage';
 async function fixture(t:test.TestContext){return accountsFixture(t);}
 const password='A long private test phrase 2026';
 test('passwords use unique salted hashes and reject incorrect passwords',async()=>{
@@ -46,6 +47,15 @@ test('scheduler dispatches each account with its own store and globally excludes
  const lock=(await accounts.claimScheduler());assert.ok(lock);assert.equal((await runScheduled({accounts,run})).status,'idle');(await accounts.releaseScheduler(lock));
  await runScheduled({accounts,run});await runScheduled({accounts,run});assert.deepEqual(new Set(names),new Set([a.email,b.email]));
  assert.equal((await runScheduled({accounts,run})).status,'idle');
+});
+test('scheduler defers an exhausted account until the UTC AI budget resets',async t=>{
+ const accounts=await fixture(t),user=await accounts.signup({email:'budget@example.com',password}),store=await accounts.store(user.id);
+ await store.saveProfile({...(await store.profile()).profile,dailyEvaluationLimit:1,enabled:true});
+ await store.requestRun();const generation=await beginGeneration(user.id,'strategy',1,accounts);await finishGeneration(generation,'completed',0,0,accounts);
+ let runs=0;const run:typeof import('../packages/core/src/worker').runSearch=async()=>{runs++;return {status:'idle'};};
+ assert.equal((await runScheduled({accounts,run})).status,'idle');assert.equal(runs,0);
+ const next=Date.parse(String((await store.state()).next_run)),reset=new Date();reset.setUTCHours(24,5,0,0);
+ assert.ok(next>=reset.getTime());assert.equal((await store.state()).requested,1);
 });
 test('authentication rate limits persist across connections and expire',async t=>{
  const accounts=(await fixture(t));const second=new Accounts(accounts.db);

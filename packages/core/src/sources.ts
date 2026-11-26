@@ -61,16 +61,16 @@ export async function searchSources(profile: Profile, adapters: {
   country?:(source:CountrySource,profile:Profile,session?:SearchSession)=>Promise<JobListing[]>;
 } = { linkedin:searchLinkedIn, yc:searchYc, company:searchCompanyBoard, country:(source,profile,session)=>searchCountrySource(source,profile,undefined,session) },session?:SearchSession): Promise<SearchReport> {
   const report:SearchReport={jobs:[],errors:[],blocked:[],succeeded:0};
-  const tasks: {key:string;run:()=>Promise<JobListing[]>}[]=[];
-  if(profile.sources.includes('linkedin'))tasks.push({key:'linkedin',run:()=>adapters.linkedin(profile,session)});
-  if(profile.sources.includes('yc'))tasks.push({key:'yc',run:()=>adapters.yc(profile,session)});
+  const tasks: {key:string;priority:number;run:()=>Promise<JobListing[]>}[]=[];
+  if(profile.sources.includes('linkedin'))tasks.push({key:'linkedin',priority:0,run:()=>adapters.linkedin(profile,session)});
+  if(profile.sources.includes('yc'))tasks.push({key:'yc',priority:0,run:()=>adapters.yc(profile,session)});
   if(profile.sources.includes('companies'))for(const value of [...new Set([...profile.companyBoards,...profile.discoveredCompanyBoards])]){
-    const board=parseBoard(value);if(board&&!tasks.some(task=>task.key===board.key))tasks.push({key:board.key,run:()=>adapters.company(value,profile,session)});
+    const board=parseBoard(value);if(board&&!tasks.some(task=>task.key===board.key))tasks.push({key:board.key,priority:profile.companyBoards.some(v=>parseBoard(v)?.key===board.key)?1:3,run:()=>adapters.company(value,profile,session)});
   }
-  for(const source of activeCountrySources(profile))tasks.push({key:source.key,run:()=>(adapters.country || ((s,p,c)=>searchCountrySource(s,p,undefined,c)))(source,profile,session)});
+  for(const source of activeCountrySources(profile))tasks.push({key:source.key,priority:2,run:()=>(adapters.country || ((s,p,c)=>searchCountrySource(s,p,undefined,c)))(source,profile,session)});
   if(session)tasks.sort((a,b)=>{
     const latest=(key:string)=>[...session.history].filter(([query])=>{try{return JSON.parse(query)[0]===key;}catch{return false;}}).map(([,date])=>date).sort().at(-1)||'';
-    return latest(a.key).localeCompare(latest(b.key));
+    return a.priority-b.priority||latest(a.key).localeCompare(latest(b.key));
   });
   for(const task of tasks){
     if(session&&(session.blocked.has(task.key)||session.remaining<=0||Date.now()>=Math.min(session.deadline,session.discoveryDeadline??session.deadline)))continue;

@@ -1,7 +1,8 @@
 import {ResearchTasks} from './research-tasks';
 import type {ResearchStats} from './research-task-schema';
 import {investigateOpportunity,dueForInvestigation} from './investigator';
-import { AIBudgetError } from './ai-usage';
+import { AIBudgetError,providerBalanceExhausted,remainingGenerations } from './ai-usage';
+import {Accounts} from './accounts';
 import { integrations } from './config';
 import { verifyListing } from './verification';
 import { strongMatch,recommendation } from './recommendation';
@@ -31,6 +32,8 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
   store: Store; force?: boolean; canNotify?:boolean; accountId?:string; dependencies?:Dependencies;
 }) {
   await store.heartbeat();
+  const budgetProfile=(await store.profile()).profile;
+  const generationBudget=await remainingGenerations(store.userId,budgetProfile.dailyEvaluationLimit,new Accounts(store.db));
   const id=await store.claim(force);if(!id)return {status:'idle' as const};
   const started=Date.now();
   const {profile,version}=await store.profile();
@@ -41,7 +44,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
   const targetLabel=(target:{location:string;workMode?:string})=>target.workMode&&target.workMode!=='any'?`${target.location} · ${target.workMode}`:target.location;
   const report:SearchDiscovery={profileVersion:version,rounds:[],requests:0,requestLimit:24,stopReason:'round_limit',coverage:locationCoverage(searchTargets(profile).map(t=>targetLabel(t)),[])};
   const session:SearchSession={round:0,page:0,remaining:24,deadline:started+8*60000,seen:new Set(),blocked:new Set(),history:new Map(state.attempts.map(a=>[queryKey(a),a.checkedAt])),successful:new Set(state.attempts.filter(a=>a.status==='ok'&&a.scope?.status!=='mismatch').map(queryKey)),cache:new Map(),perSource:new Map(),perSourceLimit:6,attempts:[],items:[]};
-  const errors:string[]=[];let failed=false,hadSuccess=false;
+  const errors:string[]=[];let failed=false,hadSuccess=false,aiUnavailable=false;
   const existingJobs=await store.jobs();
   const known=new Set(existingJobs.map(j=>j.id)),seen=new Set<string>(),evaluated=new Set<string>(),newCandidates=new Set<string>(),verified=new Set<string>();
   const verificationLimit=10;
@@ -50,7 +53,8 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     const age=Date.now()-Date.parse(job.verification?.checkedAt||'');
     return !job.verification||!Number.isFinite(age)||age>(job.verification.status==='open'?14:1)*86400000;
   };
-  const evaluationLimit=Math.max(0,Math.min(profile.maxJobsPerRun,profile.dailyEvaluationLimit-await store.evaluatedToday()));
+  if(profile.researchEnabled&&generationBudget===0)research.stopReason='daily_budget';
+  const evaluationLimit=Math.max(0,Math.min(profile.maxJobsPerRun,profile.dailyEvaluationLimit-await store.evaluatedToday(),generationBudget));
   const needsResearchReview=(job:typeof existingJobs[number])=>Boolean(job.assessment&&job.researchTask?.status==='completed'&&job.research?.profileVersion===version&&job.research.generationIds.length&&job.research.generationIds.at(-1)!==job.assessment.researchGenerationId);
   const researchReserve=profile.researchEnabled?Math.min(4,evaluationLimit,existingJobs.filter(j=>needsResearchReview(j)||promisingResearch(j,profile,version)).length):0;
   const discoveryEvaluationLimit=evaluationLimit-researchReserve;
@@ -94,6 +98,7 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
           const result=await dependencies.rank(job,profile,accountId,session.deadline);await store.assess(job.id,result.assessment,version);
           counts.evaluated++;counts.inputTokens+=result.inputTokens;counts.outputTokens+=result.outputTokens;evaluated.add(job.id);
         }catch(error){
+          if(providerBalanceExhausted(error))aiUnavailable=true;
           errors.push(error instanceof AIBudgetError?error.message:'AI evaluation failed. Check model access, API balance, and credentials. The job is saved for retry.');
           budgetStopped=true;report.stopReason='evaluation_budget';break;
         }
@@ -116,9 +121,10 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
           state={...state,boards:plan.boards};await store.saveDiscoveryState(scope,state,version);
           profile.discoveredCompanyBoards=state.boards.map(b=>b.url);
         }
-      }catch(error){errors.push(error instanceof AIBudgetError?error.message:'Company discovery was unavailable; other selected sources will still run.');}
+      }catch(error){if(providerBalanceExhausted(error))aiUnavailable=true;errors.push(error instanceof AIBudgetError?error.message:'Company discovery was unavailable; other selected sources will still run.');}
     }
     for(let round=0;round<3;round++){
+      if(aiUnavailable){report.stopReason='evaluation_budget';break;}
       if(!await current()){report.stopReason='profile_changed';break;}
       if(Date.now()>=session.deadline){report.stopReason='time_budget';break;}
       if(discoveryEvaluationLimit===0){report.stopReason='evaluation_budget';break;}
@@ -191,7 +197,9 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       if(dependencies.plan){
         try{plan=await dependencies.plan({profile,report,state,store,deadline:session.deadline,feedback:jobs.filter(j=>evaluated.has(j.id)&&j.assessment).slice(-8).map(j=>({title:j.title,score:j.assessment!.score,eligibility:j.assessment!.eligibility,concerns:j.assessment!.concerns.map(v=>v.slice(0,300)).slice(0,4),decision:recommendation(j)}))});counts.inputTokens+=plan.inputTokens;counts.outputTokens+=plan.outputTokens;}
         catch(error){
+          if(providerBalanceExhausted(error))aiUnavailable=true;
           if(error instanceof AIBudgetError){errors.push(error.message);report.stopReason='evaluation_budget';break;}
+          if(aiUnavailable){errors.push('AI evaluation failed. Check model access, API balance, and credentials. The job is saved for retry.');report.stopReason='evaluation_budget';break;}
           errors.push('Adaptive planning was unavailable. Approved search pages were used where possible.');
         }
       }
@@ -215,21 +223,22 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     if(['discovery_time_budget','request_budget','no_untried_queries','sources_unavailable','planner_unavailable','round_limit'].includes(report.stopReason)&&counts.evaluated<discoveryEvaluationLimit&&Date.now()<session.deadline&&await current()){
       await evaluateCandidates(discoveryEvaluationLimit-counts.evaluated);
     }
-    if(dependencies.investigate&&profile.researchEnabled&&await current()){
+    if(dependencies.investigate&&profile.researchEnabled&&!aiUnavailable&&generationBudget>0&&await current()){
       const tasks=new ResearchTasks(store),eligible=(await store.jobs()).filter(j=>!session.blocked.has(j.sourceKey||'linkedin')&&dueForInvestigation(j,profile,version)).sort((a,b)=>Number(Boolean(b.researchRequested))-Number(Boolean(a.researchRequested))||Number(promisingResearch(b,profile,version))-Number(promisingResearch(a,profile,version))||(b.assessment?.score||0)-(a.assessment?.score||0));
       const readiness=await Promise.all(eligible.map(j=>tasks.ready(j,version)));const candidates=eligible.filter((_,i)=>readiness[i]).slice(0,4);if(eligible.filter((_,i)=>readiness[i]).length>4)research.stopReason='opportunity_limit';
       for(const job of candidates){
+        if(await remainingGenerations(store.userId,profile.dailyEvaluationLimit,new Accounts(store.db))===0){research.stopReason='daily_budget';break;}
         if(Date.now()>=session.deadline){research.stopReason='time_budget';break;}if(!await current())break;
         try{const result=await dependencies.investigate(store,job.id,{deadline:session.deadline});counts.inputTokens+=result.inputTokens;counts.outputTokens+=result.outputTokens;
           if(result.status==='unavailable'){research.stopReason='unavailable';break;}if(result.status==='deferred'||result.status==='profile_changed')continue;
           research.attempted++;research.resumed+=Number(Boolean(result.resumed));research.completed+=Number(result.status==='completed');research.verifiedEvidence+=result.verifiedEvidence;research.answered+=result.answered;research.unresolved+=result.unresolved;research.retryScheduled+=Number(result.status==='retry'&&!result.failed);research.failed+=Number(Boolean(result.failed));
-        }catch(error){research.attempted++;research.failed++;errors.push(error instanceof AIBudgetError?error.message:'Investigation could not finish. Saved evidence remains available; unresolved questions will be retried.');if(error instanceof AIBudgetError){research.stopReason='daily_budget';break;}}
+        }catch(error){const balance=providerBalanceExhausted(error);research.attempted++;research.failed++;errors.push(error instanceof AIBudgetError?error.message:'Investigation could not finish. Saved evidence remains available; unresolved questions will be retried.');if(balance)aiUnavailable=true;if(error instanceof AIBudgetError||balance){research.stopReason=balance?'unavailable':'daily_budget';break;}}
         await store.researchProgress(id,research);
       }
     }
     // Research is not the final verdict. Reassess the exact vacancy using its
     // checked role excerpts; company facts cannot establish role conditions.
-    if(profile.researchEnabled&&await current())for(const job of (await store.jobs()).filter(needsResearchReview)){
+    if(profile.researchEnabled&&!aiUnavailable&&generationBudget>0&&await current())for(const job of (await store.jobs()).filter(needsResearchReview)){
       if(Date.now()>=session.deadline)break;
       if(!await current())break;
       try{

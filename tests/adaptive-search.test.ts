@@ -11,7 +11,8 @@ import {SourceError,searchLinkedIn} from '../packages/core/src/linkedin';
 import {planAdaptiveSearch,validateAdaptivePlan,fallbackPage,type AdaptivePlan} from '../packages/core/src/adaptive-planner';
 import {discoveryScope,freshDiscoveryState} from '../packages/core/src/discovery-state';
 import {sourceEnabled} from '../packages/core/src/source-settings';
-import {generationForAccount} from '../packages/core/src/ai-usage';
+import {beginGeneration,finishGeneration,generationForAccount} from '../packages/core/src/ai-usage';
+import {Accounts} from '../packages/core/src/accounts';
 import type {SearchDiscovery,DiscoveryState} from '../packages/core/src/adaptive-search-schema';
 import {searchCountrySource} from '../packages/core/src/country-adapters';
 import {countrySources} from '../packages/core/src/country-sources';
@@ -34,6 +35,14 @@ test('query budget, per-source fairness, cache reuse and history rotation bound 
  s.history.set(queryKey(q),'2026-10-01');assert.deepEqual(orderedQueries([q,{...q,query:'Untried'}],s).map(a=>a.query),['Untried','Software Engineer']);
  for(let source=0;source<5;source++)for(let i=0;i<8;i++)await searchQuery(s,{...q,source:`source${source}`,query:`Role ${i}`},async()=>{reads++;return [];});assert.equal(s.remaining,0);assert.equal(reads,24);
  s.deadline=0;assert.deepEqual(await searchQuery(s,{...q,source:'new'},async()=>{throw Error('must not read');}),[]);
+});
+test('configured discovery sources run before a backlog of discovered employer boards',async()=>{
+ const s=session();s.remaining=1;const called:string[]=[];
+ const boards=Array.from({length:20},(_,i)=>`https://jobs.ashbyhq.com/board-${i}`);
+ await searchSources({...defaultProfile,sources:['linkedin','companies'],discoveredCompanyBoards:boards},{
+  linkedin:async(_profile,session)=>{called.push('linkedin');return searchQuery(session!,q,async()=>[job('priority')]);},
+  yc:async()=>[],company:async value=>{called.push(value);return [];}},s);
+ assert.deepEqual(called,['linkedin']);
 });
 test('access challenges block the source for the whole run, retaining earlier successful results',async()=>{
  const s=session();await searchQuery(s,q,async()=>[job('2')]);
@@ -94,6 +103,19 @@ test('exhausted daily evaluations avoid source and planner calls',async t=>{
  const store=await ready(t,{dailyEvaluationLimit:1});const id=await store.claim(true);assert.ok(id);await store.finish(id,'completed',{discovered:1,evaluated:1,matched:0,inputTokens:0,outputTokens:0},null);
  await runSearch({store,force:true,dependencies:{search:async()=>{throw Error('must not search');},describe:async()=>description,rank:async()=>{throw Error('must not rank');},plan:async()=>{throw Error('must not plan');},notify:async()=>0}});
  assert.equal((await store.runs())[0].discovery?.stopReason,'evaluation_budget');assert.equal((await store.runs())[0].discovery?.requests,0);
+});
+test('exhausted AI generations avoid source scans even when evaluation slots remain',async t=>{
+ const store=await ready(t,{dailyEvaluationLimit:1});const accounts=new Accounts(store.db);
+ const id=await beginGeneration(store.userId,'strategy',1,accounts);await finishGeneration(id,'completed',0,0,accounts);
+ await runSearch({store,force:true,dependencies:{search:async()=>{throw Error('source scan');},describe:async()=>description,rank:async()=>{throw Error('rank');},investigate:async()=>{throw Error('research');},plan:async()=>{throw Error('plan');},notify:async()=>0}});
+ const run=(await store.runs())[0];assert.equal(run.discovery?.stopReason,'evaluation_budget');assert.equal(run.research?.stopReason,'daily_budget');assert.equal(run.discovery?.requests,0);
+});
+test('provider credit failure stops research after one attempt',async t=>{
+ const store=await ready(t);const version=(await store.profile()).version;
+ for(let i=0;i<3;i++){await store.upsert(job(`credit-${i}`));await store.assess(`credit-${i}`,assessment,version);}
+ let attempts=0;
+ await runSearch({store,force:true,dependencies:{search:async()=>[],describe:async()=>description,rank:async()=>({assessment,inputTokens:0,outputTokens:0}),investigate:async()=>{attempts++;throw {responseBody:'{"error":{"code":"credit_balance_exhausted"}}'};},notify:async()=>0}});
+ assert.equal(attempts,1);assert.equal((await store.runs())[0].research?.stopReason,'unavailable');
 });
 test('profile edits during a search stop evaluation, planning and notifications while preserving coverage',async t=>{
  const store=await ready(t);let ranked=0,planned=0,notified=0;
