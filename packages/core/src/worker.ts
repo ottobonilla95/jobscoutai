@@ -126,6 +126,32 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     if(profile.cvText.length<100)throw new Error('Add your CV in Search profile before running a search.');
     if(!integrations().ai)throw new Error('Add OPENAI_API_KEY on the server to enable matching.');
     if(backlogOnly){
+      // A large ranking queue should not prevent a small check of official
+      // employer boards. These sources expose application routes that public
+      // aggregators often cannot verify, and require no AI generation.
+      if(profile.sources.includes('companies')&&(profile.companyBoards.length||profile.discoveredCompanyBoards.length)){
+        session.discoveryDeadline=Math.min(session.deadline-180000,Date.now()+45000);
+        session.roundRemaining=Math.min(3,session.remaining);session.perSourceLimit=1;
+        let listings:JobListing[]=[];
+        try{
+          const result=await dependencies.search({...profile,sources:['companies']},session);
+          listings=Array.isArray(result)?result:result.jobs;
+          if(Array.isArray(result))hadSuccess=true;
+          else{errors.push(...result.errors);result.blocked.forEach(key=>session.blocked.add(key));hadSuccess ||= result.succeeded>0;}
+        }catch(error){errors.push(error instanceof SourceError?error.message:'Employer boards could not be read. Saved candidates will still be evaluated.');}
+        const fresh=new Set<string>();
+        for(const listing of listings.filter(listing=>listingWithinAge(listing,profile))){
+          if(Date.now()>=session.deadline)break;
+          await store.upsert(listing);seen.add(listing.id);
+          if(!known.has(listing.id)){known.add(listing.id);const saved=await store.job(listing.id);if(saved&&!saved.duplicateOf){fresh.add(listing.id);newCandidates.add(listing.id);}}
+        }
+        counts.discovered=seen.size;report.requests=24-session.remaining;
+        report.rounds.push({round:0,reason:'Check official employer boards before classifying the saved queue.',newCandidates:fresh.size,strongCandidates:0,attempts:session.attempts,generationId:null,queries:[],boards:[]});
+        const history=new Map(state.attempts.map(a=>[queryKey(a),a]));session.attempts.forEach(a=>history.set(queryKey(a),a));
+        state={...state,attempts:[...history.values()].sort((a,b)=>a.checkedAt.localeCompare(b.checkedAt)).slice(-120)};
+        await store.saveDiscoveryState(scope,state,version);
+        session.discoveryDeadline=undefined;
+      }
       await evaluateCandidates(discoveryEvaluationLimit);
       if(report.stopReason==='round_limit')report.stopReason='evaluation_budget';
     }

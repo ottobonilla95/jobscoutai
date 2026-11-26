@@ -10,7 +10,7 @@ import {searchSources,searchCompanyBoard} from '../packages/core/src/sources';
 import {SourceError,searchLinkedIn} from '../packages/core/src/linkedin';
 import {planAdaptiveSearch,validateAdaptivePlan,fallbackPage,type AdaptivePlan} from '../packages/core/src/adaptive-planner';
 import {discoveryScope,freshDiscoveryState} from '../packages/core/src/discovery-state';
-import {sourceEnabled} from '../packages/core/src/source-settings';
+import {sourceEnabled,parseBoard} from '../packages/core/src/source-settings';
 import {beginGeneration,finishGeneration,generationForAccount} from '../packages/core/src/ai-usage';
 import {Accounts} from '../packages/core/src/accounts';
 import type {SearchDiscovery,DiscoveryState} from '../packages/core/src/adaptive-search-schema';
@@ -36,13 +36,19 @@ test('query budget, per-source fairness, cache reuse and history rotation bound 
  for(let source=0;source<5;source++)for(let i=0;i<8;i++)await searchQuery(s,{...q,source:`source${source}`,query:`Role ${i}`},async()=>{reads++;return [];});assert.equal(s.remaining,0);assert.equal(reads,24);
  s.deadline=0;assert.deepEqual(await searchQuery(s,{...q,source:'new'},async()=>{throw Error('must not read');}),[]);
 });
-test('configured discovery sources run before a backlog of discovered employer boards',async()=>{
+test('a bounded employer board is checked before broad sources, rotating across runs',async()=>{
  const s=session();s.remaining=1;const called:string[]=[];
  const boards=Array.from({length:20},(_,i)=>`https://jobs.ashbyhq.com/board-${i}`);
  await searchSources({...defaultProfile,sources:['linkedin','companies'],discoveredCompanyBoards:boards},{
   linkedin:async(_profile,session)=>{called.push('linkedin');return searchQuery(session!,q,async()=>[job('priority')]);},
-  yc:async()=>[],company:async value=>{called.push(value);return [];}},s);
- assert.deepEqual(called,['linkedin']);
+  yc:async()=>[],company:async (value,_profile,session)=>{called.push(value);return searchQuery(session!,{source:parseBoard(value)!.key,query:'*',location:'',page:0},async()=>[]);}},s);
+ assert.deepEqual(called,[boards[0]]);
+ const next=session();next.remaining=1;next.history.set(queryKey({source:parseBoard(boards[0])!.key,query:'*',location:'',page:0}),new Date().toISOString());
+ called.length=0;
+ await searchSources({...defaultProfile,sources:['linkedin','companies'],discoveredCompanyBoards:boards},{
+  linkedin:async(_profile,session)=>{called.push('linkedin');return searchQuery(session!,q,async()=>[job('priority')]);},
+  yc:async()=>[],company:async (value,_profile,session)=>{called.push(value);return searchQuery(session!,{source:parseBoard(value)!.key,query:'*',location:'',page:0},async()=>[]);}},next);
+ assert.deepEqual(called,[boards[1]]);
 });
 test('access challenges block the source for the whole run, retaining earlier successful results',async()=>{
  const s=session();await searchQuery(s,q,async()=>[job('2')]);
@@ -119,6 +125,21 @@ test('a full backlog is classified before discovery and leaves room for research
  for(let i=0;i<10;i++)await store.upsert(job(`pending-${i}`));
  let ranked=0,researched=0;await runSearch({store,force:true,dependencies:{search:async()=>{throw Error('A full backlog must be processed first');},plan:async()=>{throw Error('Planning must wait for the backlog');},describe:async()=>description,rank:async()=>{ranked++;return {assessment,inputTokens:1,outputTokens:1};},investigate:async()=>{researched++;return {status:'completed',generationId:null,inputTokens:1,outputTokens:1,verifiedEvidence:0,answered:0,unresolved:1};},notify:async()=>0}});
  assert.equal(ranked,8);assert.ok(researched>0);assert.equal((await store.runs())[0].discovery?.requests,0);
+});
+test('a full backlog still checks a bounded employer board and assesses its fresh role',async t=>{
+ const store=await ready(t,{sources:['companies'],maxJobsPerRun:2,dailyEvaluationLimit:2});
+ const {profile,version}=await store.profile();
+ await store.saveDiscoveryState(discoveryScope(profile),{attempts:[],boards:[{url:'https://jobs.ashbyhq.com/share',sourceUrl:'https://jobs.ashbyhq.com/share/known',discoveredAt:new Date().toISOString()}]},version);
+ for(const id of ['saved-1','saved-2'])await store.upsert(job(id,{sourceKey:'ashby:share',url:`https://jobs.ashbyhq.com/share/${id}`}));
+ const fresh=job('new-board-role',{sourceKey:'ashby:share',url:'https://jobs.ashbyhq.com/share/new-board-role'});
+ const ranked:string[]=[];
+ await runSearch({store,force:true,dependencies:{search:async (p,s)=>{
+  assert.deepEqual(p.sources,['companies']);
+  return {jobs:await searchQuery(s!,{source:'ashby:share',query:'*',location:'',page:0},async()=>[fresh]),errors:[],blocked:[],succeeded:1};
+ },describe:async()=>description,rank:async j=>{ranked.push(j.id);return {assessment,inputTokens:1,outputTokens:1};},notify:async()=>0}});
+ assert.equal(ranked[0],fresh.id);
+ assert.equal((await store.runs())[0].discovery?.requests,1);
+ assert.equal((await store.job(fresh.id))?.assessment?.score,90);
 });
 test('the final AI call classifies a saved candidate before starting discovery',async t=>{
  const store=await ready(t,{dailyEvaluationLimit:1});await store.upsert(job('last-slot'));

@@ -62,14 +62,18 @@ export async function searchSources(profile: Profile, adapters: {
 } = { linkedin:searchLinkedIn, yc:searchYc, company:searchCompanyBoard, country:(source,profile,session)=>searchCountrySource(source,profile,undefined,session) },session?:SearchSession): Promise<SearchReport> {
   const report:SearchReport={jobs:[],errors:[],blocked:[],succeeded:0};
   const tasks: {key:string;priority:number;run:()=>Promise<JobListing[]>}[]=[];
-  if(profile.sources.includes('linkedin'))tasks.push({key:'linkedin',priority:0,run:()=>adapters.linkedin(profile,session)});
-  if(profile.sources.includes('yc'))tasks.push({key:'yc',priority:0,run:()=>adapters.yc(profile,session)});
-  if(profile.sources.includes('companies'))for(const value of [...new Set([...profile.companyBoards,...profile.discoveredCompanyBoards])]){
-    const board=parseBoard(value);if(board&&!tasks.some(task=>task.key===board.key))tasks.push({key:board.key,priority:profile.companyBoards.some(v=>parseBoard(v)?.key===board.key)?1:3,run:()=>adapters.company(value,profile,session)});
+  const latest=(key:string)=>[...(session?.history||[])].filter(([query])=>{try{return JSON.parse(query)[0]===key;}catch{return false;}}).map(([,date])=>date).sort().at(-1)||'';
+  if(profile.sources.includes('companies')){
+    const explicit=profile.companyBoards.map(value=>({value,board:parseBoard(value)})).filter(x=>x.board);
+    const explicitKeys=new Set(explicit.map(x=>x.board!.key));
+    const discovered=profile.discoveredCompanyBoards.map(value=>({value,board:parseBoard(value)})).filter(x=>x.board&&!explicitKeys.has(x.board.key));
+    const selected=session?discovered.sort((a,b)=>latest(a.board!.key).localeCompare(latest(b.board!.key))).slice(0,3):discovered;
+    for(const {value,board} of [...explicit,...selected])if(board&&!tasks.some(task=>task.key===board.key))tasks.push({key:board.key,priority:explicitKeys.has(board.key)?0:1,run:()=>adapters.company(value,profile,session)});
   }
-  for(const source of activeCountrySources(profile))tasks.push({key:source.key,priority:2,run:()=>(adapters.country || ((s,p,c)=>searchCountrySource(s,p,undefined,c)))(source,profile,session)});
+  if(profile.sources.includes('yc'))tasks.push({key:'yc',priority:2,run:()=>adapters.yc(profile,session)});
+  if(profile.sources.includes('linkedin'))tasks.push({key:'linkedin',priority:3,run:()=>adapters.linkedin(profile,session)});
+  for(const source of activeCountrySources(profile))tasks.push({key:source.key,priority:4,run:()=>(adapters.country || ((s,p,c)=>searchCountrySource(s,p,undefined,c)))(source,profile,session)});
   if(session)tasks.sort((a,b)=>{
-    const latest=(key:string)=>[...session.history].filter(([query])=>{try{return JSON.parse(query)[0]===key;}catch{return false;}}).map(([,date])=>date).sort().at(-1)||'';
     return a.priority-b.priority||latest(a.key).localeCompare(latest(b.key));
   });
   for(const task of tasks){
