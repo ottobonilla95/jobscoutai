@@ -22,6 +22,7 @@ test('legacy profiles gain source defaults; malformed or empty source selections
 });
 test('company sources accept only exact HTTPS board hosts and board paths',()=>{
  assert.equal(parseBoard('https://jobs.ashbyhq.com/example?utm_source=careers')?.key,'ashby:example');
+ assert.equal(parseBoard('https://jobs.ashbyhq.com/fanvue.com')?.key,'ashby:fanvue.com');
  assert.equal(parseBoard('https://job-boards.greenhouse.io/example')?.key,'greenhouse:example');
  for(const url of ['http://localhost/jobs','https://jobs.ashbyhq.com.evil.test/example','https://user@jobs.ashbyhq.com/example','https://jobs.ashbyhq.com/example/job','https://jobs.ashbyhq.com:9999/example'])assert.equal(parseBoard(url),null);
  assert.equal(sourceEnabled({...defaultProfile,sources:['companies'],companyBoards:['https://jobs.ashbyhq.com/a']},'ashby:b'),false);

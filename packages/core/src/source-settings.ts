@@ -13,8 +13,8 @@ export function parseBoard(value: string): { key: string; provider: 'ashby' | 'g
     if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
     const provider = url.hostname === 'jobs.ashbyhq.com' ? 'ashby' :
       ['boards.greenhouse.io','job-boards.greenhouse.io'].includes(url.hostname) ? 'greenhouse' : null;
-    const slug = url.pathname.match(/^\/([a-zA-Z0-9_-]{1,100})\/?$/)?.[1];
-    if (!provider || !slug) return null;
+    const slug = url.pathname.match(/^\/([a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*)\/?$/)?.[1];
+    if (!provider || !slug || slug.length > 100) return null;
     return { provider, slug, key: `${provider}:${slug}`, url: `${url.origin}/${slug}` };
   } catch { return null; }
 }
