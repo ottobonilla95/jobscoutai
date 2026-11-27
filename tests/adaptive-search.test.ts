@@ -116,30 +116,27 @@ test('evaluation allowance and source budget are shared across all attempts',asy
  await runSearch({store,force:true,dependencies:{search:async(p,s)=>searchQuery(s!,{...q,query:p.titles[0],page:s!.page},async()=>Array.from({length:6},(_,i)=>job(String(s!.round*100+i)))),describe:async()=>description,rank:async()=>{ranked++;return {assessment:{...assessment,score:20},inputTokens:1,outputTokens:1};},plan:async()=>plan([]),notify:async()=>0}});
  assert.equal(ranked,3);const r=(await store.runs())[0];assert.equal(r.evaluated,3);assert.equal(r.discovery?.rounds.length,3);assert.equal(r.discovery?.stopReason,'evaluation_budget');assert.equal(r.discovery?.requests,3);
 });
-test('a full backlog is classified before discovery and leaves room for research',async t=>{
+test('a half-full backlog drains saved classifications before discovery or automatic research',async t=>{
  const store=await ready(t,{maxJobsPerRun:10});const version=(await store.profile()).version;
  for(let i=0;i<4;i++){
   await store.upsert(job(`research-${i}`));await store.assess(`research-${i}`,{...assessment,concerns:['Check this role further.']},version);
   await store.track(`research-${i}`,{stage:'not_recorded',recommendation:'research',nextAction:'Check role evidence.',notes:'',followUp:''});
  }
- for(let i=0;i<10;i++)await store.upsert(job(`pending-${i}`));
+ for(let i=0;i<6;i++)await store.upsert(job(`pending-${i}`));
  let ranked=0,researched=0;await runSearch({store,force:true,dependencies:{search:async()=>{throw Error('A full backlog must be processed first');},plan:async()=>{throw Error('Planning must wait for the backlog');},describe:async()=>description,rank:async()=>{ranked++;return {assessment,inputTokens:1,outputTokens:1};},investigate:async()=>{researched++;return {status:'completed',generationId:null,inputTokens:1,outputTokens:1,verifiedEvidence:0,answered:0,unresolved:1};},notify:async()=>0}});
- assert.equal(ranked,8);assert.ok(researched>0);assert.equal((await store.runs())[0].discovery?.requests,0);
+ assert.equal(ranked,6);assert.equal(researched,0);assert.equal((await store.runs())[0].discovery?.requests,0);
 });
-test('a full backlog still checks a bounded employer board and assesses its fresh role',async t=>{
+test('a full backlog does not add fresh board roles ahead of saved jobs',async t=>{
  const store=await ready(t,{sources:['companies'],maxJobsPerRun:2,dailyEvaluationLimit:2});
  const {profile,version}=await store.profile();
  await store.saveDiscoveryState(discoveryScope(profile),{attempts:[],boards:[{url:'https://jobs.ashbyhq.com/share',sourceUrl:'https://jobs.ashbyhq.com/share/known',discoveredAt:new Date().toISOString()}]},version);
  for(const id of ['saved-1','saved-2'])await store.upsert(job(id,{sourceKey:'ashby:share',url:`https://jobs.ashbyhq.com/share/${id}`}));
  const fresh=job('new-board-role',{sourceKey:'ashby:share',url:'https://jobs.ashbyhq.com/share/new-board-role'});
  const ranked:string[]=[];
- await runSearch({store,force:true,dependencies:{search:async (p,s)=>{
-  assert.deepEqual(p.sources,['companies']);
-  return {jobs:await searchQuery(s!,{source:'ashby:share',query:'*',location:'',page:0},async()=>[fresh]),errors:[],blocked:[],succeeded:1};
- },describe:async()=>description,rank:async j=>{ranked.push(j.id);return {assessment,inputTokens:1,outputTokens:1};},notify:async()=>0}});
- assert.equal(ranked[0],fresh.id);
- assert.equal((await store.runs())[0].discovery?.requests,1);
- assert.equal((await store.job(fresh.id))?.assessment?.score,90);
+ await runSearch({store,force:true,dependencies:{search:async()=>{throw Error('Discovery must wait for saved jobs');},describe:async()=>description,rank:async j=>{ranked.push(j.id);return {assessment,inputTokens:1,outputTokens:1};},notify:async()=>0}});
+ assert.deepEqual(new Set(ranked),new Set(['saved-1','saved-2']));
+ assert.equal((await store.runs())[0].discovery?.requests,0);
+ assert.equal(await store.job(fresh.id),null);
 });
 test('the final AI call classifies a saved candidate before starting discovery',async t=>{
  const store=await ready(t,{dailyEvaluationLimit:1});await store.upsert(job('last-slot'));

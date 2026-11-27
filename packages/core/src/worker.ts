@@ -62,13 +62,14 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
   const evaluationLimit=Math.max(0,Math.min(profile.maxJobsPerRun,profile.dailyEvaluationLimit-await store.evaluatedToday(),generationBudget));
   const needsResearchReview=(job:typeof existingJobs[number])=>Boolean(job.assessment&&job.researchTask?.status==='completed'&&job.research?.profileVersion===version&&job.research.generationIds.length&&job.research.generationIds.at(-1)!==job.assessment.researchGenerationId);
   const pendingCount=(await store.pending(version,30,profile)).length;
+  // Drain a substantial saved queue before collecting more roles. New source
+  // scans otherwise grow that queue faster than the AI allowance can clear it.
+  const backlogOnly=pendingCount>0&&(pendingCount>=Math.max(1,Math.ceil(evaluationLimit/2))||generationBudget<=2);
+  const requestedResearch=existingJobs.some(job=>job.researchRequested&&dueForInvestigation(job,profile,version));
   const researchCandidates=existingJobs.filter(j=>needsResearchReview(j)||promisingResearch(j,profile,version)).length;
   // Investigation may need one call to find evidence and another to rescore
-  // the exact posting. Keep both available when a research lead exists.
-  const researchReserve=profile.researchEnabled&&researchCandidates?Math.min(2,Math.max(0,evaluationLimit-1)):0;
-  // A full saved queue should be processed before collecting more listings.
-  // In particular, avoid spending a scarce call on an adaptive search plan.
-  const backlogOnly=pendingCount>0&&(pendingCount>=evaluationLimit||generationBudget<=2);
+  // the exact posting. Automatic research waits until saved roles are ranked.
+  const researchReserve=profile.researchEnabled&&(backlogOnly?requestedResearch:researchCandidates>0)?Math.min(backlogOnly?1:2,Math.max(0,evaluationLimit-1)):0;
   const planningReserve=!backlogOnly&&dependencies.plan&&researchReserve&&generationBudget<=profile.maxJobsPerRun?1:0;
   const discoveryEvaluationLimit=evaluationLimit-researchReserve-planningReserve;
   let searchProfile=profile,plan:AdaptivePlan|null=null;
@@ -127,32 +128,6 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
     if(profile.cvText.length<100)throw new Error('Add your CV in Search profile before running a search.');
     if(!integrations().ai)throw new Error('Add OPENAI_API_KEY on the server to enable matching.');
     if(backlogOnly){
-      // A large ranking queue should not prevent a small check of official
-      // employer boards. These sources expose application routes that public
-      // aggregators often cannot verify, and require no AI generation.
-      if(profile.sources.includes('companies')&&(profile.companyBoards.length||profile.discoveredCompanyBoards.length)){
-        session.discoveryDeadline=Math.min(session.deadline-180000,Date.now()+45000);
-        session.roundRemaining=Math.min(3,session.remaining);session.perSourceLimit=1;
-        let listings:JobListing[]=[];
-        try{
-          const result=await dependencies.search({...profile,sources:['companies']},session);
-          listings=Array.isArray(result)?result:result.jobs;
-          if(Array.isArray(result))hadSuccess=true;
-          else{errors.push(...result.errors);result.blocked.forEach(key=>session.blocked.add(key));hadSuccess ||= result.succeeded>0;}
-        }catch(error){errors.push(error instanceof SourceError?error.message:'Employer boards could not be read. Saved candidates will still be evaluated.');}
-        const fresh=new Set<string>();
-        for(const listing of listings.filter(listing=>listingWithinAge(listing,profile))){
-          if(Date.now()>=session.deadline)break;
-          await store.upsert(listing);seen.add(listing.id);
-          if(!known.has(listing.id)){known.add(listing.id);const saved=await store.job(listing.id);if(saved&&!saved.duplicateOf){fresh.add(listing.id);newCandidates.add(listing.id);}}
-        }
-        counts.discovered=seen.size;report.requests=24-session.remaining;
-        report.rounds.push({round:0,reason:'Check official employer boards before classifying the saved queue.',newCandidates:fresh.size,strongCandidates:0,attempts:session.attempts,generationId:null,queries:[],boards:[]});
-        const history=new Map(state.attempts.map(a=>[queryKey(a),a]));session.attempts.forEach(a=>history.set(queryKey(a),a));
-        state={...state,attempts:[...history.values()].sort((a,b)=>a.checkedAt.localeCompare(b.checkedAt)).slice(-120)};
-        await store.saveDiscoveryState(scope,state,version);
-        session.discoveryDeadline=undefined;
-      }
       await evaluateCandidates(discoveryEvaluationLimit);
       if(report.stopReason==='round_limit')report.stopReason='evaluation_budget';
     }
@@ -274,8 +249,8 @@ export async function runSearch({ store, force = false, accountId, canNotify = t
       // Keep one generation for rescoring a role if research finds checked
       // evidence. Otherwise two investigations can consume both reserved calls.
       const available=await remainingGenerations(store.userId,profile.dailyEvaluationLimit,new Accounts(store.db));
-      const researchLimit=Math.min(4,available>1?available-1:available);
-      const candidates=ready.slice(0,researchLimit);if(ready.length>researchLimit)research.stopReason='opportunity_limit';
+      const researchLimit=Math.min(1,available>1?available-1:available);
+      const candidates=(backlogOnly?ready.filter(job=>job.researchRequested):ready).slice(0,researchLimit);if(ready.length>candidates.length)research.stopReason='opportunity_limit';
       for(const job of candidates){
         if(await remainingGenerations(store.userId,profile.dailyEvaluationLimit,new Accounts(store.db))===0){research.stopReason='daily_budget';break;}
         if(Date.now()>=session.deadline){research.stopReason='time_budget';break;}if(!await current())break;
